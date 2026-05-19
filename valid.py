@@ -1,14 +1,11 @@
-import storage
+import constant
 
-FEATURE_NAMES = ["hook", "holding", "tension"]
-BAD_CHARACTERS = ",.'][@#$%^&*()?"
 
 def is_valid_features(features: dict) -> bool:
     '''Проверка корректности ключей словаря features'''
-    return set(FEATURE_NAMES) & set(features.keys()) == set(FEATURE_NAMES)
+    return set(constant.FEATURES) & set(features.keys()) == set(constant.FEATURES)
 
 
- 
 def is_valid_grade(nums: list, max_value = 10) -> bool:
     '''Проверка числа от 0 до max_value'''
     
@@ -24,25 +21,23 @@ def is_valid_grade(nums: list, max_value = 10) -> bool:
         return 0 <= nums <= max_value
     return False
 
-def is_origin_title(new_title: str) -> bool:
-    new_title = new_title.strip()
-    data = storage.load_dataset()
-    
-    for d in data:
-        if d['title'] == new_title:
-            return False
-    return True       
-        
 def is_correct_title(title):
     title = title.strip()
     if title == '':
         return False
-    return set(BAD_CHARACTERS) & set(title) == 0
+    return len(set(constant.BAD_CHARACTERS) & set(title)) == 0
 
-def is_parse_str_float(a):
+def is_correct_score(score: str):
     
     try:
-        float(a)
-        return True
-    except ValueError:
+        sc_flt = float(score)
+        return 0 <= sc_flt <= 10
+    except:
         return False
+
+
+def is_correct_main_menu_command(command: str):
+    if command in constant.COMMANDS:
+        return True
+    return False
+    
