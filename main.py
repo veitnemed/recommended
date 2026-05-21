@@ -111,6 +111,7 @@ def main_loop():
     storage.init_dataset()
     storage.init_weights()
     storage.init_txt()
+    storage.create_backup()
     
     while True:
         ui.clean_terminal()

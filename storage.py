@@ -2,6 +2,7 @@ import json
 import os
 import valid
 import constant
+from datetime import datetime
 
 def is_json_exists(file_name):
     return os.path.exists(file_name)
@@ -163,4 +164,17 @@ def input_txt() -> bool:
 def restart_txt():
     with open(constant.TXT_INPUT, 'w', encoding='UTF-8') as file:
             return
+
+
+def create_backup():
     
+    dataset = load_dataset()
+    date_name = datetime.now().strftime('%d-%m-%Y %H-%M-%S')
+    b = constant.BACKUP_DIR + date_name + '.json'
+    if is_json_exists(b) is False:
+        os.makedirs(constant.BACKUP_DIR, exist_ok=True)
+    
+    with open(b, 'w', encoding='UTF-8') as file:
+        json.dump(dataset, file, ensure_ascii=False, indent=4)
+
+

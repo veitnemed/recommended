@@ -2,8 +2,10 @@ DATA_DIR = 'C:/movies-learn'
 FILE_NAME = 'C:/movies-learn/dataset.json'
 WEIGHTS_JSON = 'C:/movies-learn/weights.json'
 TXT_INPUT = 'C:/movies-learn/input.txt'
+BACKUP_DIR = 'C:/backup-movies-learn/'
 
 
+FEATURES = ["kp_score", "hook", "holding", "tension"]
 FEATURES = ["kp_score", "hook", "holding", "tension"]
 FEATURES_RUSSIAN = {
             "kp_score": "Рейтинг кинопоиска",
