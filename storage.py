@@ -3,8 +3,6 @@ import os
 import valid
 import constant
 
-
-
 def is_json_exists(file_name):
     return os.path.exists(file_name)
 
@@ -16,9 +14,6 @@ def init_dataset():
         with open(constant.FILE_NAME, 'w', encoding='UTF-8') as file:
             json.dump(empty_list, file, ensure_ascii=False, indent=4)
 
-
-
-     
 def load_dataset() -> list:
     '''Возвращает список dict-объектов'''
 
@@ -37,7 +32,6 @@ def is_origin_title(new_title: str) -> bool:
         if d['title'].strip().lower() == new_title.strip().lower():
             return False
     return True
-
 
 def add_movies(title: str, user_score: str, features: dict) -> bool:
     ''' Добавляем ещё один объект в json'''
@@ -69,25 +63,27 @@ def add_movies(title: str, user_score: str, features: dict) -> bool:
     
     new_obj['title'] = title
     new_obj['user_score'] = user_score_float
-    new_obj['liked'] = 1 if user_score_float >= constant.THRESHOLD else 0
     new_obj['features'] = features
 
     data.append(new_obj)
     save_dataset(data)
     return True
 
-
+def clean_dataset():
+    empty_list = []
+    with open(constant.FILE_NAME, 'w', encoding='UTF-8') as file:
+        json.dump(empty_list, file, ensure_ascii=False, indent=4)
+        
 def init_weights():
     if is_json_exists(constant.WEIGHTS_JSON) is False:
         with open(constant.WEIGHTS_JSON, 'w', encoding='UTF-8') as file:
             json.dump(constant.DEFAULT_WEIGHTS, file, ensure_ascii=False, indent=4)
 
-
 def load_weights() -> list:
     with open(constant.WEIGHTS_JSON, 'r', encoding='UTF-8') as file:
         return json.load(file)
    
-def save_weights(data: list):
+def save_weights(data: dict):
     with open(constant.WEIGHTS_JSON, 'w', encoding='UTF-8') as file:
         json.dump(data, file, ensure_ascii=False, indent=4)  
 
@@ -99,7 +95,6 @@ def init_txt():
     if is_json_exists(constant.TXT_INPUT) is False:
         with open(constant.TXT_INPUT, 'w', encoding='UTF-8') as file:
             return
-
 
 def input_txt() -> bool:
     '''Импорт записей из txt в dataset.json'''
@@ -119,9 +114,6 @@ def input_txt() -> bool:
         param = line.strip().split(';')
         
         param = [p.strip() for p in line.strip().split(';')]
-
-        print('DEBUG line:', idx + 1)
-        print('DEBUG param:', [repr(p) for p in param])
         
         if len(param) != expected_len:
             print(f'Ошибка парсинга из текстового файла! Строка {idx+1}')

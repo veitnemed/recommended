@@ -5,9 +5,6 @@ import constant
 import model
 import time
 
-
-    
-
 def show_all_movies():
     data = storage.load_dataset()
     if len(data) == 0:
@@ -18,7 +15,6 @@ def show_all_movies():
         title = obj['title']
         user_score = obj['user_score']
         print(f"{idx+1}) {title} | оценка: {user_score}")
-
 
 def loop_input(text: str, funcs_list: list):
     while True:
@@ -46,9 +42,7 @@ def get_predict(weights):
     score = model.predict_score(features, weights)
     
     print(f'Оценка модели для {title}: {score}')
-     
-    
-          
+            
 def ask_object():   
     title = loop_input(
         text='Введите название: ',
@@ -82,20 +76,23 @@ def ask_object():
 
 def train_model(data, weights):
     start_time = time.perf_counter()
-    old_error = model.mean_absolute_error(data, weights)
-    new_weights = model.selection_weights(data, weights)
-    storage.save_weights(new_weights)
-    new_error = model.mean_absolute_error(data, new_weights)
-            
-    print('Новые веса: \n')
-    for weight, value in new_weights.items():
-        print(f'{weight}: {round(value,2)}')
-                
-    print('\nОшибка до обучения: ', round(old_error,2))
-    print('Ошибка после обучения: ', round(new_error,2))
-    end_time = time.perf_counter()
-    print(f'\nВремя подбора весов: {round(end_time-start_time,4)} сек.')  
 
+    old_error = model.mean_absolute_error(data, weights)
+    new_weights = model.fit_weights(data, weights)
+    new_error = model.mean_absolute_error(data, new_weights)
+
+    storage.save_weights(new_weights)
+
+    print('Новые веса:\n')
+    for weight, value in new_weights.items():
+        print(f'{weight}: {round(value, 4)}')
+
+    print('\nОшибка до обучения:', round(old_error, 4))
+    print('Ошибка после обучения:', round(new_error, 4))
+
+    end_time = time.perf_counter()
+    print(f'\nВремя подбора весов: {round(end_time - start_time, 4)} сек.')
+    
 def show_feature_importance(data: list):
     '''Вычилсяем ошибку без каждого параметра'''
     
@@ -151,9 +148,18 @@ def main_loop():
             ui.clean_terminal()
             show_feature_importance(data)
         elif command == "8":
-            model.one_to_one_error(data)
+            ui.clean_terminal()
+            lenth = len(storage.load_dataset())
+            if lenth >= 10:
+                model.one_to_one_error(data,10)
+            else:
+                model.one_to_one_error(data,lenth)
         elif command == "9":
+            ui.clean_terminal()
             get_predict(weights)
+        elif command == "10":
+            storage.clean_dataset()
+            print('Датасет отчищен')
         
         input('Enter, чтобы продолжить >>')
 

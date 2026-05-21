@@ -11,7 +11,7 @@ FEATURES_RUSSIAN = {
             "holding": ""
 }
 
-COMMANDS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+COMMANDS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9","10"]
 BAD_CHARACTERS = ",.'][@#$%^&*()?"
 THRESHOLD = 6.5
 
