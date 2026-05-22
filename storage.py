@@ -3,6 +3,8 @@ import os
 import valid
 import constant
 from datetime import datetime
+import feature_engineering
+
 
 def is_json_exists(file_name):
     return os.path.exists(file_name)
@@ -51,71 +53,88 @@ def is_origin_title(new_title: str) -> bool:
         if d['title'].strip().lower() == new_title.strip().lower():
             return False
     return True
-def add_movies_to_meta(title, user_score, features_const):
+
+def add_movies_to_meta(title: str, user_score: str, raw: dict) -> bool:
     title = title.strip()
     meta = load_meta()
+
     if valid.is_correct_title(title) is False:
-        print('Ошибка добавления! Некорректное название')
+        print('Ошибка добавления в meta! Некорректное название')
         return False
-    
-    
-    
-    if valid.is_valid_features_meta(features_const) is False:
-        print('Ошибка добавления! Не хватает параметров')
-        return False
+
     if valid.is_correct_score(user_score) is False:
-        print('Ошибка добавления! Некорректное значение user_score')
+        print('Ошибка добавления в meta! Некорректное значение user_score')
         return False
-    
-    if valid.is_valid_grade(list(features_const.values())) is False:
-        print('Ошибка добавления! Неверное значение параметров')
+
+    if valid.is_valid_raw_meta(raw) is False:
+        print('Ошибка добавления в meta! Некорректные raw-данные')
         return False
-    
-    user_score_float = float(user_score)
+
+    normalized_raw = {
+        "kp_score": float(raw["kp_score"]),
+        "imdb_votes": int(raw["imdb_votes"]),
+        "year": int(raw["year"]),
+        "first_episode_score": float(raw["first_episode_score"]),
+        "last_episode_score": float(raw["last_episode_score"])
+    }
+
     meta[title] = {
-    'user_score': user_score_float,
-    'features_const': features_const
-                }
+        "user_score": float(user_score),
+        "raw": normalized_raw
+    }
+
     save_meta(meta)
     return True
-    
+
 def add_movies(title: str, user_score: str, features: dict) -> bool:
-    ''' Добавляем ещё один объект в json'''
-    
+    '''Добавляем объект в dataset.json. 
+    LLM-признаки приходят из txt/ручного ввода, objective-признаки подтягиваются из meta.
+    '''
+
     meta = load_meta()
     title = title.strip()
+
     if valid.is_correct_title(title) is False:
         print('Ошибка добавления! Некорректное название')
         return False
+
     if is_origin_title(title) is False:
-        print('Ошибка добавления! Такой объект добавлен')
+        print('Ошибка добавления! Такой объект уже добавлен')
         return False
-    
+
+    features = features.copy()
+
+    if title in meta:
+        user_score_float = float(meta[title]['user_score'])
+        const_features = feature_engineering.build_const_features(meta[title]['raw'])
+
+        for key, value in const_features.items():
+            features[key] = value
+    else:
+        if valid.is_correct_score(user_score) is False:
+            print('Ошибка добавления! Некорректное значение user_score')
+            return False
+
+        user_score_float = float(user_score)
+
     if valid.is_valid_features(features) is False:
         print('Ошибка добавления! Не хватает параметров')
+        print('Ожидались:', constant.FEATURES)
+        print('Получены:', list(features.keys()))
         return False
-    
+
     if valid.is_valid_grade(list(features.values())) is False:
         print('Ошибка добавления! Неверное значение параметров')
         return False
-    
-    if valid.is_correct_score(user_score) is False:
-        print('Ошибка добавления! Некорректное значение user_score')
-        return False
-    
-    new_obj = {}
-    new_obj['features'] = features
 
     data = load_dataset()
-    user_score_float = float(user_score)
-    new_obj['title'] = title
-    new_obj['user_score'] = user_score_float
-    
-    if title in meta:
-        new_obj['user_score'] = meta[title]['user_score']
-        for k, v in meta[title]['features_const'].items():
-            new_obj['features'][k] = v
-    
+
+    new_obj = {
+        'title': title,
+        'user_score': user_score_float,
+        'features': features
+    }
+
     data.append(new_obj)
     save_dataset(data)
     return True
@@ -150,7 +169,7 @@ def init_txt():
 def input_txt() -> bool:
     '''Импорт записей из txt в dataset.json'''
     
-    expected_len = len(constant.FEATURES) + 2
+    expected_len = len(constant.LLM_FEATURES) + 2
     added_count = 0
     with open(constant.TXT_INPUT, 'r', encoding='utf-8-sig') as f: 
         data = f.readlines()
@@ -192,7 +211,7 @@ def input_txt() -> bool:
             if valid.is_correct_score(value) is False:
                 print(f'Строка {idx+1}: Некорректное значения параметров')
                 return False
-            features_dict[constant.FEATURES[i]] = float(value)
+            features_dict[constant.LLM_FEATURES[i]] = float(value)
               
         result = add_movies(
             title=title,

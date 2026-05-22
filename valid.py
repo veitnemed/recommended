@@ -38,8 +38,51 @@ def is_correct_score(score: str):
     except:
         return False
 
+def is_correct_year(year: str) -> bool:
+   
+    try:
+        year_int = int(year)
+        return 2000 <= year_int <= constant.NOW_YEAR
+    except:
+        return False
+
 def is_correct_main_menu_command(command: str):
     if command in constant.COMMANDS:
         return True
     return False
-    
+
+def is_correct_votes(votes: str) -> bool:
+    try:
+        votes_int = int(votes)
+        return votes_int >= 0
+    except:
+        return False
+
+
+def is_valid_raw_meta(raw: dict) -> bool:
+    if set(raw.keys()) != set(constant.RAW_META_FIELDS):
+        return False
+
+    if is_correct_score(raw["kp_score"]) is False:
+        return False
+
+    if is_correct_votes(raw["imdb_votes"]) is False:
+        return False
+
+    if is_correct_year(raw["year"]) is False:
+        return False
+
+    if is_correct_score(raw["first_episode_score"]) is False:
+        return False
+
+    if is_correct_score(raw["last_episode_score"]) is False:
+        return False
+
+    return True
+
+def is_correct_votes(votes: str) -> bool:
+    try:
+        votes_int = int(votes)
+        return votes_int >= 0
+    except:
+        return False

@@ -7,33 +7,34 @@ import time
 import math
 
 def show_all_movies():
+    '''Показать все сериалы и оценку user_score'''
+
     data = storage.load_dataset()
     if len(data) == 0:
         print('Датасет пуст!')
         return
     
-    for idx, obj in enumerate(data):
-        title = obj['title']
-        user_score = obj['user_score']
+    for idx, object in enumerate(data):
+        title = object['title']
+        user_score = object['user_score']
         print(f"{idx+1}) {title} | оценка: {user_score}")
 
+def loop_input(text: str, funcs_list: list) -> str:
+    '''Цикл ввода параметров и проверка валидации'''
 
-
-def loop_input(text: str, funcs_list: list):
     while True:
-        w = input(text)
+        ans = input(text)
 
         for f in funcs_list:
-            if f(w) is False:
+            if f(ans) is False:
                 print('Некорректный ввод')
                 break
         else:
-            return w
+            return ans
    
-def get_predict(weights):
-    title = loop_input(
-        text='Введите название: ',
-        funcs_list=[valid.is_correct_title])
+def get_predict(weights: dict) -> None:
+    
+    title = loop_input(text='Введите название: ', funcs_list=[valid.is_correct_title])
     
     features = {}
     for feature in constant.FEATURES:   
@@ -45,8 +46,68 @@ def get_predict(weights):
     score = model.predict_score(features, weights)
     
     print(f'Оценка модели для {title}: {score}')
-            
-def ask_object():   
+
+def popularity_score(imdb_votes: int, year: int) -> float:
+    age = max(1, constant.NOW_YEAR - year)
+
+    adjusted_votes = imdb_votes / (age ** 0.5)
+
+    min_votes = 150
+    max_votes = 7000
+
+    if adjusted_votes <= min_votes:
+        return 0
+
+    score = math.log(adjusted_votes / min_votes) / math.log(max_votes / min_votes) * 10
+
+    return max(0, min(10, score))
+
+def ask_raw_meta() -> dict:
+    raw = {}
+
+    for field in constant.RAW_META_FIELDS:
+        label = constant.RAW_META_RUSSIAN.get(field, field)
+
+        if field == "imdb_votes":
+            answer = loop_input(
+                text=f'{label}: ',
+                funcs_list=[valid.is_correct_votes]
+            )
+            raw[field] = int(answer)
+
+        elif field == "year":
+            answer = loop_input(
+                text=f'{label}: ',
+                funcs_list=[valid.is_correct_year]
+            )
+            raw[field] = int(answer)
+
+        else:
+            answer = loop_input(
+                text=f'{label}: ',
+                funcs_list=[valid.is_correct_score]
+            )
+            raw[field] = float(answer)
+
+    return raw
+
+def ask_llm_features() -> dict:
+    features = {}
+
+    for feature in constant.LLM_FEATURES:
+        label = constant.FEATURES_RUSSIAN.get(feature, feature)
+
+        answer = loop_input(
+            text=f'{label}: ',
+            funcs_list=[valid.is_correct_score]
+        )
+        features[feature] = float(answer)
+
+    return features
+
+def ask_object() -> None:
+    '''Ввод сериала: raw-данные в meta + LLM-признаки в dataset'''
+
     title = loop_input(
         text='Введите название: ',
         funcs_list=[valid.is_correct_title, storage.is_origin_title]
@@ -57,19 +118,26 @@ def ask_object():
         funcs_list=[valid.is_correct_score]
     )
 
-    new_dict = {}
+    print('\n--- Постоянные данные для meta ---')
+    raw = ask_raw_meta()
 
-    for feature in constant.FEATURES:   
-        answer = loop_input(
-            text=f'{feature} >> ',
-            funcs_list=[valid.is_correct_score]
-        )
-        new_dict[feature] = float(answer)
+    print('\n--- Параметры эксперимента ---')
+    features = ask_llm_features()
+
+    meta_result = storage.add_movies_to_meta(
+        title=title,
+        user_score=user_score,
+        raw=raw
+    )
+
+    if meta_result is False:
+        print('Ошибка! Запись в meta не добавлена')
+        return
 
     result = storage.add_movies(
         title=title,
         user_score=user_score,
-        features=new_dict
+        features=features
     )
 
     if result:
