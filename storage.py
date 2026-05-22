@@ -3,7 +3,8 @@ import os
 import valid
 import constant
 from datetime import datetime
-import feature_engineering
+import recommended.transformation_features as transform
+
 
 
 def is_json_exists(file_name):
@@ -106,7 +107,7 @@ def add_movies(title: str, user_score: str, features: dict) -> bool:
 
     if title in meta:
         user_score_float = float(meta[title]['user_score'])
-        const_features = feature_engineering.build_const_features(meta[title]['raw'])
+        const_features = transform.build_const_features(meta[title]['raw'])
 
         for key, value in const_features.items():
             features[key] = value

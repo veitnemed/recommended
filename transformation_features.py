@@ -11,17 +11,18 @@ def popularity_score(imdb_votes: int, year: int) -> float:
 
     adjusted_votes = imdb_votes / (age ** 0.5)
 
-    min_votes = 150
-    max_votes = 7000
+    min_votes = 50
+    max_votes = 5000
 
     if adjusted_votes <= min_votes:
         return 0
 
-    score = math.log(adjusted_votes / min_votes) / math.log(max_votes / min_votes) * 10
+    score = math.log(adjusted_votes / min_votes) / math.log(max_votes / min_votes) * 15
 
     return clip_0_10(score)
 
-
+print(popularity_score(300,2025))
+print(popularity_score(1100,2021))
 def build_const_features(raw: dict) -> dict:
     return {
         "kp_score": float(raw["kp_score"]),

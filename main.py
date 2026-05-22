@@ -62,7 +62,7 @@ def popularity_score(imdb_votes: int, year: int) -> float:
 
     return max(0, min(10, score))
 
-def ask_raw_meta() -> dict:
+def request_raw_meta() -> dict:
     raw = {}
 
     for field in constant.RAW_META_FIELDS:
@@ -91,7 +91,7 @@ def ask_raw_meta() -> dict:
 
     return raw
 
-def ask_llm_features() -> dict:
+def request_llm_features() -> dict:
     features = {}
 
     for feature in constant.LLM_FEATURES:
@@ -105,7 +105,7 @@ def ask_llm_features() -> dict:
 
     return features
 
-def ask_object() -> None:
+def request_object() -> None:
     '''Ввод сериала: raw-данные в meta + LLM-признаки в dataset'''
 
     title = loop_input(
@@ -119,10 +119,10 @@ def ask_object() -> None:
     )
 
     print('\n--- Постоянные данные для meta ---')
-    raw = ask_raw_meta()
+    raw = request_raw_meta()
 
     print('\n--- Параметры эксперимента ---')
-    features = ask_llm_features()
+    features = request_llm_features()
 
     meta_result = storage.add_movies_to_meta(
         title=title,
@@ -170,14 +170,16 @@ def show_feature_importance(data: list):
     data = storage.load_dataset()
     for feature in constant.FEATURES:
         weights_without_holding = model.selection_weights_without_feature(data,excluded_feature=feature)
-        error_without_holding = model.mean_absolute_error(data, weights_without_holding)
+        error_without_holding = model.mean_absolute_error(data, 
+                                                          weights_without_holding)
         print(f"\nВеса без {feature}:")
         for weight, value in weights_without_holding.items():
             print(f"{weight}: {round(value, 2)}")
-
-            print(f"Ошибка без {feature}:", round(error_without_holding,4))
+            print(f"Ошибка без {feature}:", 
+                  round(error_without_holding,4))
 
 def main_loop():
+    '''Главная функйия программы'''
     
     storage.init_meta()
     storage.init_dataset()
@@ -197,7 +199,7 @@ def main_loop():
             break
         elif command == '1':
             ui.clean_terminal()
-            ask_object()
+            request_object()
         elif command == "2":
             ui.clean_terminal()
             storage.input_txt()
