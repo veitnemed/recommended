@@ -1,3 +1,5 @@
+import scheme
+
 DATA_DIR = 'C:/movies-learn'
 FILE_NAME = 'C:/movies-learn/dataset.json'
 WEIGHTS_JSON = 'C:/movies-learn/weights.json'
@@ -5,36 +7,21 @@ BACKUP_DIR = 'C:/backup-movies-learn/'
 DIR_META = 'C:/meta-movies-learn/'
 META_JSON = 'C:/meta-movies-learn/meta_data.json'
 TXT_INPUT = 'C:/movies-learn/input.txt'
+CSV_INPUT = 'C:/movies-learn/input.csv'
 
-MAIN_INFO = ["title", "user_score"]
-RAW_SCORES = ["kp_score", "year", "imdb_votes", "first_episode_score", "last_episode_score"]
-COMPUTED_SCORES = ["kp_score", "imdb_popularity", "delta_score", "last_episode_score" ]
-subjective_scores
-SUBJECTIVE_SCORES = ["holding", "hook", "tension"]
-'''{
-  "main_info": {
-    "title": "Триггер",
-    "user_score": 8.0
-  },
-  "raw_scores": {
-    "year": 2021,
-    "imdb_votes": 2010,
-    "first_episode_score": 8.0,
-    "last_episode_score": 7.0
-  },
-  "computed_scores": {
-    "kp_score": 8.0,
-    "imdb_popularity": 7.0,
-    "delta_score": 4.0,
-    "last_episode_score": 7.0
-  },
-  "subjective_scores": {
-    "holding": 7.0,
-    "hook": 6.0,
-    "tension": 9.0
-  }
-}'''
-   
+
+
+MAIN_INFO = scheme.get_fields("main_info")
+RAW_SCORES = scheme.get_fields("raw_scores")
+SUBJECTIVE_SCORES = scheme.get_fields("subjective_scores")
+
+COMPUTED_SCORES = scheme.get_fields("computed_scores")
+
+CSV_FIELDS = MAIN_INFO + RAW_SCORES + SUBJECTIVE_SCORES
+FEATURES = COMPUTED_SCORES + SUBJECTIVE_SCORES
+RAW_META_FIELDS = RAW_SCORES
+FEATURES_CONST = COMPUTED_SCORES
+
 DEFAULT_WEIGHTS = {
     feature: round(1 / len(FEATURES), 4)
     for feature in FEATURES
@@ -43,29 +30,44 @@ DEFAULT_WEIGHTS = {
 TRANSLATION = {
     'features': {
         "kp_score": "Рейтинг Кинопоиска",
-        "popularity_score": "Популярность с поправкой на год и голоса IMDb",
+        "imdb_popularity": "Популярность IMDb",
+        "delta_score": "Разница оценки первой и последней серии",
         "first_episode_score": "Оценка первой серии",
         "last_episode_score": "Оценка последней серии",
         "hook": "Сюжетная завязка",
         "holding": "Удержание за просмотром",
         "tension": "Напряжение"
-        },
+    },
     'meta features': {
         "kp_score": "Рейтинг Кинопоиска",
-        "popularity_score": "Популярность с поправкой на год и голоса IMDb",
-        "first_episode_score": "Оценка первой серии",
-        "last_episode_score": "Оценка последней серии",
-        "hook": "Сюжетная завязка",
-        "holding": "Удержание за просмотром",
-        "tension": "Напряжение"
+        "year": "Год выхода",
+        "imdb_votes": "Количество голосов IMDb",
+        "first_episode_votes": "Оценка первой серии",
+        "last_episode_votes": "Оценка последней серии"
     }
-} 
+}
 
-COMMANDS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9","10"]
+TRANSLATION = {
+    'features': {
+        "kp_score": "Kinopoisk score",
+        "kp_popularity": "Kinopoisk popularity",
+        "imdb_score": "IMDb score",
+        "imdb_popularity": "IMDb popularity",
+        "hook": "Hook",
+        "holding": "Holding",
+        "tension": "Tension"
+    },
+    'meta features': {
+        "year": "Year",
+        "kp_score": "Kinopoisk score",
+        "kp_votes": "Kinopoisk votes",
+        "imdb_score": "IMDb score",
+        "imdb_votes": "IMDb votes"
+    }
+}
+
+COMMANDS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
 BAD_CHARACTERS = ",.'][@#$%^&*()?"
 THRESHOLD = 6.5
 NOW_YEAR = 2026
-
-
-STEP = 0.01
-
+STEP = 0.001
