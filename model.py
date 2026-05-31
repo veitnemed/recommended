@@ -60,6 +60,20 @@ def mean_absolute_error(data: list, weights=constant.DEFAULT_WEIGHTS) -> float:
     return absolute_error
 
 
+def kp_mean_absolute_error(data: list) -> float:
+    """Считает среднюю абсолютную ошибку оценки Кинопоиска на датасете."""
+    movies = iter_movies(data)
+    length = len(movies)
+    absolute_error = 0
+    if length == 0:
+        return 0
+    for obj in movies:
+        user_score = get_user_score(obj)
+        kp_score = obj["raw_scores"]["kp_score"]
+        absolute_error += abs(user_score - kp_score) / length
+    return absolute_error
+
+
 def mean_error(data: list, weights=constant.DEFAULT_WEIGHTS) -> float:
     """Считает среднее отклонение модели с учетом знака ошибки."""
     movies = iter_movies(data)
@@ -96,7 +110,7 @@ def normalize_weights(weights: dict) -> dict:
 def fit_weights_2(
         data: list,
         start_weights=constant.DEFAULT_WEIGHTS,
-        score=20,
+        score=5000,
         step: float = constant.STEP
 ) -> dict:
     """Подбирает веса случайными переносами доли веса между признаками."""
@@ -137,7 +151,7 @@ def fit_weights_2(
 def fit_weights_until_plateau(
         data: list,
         start_weights=constant.DEFAULT_WEIGHTS,
-        score=20,
+        score=5000,
         step: float = constant.STEP
 ) -> dict:
     return fit_weights_2(data, start_weights, score, step)
@@ -188,27 +202,37 @@ def one_to_one_error(data: list, top_n):
     length_data = len(data)
     mean_error = 0
     result = []
+    all_dict = {}
     for idx in range(length_data):
         train_data = data.copy()
         test_movie = train_data.pop(idx)
 
         user_score = get_user_score(test_movie)
         new_weights = fit_weights(train_data)
-
+        features = get_features(test_movie)
         predict = predict_score(get_features(test_movie), new_weights)
         error = abs(user_score - predict)
-        result.append((error, get_movie_title(test_movie), round(user_score, 1), round(predict, 1)))
+        result.append((error, get_movie_title(test_movie), round(user_score, 1), round(predict, 1),new_weights, features))
         mean_error += error / length_data
 
     sorted_result = sorted(result, key=lambda x: x[0], reverse=True)
 
     counter = 0
 
-    for error, title, user_score, predict in sorted_result:
+    for error, title, user_score, predict, new_weights,features in sorted_result:
         counter += 1
         print(f"\n{title} ({round(user_score, 2)})")
         print('Оценка модели:', round(predict, 2))
         print('Ошибка:', round(error, 2))
+        print('\nВклад параметров:')
+        res = []
+        for k,v in features.items():
+            impact = v*new_weights[k]
+            res.append((impact,k))
+
+        for k, v in sorted(res, reverse=True):
+            print(f"{v}: + {round(k,2)}")
+
         if counter == top_n:
             break
 

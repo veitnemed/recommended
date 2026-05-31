@@ -1,4 +1,5 @@
 import copy
+import tags_work
 
 
 MAIN_INFO = "main_info"
@@ -44,31 +45,12 @@ SHEME_VALIDATORS = {
         }
     },
     TAGS_VIBE: {
-        "has_crime": {
-            "tag": ["tags_score"],
-            "type": int,
-            "max_value": 1
-        },
-        "has_psyhology": {
-            "tag": ["tags_score"],
-            "type": int,
-            "max_value": 1
-        },
-        "has_comedy": {
-            "tag": ["tags_score"],
-            "type": int,
-            "max_value": 1
-        },
-        "has_mystic": {
-            "tag": ["tags_score"],
-            "type": int,
-            "max_value": 1
-        },
-        "has_romantic_tension": {
+        feature: {
             "tag": ["tags_score"],
             "type": int,
             "max_value": 1
         }
+        for feature in tags_work.get_tag_fields()
     }
 }
 

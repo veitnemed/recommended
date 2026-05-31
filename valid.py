@@ -1,6 +1,10 @@
 import constant
 
 
+def parse_float(value) -> float:
+    return float(str(value).replace(",", "."))
+
+
 def is_valid_features(features: dict) -> bool:
     return set(constant.FEATURES) == set(features.keys())
 
@@ -14,7 +18,7 @@ def is_correct_title(title):
 
 def is_correct_score(score: str):
     try:
-        score_float = float(score)
+        score_float = parse_float(score)
         return 0 <= score_float <= 10
     except:
         return False
@@ -88,7 +92,7 @@ def is_correct_train_step(value: str) -> bool:
     if value.strip() == "":
         return True
     try:
-        step = float(value)
+        step = parse_float(value)
         return 0 < step <= 1
     except ValueError:
         return False

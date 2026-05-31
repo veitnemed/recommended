@@ -23,6 +23,11 @@ def assert_check(text: str, result: bool) -> None:
 
 def make_movie(title="Test Movie", user_score=8.0, raw_score=8.0) -> dict:
     """Создает валидный объект фильма для тестовых сценариев."""
+    tags_vibe = {feature: 0 for feature in constant.TAGS_VIBE}
+    for feature in ["has_crime", "has_psychology", "has_romantic_pursuit"]:
+        if feature in tags_vibe:
+            tags_vibe[feature] = 1
+
     return {
         "main_info": {
             "title": title,
@@ -35,13 +40,7 @@ def make_movie(title="Test Movie", user_score=8.0, raw_score=8.0) -> dict:
             "imdb_score": raw_score,
             "imdb_votes": 1200
         },
-        constant.TAGS_VIBE_SECTION: {
-            "has_crime": 1,
-            "has_psyhology": 1,
-            "has_comedy": 0,
-            "has_mystic": 0,
-            "has_romantic_tension": 1
-        }
+        constant.TAGS_VIBE_SECTION: tags_vibe
     }
 
 
@@ -126,13 +125,14 @@ def test_meta_overrides_raw_scores() -> None:
     storage.clean_dataset()
 
     second_movie = make_movie(title="Known Movie", raw_score=1.0)
-    second_movie[constant.TAGS_VIBE_SECTION]["has_comedy"] = 1
+    changed_tag = constant.TAGS_VIBE[0]
+    second_movie[constant.TAGS_VIBE_SECTION][changed_tag] = 1
 
     assert_check("Повторная запись с тем же title добавляется в пустой dataset", storage.add_movie(second_movie))
 
     saved_movie = storage.load_dataset()["Known Movie"]
     assert_check("Raw kp_score взят из meta, а не из нового ввода", saved_movie["raw_scores"]["kp_score"] == 9.0)
-    assert_check("Tag has_comedy взят из нового ввода", saved_movie[constant.TAGS_VIBE_SECTION]["has_comedy"] == 1)
+    assert_check("Tag взят из нового ввода", saved_movie[constant.TAGS_VIBE_SECTION][changed_tag] == 1)
 
 
 def test_duplicate_rejected() -> None:
@@ -175,6 +175,25 @@ def test_validation() -> None:
     assert_check("-1 голосов не проходит", valid.is_correct_votes("-1") is False)
 
 
+def test_tag_compatibility() -> None:
+    """Checks legacy tag migration and missing active tag defaults."""
+    expected_tags = constant.TAGS_VIBE
+    old_tags = {
+        "has_crime": 1,
+        "has_psyhology": 1,
+        "has_comedy": 0,
+        "has_mystic": 1,
+        "has_romantic_tension": 1,
+    }
+    normalized = storage.normalize_tags_vibe(old_tags)
+
+    assert_check("Tag order matches the new scheme", constant.TAGS_VIBE == expected_tags)
+    assert_check("Legacy tags are removed after migration", list(normalized) == expected_tags)
+    assert_check("Missing active tags default to zero", all(feature in normalized for feature in constant.TAGS_VIBE))
+    changed_tag = constant.TAGS_VIBE[0]
+    assert_check("Invalid binary tag is rejected", storage.is_valid_tags_vibe({**normalized, changed_tag: 2}) is False)
+
+
 def test_training() -> None:
     """Проверяет запуск обучения модели."""
     print("\n7) Проверяем обучение модели")
@@ -203,8 +222,9 @@ def test_txt_import() -> None:
     """Проверяет импорт записи из txt-файла."""
     print("\n8) Проверяем импорт из txt")
     storage.clean_dataset()
+    tags = ["0"] * len(constant.TAGS_VIBE)
     Path(constant.TXT_INPUT).write_text(
-        "Txt Movie;8;2024;8;120000;8;1200;1;1;0;0;1\n",
+        ";".join(["Txt Movie", "8", "2024", "8", "120000", "8", "1200"] + tags) + "\n",
         encoding="utf-8"
     )
 
@@ -224,9 +244,10 @@ def test_csv_import() -> None:
     """Проверяет импорт записи из CSV-файла."""
     print("\n9) Проверяем импорт из CSV")
     storage.clean_dataset()
+    tags = ["0"] * len(constant.TAGS_VIBE)
     Path(constant.CSV_INPUT).write_text(
-        "title;user_score;year;kp_score;kp_votes;imdb_score;imdb_votes;has_crime;has_psyhology;has_comedy;has_mystic;has_romantic_tension\n"
-        "Csv Movie;8;2024;8;120000;8;1200;1;1;0;0;1\n",
+        ";".join(constant.CSV_FIELDS) + "\n"
+        + ";".join(["Csv Movie", "8", "2024", "8", "120000", "8", "1200"] + tags) + "\n",
         encoding="utf-8-sig"
     )
 
@@ -253,6 +274,7 @@ def run_tests() -> None:
         test_duplicate_rejected()
         test_feature_formatting()
         test_validation()
+        test_tag_compatibility()
         test_training()
         test_txt_import()
         test_csv_import()

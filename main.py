@@ -1,10 +1,12 @@
 import time
 import os
 import constant
+import excel_work
 import format_score as format
 import model
 import request
 import storage
+import tags_work
 import ui
 import valid
 from functools import partial
@@ -35,7 +37,7 @@ def get_predict(weights: dict) -> None:
             text=f'{feature} >> ',
             funcs_list=[valid.is_correct_score]
         )
-        features[feature] = float(answer)
+        features[feature] = valid.parse_float(answer)
 
     score = model.predict_score(features, weights)
     print(f'Оценка модели для {title}: {score}')
@@ -51,19 +53,47 @@ def request_object() -> None:
     else:
         print('Ошибка! Новая запись не добавлена')
 
-def train_model(data, weights, fit_func, title: str):
+def train_model(data, weights, fit_func, title: str, **train_kwargss):
     start_time = time.perf_counter()
 
     print(title)
     old_error = model.mean_absolute_error(data, weights)
-    new_weights = fit_func(data, weights)
+    new_weights = fit_func(data, weights, **train_kwargss)
     new_error = model.mean_absolute_error(data, new_weights)
 
-    storage.save_weights(new_weights)
+    if new_error <= old_error:
+        storage.save_weights(new_weights)
+    else:
+        new_weights = weights
+        new_error = old_error
+        print('Новые веса не сохранены: ошибка модели увеличилась.')
     end_time = time.perf_counter()
     delta_time = end_time - start_time
 
     ui.show_result_train(new_weights, old_error, new_error, delta_time)
+
+
+def auto_train_grid_steps(data, weights, title: str):
+    start_time = time.perf_counter()
+    step_values = constant.STEPS_TRAIN
+    error_now = model.mean_absolute_error(data, weights)
+    best_weights = weights.copy()
+    best_error = error_now
+
+    print(title)
+    for step in step_values:
+        new_weights = model.fit_weights(data,best_weights,passes=5, step = step)
+        new_error = model.mean_absolute_error(data,new_weights)
+
+        if new_error < best_error:
+            best_error = new_error
+            best_weights = new_weights
+
+        print(f'step: {step} | error_now: {round(best_error,2)}')
+    storage.save_weights(best_weights)
+    end_time = time.perf_counter()
+    delta_time = end_time - start_time
+    ui.show_result_train(best_weights, error_now, best_error, delta_time)
 
 def show_mean_error(data, weights):
     ui.clean_terminal()
@@ -100,7 +130,7 @@ def show_feature_importance(weights, full_error):
     ui.clean_terminal()
     data = storage.load_dataset()
     for feature in constant.FEATURES:
-        weights_without_feature = model.weights_without_feature(weights, feature)
+        weights_without_feature = model.selection_weights_without_feature(data, feature, weights)
         error_without_feature = model.mean_absolute_error(data, weights_without_feature)
         eps = error_without_feature - full_error
         print(f"Ошибка без {feature}: {round(error_without_feature * 10, 1)} %")
@@ -126,10 +156,12 @@ def setup_train_params():
     )
 
     if step.strip() != "":
-        TRAIN_STEP = float(step)
+        TRAIN_STEP = valid.parse_float(step)
     if plateau_score.strip() != "":
         TRAIN_PLATEAU_SCORE = int(plateau_score)
     print(f'Параметры обучения обновлены: шаг={TRAIN_STEP}, плато={TRAIN_PLATEAU_SCORE}')
+
+
 
 def open_data_menu():
     while True:
@@ -141,10 +173,10 @@ def open_data_menu():
         if command == "0":
             return
         elif command == "1":
-            if storage.export_dataset_to_csv():
-                storage.open_file(constant.EDIT_CSV)
+            if excel_work.export_dataset_to_excel():
+                storage.open_file(constant.EDIT_EXCEL)
         elif command == "2":
-            storage.replace_dataset_from_edit_csv()
+            excel_work.replace_dataset_from_excel()
         elif command == "3":
             request_object()
         elif command == "4":
@@ -164,37 +196,40 @@ def open_train_menu():
 
         command = request.loop_input(
             text=">> ",
-            funcs_list=[partial(valid.is_correct_select_menu,5)]
+            funcs_list=[partial(valid.is_correct_select_menu,6)]
         )
 
         if command == "0":
             return
         elif command == "1":
             train_model(
-                data,
-                weights,
-                lambda train_data, start_weights: model.fit_weights(train_data, start_weights, step=TRAIN_STEP),
-                'Перебор весов 0..1'
+                data = data,
+                weights = weights,
+                fit_func = model.fit_weights,
+                title = 'Перебор весов 0..1',
+                step = TRAIN_STEP
             )
         elif command == "2":
             train_model(
-                data,
-                weights,
-                lambda train_data, start_weights: model.fit_weights_until_plateau(
-                    train_data,
-                    start_weights,
-                    score=TRAIN_PLATEAU_SCORE,
-                    step=TRAIN_STEP
-                ),
-                'Рандомное обучение'
+                data = data,
+                weights = weights,
+                fit_func = model.fit_weights_until_plateau,
+                title = 'Рандомное обучение',
+                step = TRAIN_STEP,
+                score = TRAIN_PLATEAU_SCORE
             )
         elif command == "3":
+            auto_train_grid_steps(data = data,
+                                  weights = weights,
+                                  title= 'Перебор по шагам')
+        elif command == "4":
             length = len(data)
             model.one_to_one_error(data, min(10, length))
-        elif command == "4":
-            get_predict(weights)
         elif command == "5":
+            get_predict(weights)
+        elif command == "6":
             setup_train_params()
+
 
         press_enter()
 
@@ -238,21 +273,43 @@ def open_extra_menu():
         elif command == "2":
             updated_count = storage.rework_formated_scores()
             print(f'Пересчитано записей: {updated_count}')
+        elif command == "3":
+            open_tags_menu()
 
         press_enter()
 
+
+def open_tags_menu():
+    while True:
+        ui.clean_terminal()
+        ui.show_tags_menu()
+
+        command = request.loop_input(
+            text=">> ",
+            funcs_list=[partial(valid.is_correct_select_menu, 3)]
+        )
+
+        if command == "0":
+            return
+        elif command == "1":
+            tags_work.show_tags()
+        elif command == "2":
+            tags_work.request_new_tag()
+        elif command == "3":
+            tags_work.request_delete_tag()
+
+        press_enter()
+
+
 def main_loop():
-    storage.init_meta()
-    storage.init_dataset()
-    storage.init_weights()
-    storage.init_txt()
-    storage.init_csv()
-    storage.create_backup()
+
+    storage.init_all_dates()
 
     while True:
         ui.clean_terminal()
         data, weights, movies_counter, abs_error = get_menu_state()
-        ui.show_main_menu(movies_counter, round(abs_error, 2))
+        kp_error = model.kp_mean_absolute_error(data)
+        ui.show_main_menu(movies_counter, round(abs_error, 2), kp_error)
 
         command = request.loop_input(text=">> ",funcs_list=[partial(valid.is_correct_select_menu, 4)])
         if command == "0":

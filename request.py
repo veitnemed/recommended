@@ -70,7 +70,10 @@ def request_all_scores() -> dict:
                 text=f'>> {get_label(feature)}: ',
                 funcs_list=funcs
                             )
-            section[feature] = type_func(answer)
+            if type_func is float:
+                section[feature] = valid.parse_float(answer)
+            else:
+                section[feature] = type_func(answer)
 
         movie[section_name] = section
 

@@ -8,32 +8,35 @@ def clip_0_10(value: float) -> float:
     return max(0, min(10, value))
 
 
-def popularity_kp(kp_votes: int, year: int) -> float:
+def popularity_by_votes(votes: int, year: int, min_votes: int, max_votes: int) -> float:
     age = max(1, constant.NOW_YEAR - year)
-    adjusted_votes = kp_votes / (age ** 0.5)
+    adjusted_votes = votes / (age ** 0.5)
 
-    min_votes = 5000
-    max_votes = 5000000
+    score = (
+        math.log1p(adjusted_votes / min_votes)
+        / math.log1p(max_votes / min_votes)
+        * 10
+    )
 
-    if adjusted_votes <= min_votes:
-        return 0
-
-    score = math.log(adjusted_votes / min_votes) / math.log(max_votes / min_votes) * 15
     return clip_0_10(score)
+
+
+def popularity_kp(kp_votes: int, year: int) -> float:
+    return popularity_by_votes(
+        votes=kp_votes,
+        year=year,
+        min_votes=5000,
+        max_votes=5000000
+    )
 
 
 def popularity_score(imdb_votes: int, year: int) -> float:
-    age = max(1, constant.NOW_YEAR - year)
-    adjusted_votes = imdb_votes / (age ** 0.5)
-
-    min_votes = 50
-    max_votes = 5000
-
-    if adjusted_votes <= min_votes:
-        return 0
-
-    score = math.log(adjusted_votes / min_votes) / math.log(max_votes / min_votes) * 15
-    return clip_0_10(score)
+    return popularity_by_votes(
+        votes=imdb_votes,
+        year=year,
+        min_votes=50,
+        max_votes=5000
+    )
 
 
 FORMATTERS = {

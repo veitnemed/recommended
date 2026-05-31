@@ -9,9 +9,66 @@ import scheme
 import valid
 
 
+LEGACY_TAG_FIELDS = {
+    "has_psyhology": "has_psychology",
+    "has_relationship_focus": "has_relationships",
+    "has_romantic_tension": "has_romantic_pursuit",
+    "has_love_tension": "has_romantic_pursuit",
+}
+REMOVED_TAG_FIELDS = {"has_mystic"}
+
+
+def normalize_tags_vibe(tags_vibe: dict) -> dict:
+    """Converts legacy tags and fills missing active tags with zero."""
+    normalized = {feature: 0 for feature in constant.TAGS_VIBE}
+    for feature, value in tags_vibe.items():
+        if feature in normalized:
+            normalized[feature] = value
+    for old_feature, active_feature in LEGACY_TAG_FIELDS.items():
+        if old_feature in tags_vibe and active_feature not in tags_vibe:
+            normalized[active_feature] = tags_vibe[old_feature]
+    return normalized
+
+
+def normalize_movie_tags(movie: dict) -> dict:
+    if constant.TAGS_VIBE_SECTION in movie:
+        movie[constant.TAGS_VIBE_SECTION] = normalize_tags_vibe(movie[constant.TAGS_VIBE_SECTION])
+    return movie
+
+
+def normalize_csv_row(row: dict) -> dict:
+    normalized = {feature: value for feature, value in row.items() if feature not in REMOVED_TAG_FIELDS}
+    for old_feature, active_feature in LEGACY_TAG_FIELDS.items():
+        if active_feature not in normalized and old_feature in normalized:
+            normalized[active_feature] = normalized[old_feature]
+        normalized.pop(old_feature, None)
+    for feature in constant.TAGS_VIBE:
+        normalized.setdefault(feature, "0")
+    return normalized
+
+
+def is_supported_csv_fields(fieldnames: list) -> bool:
+    normalized = normalize_csv_row({field: "" for field in fieldnames})
+    return all(field in normalized for field in constant.CSV_FIELDS)
+
+
 def is_json_exists(file_name):
     """Проверяет, существует ли файл по переданному пути."""
     return os.path.exists(file_name)
+
+
+def open_file(file_name: str) -> None:
+    """Открывает файл в программе Windows по умолчанию."""
+    os.startfile(file_name)
+
+
+def is_file_writable(file_name: str) -> bool:
+    """Проверяет доступность существующего файла для записи без изменения данных."""
+    try:
+        with open(file_name, 'a', encoding='UTF-8'):
+            return True
+    except PermissionError:
+        return False
 
 
 def init_dataset():
@@ -36,7 +93,7 @@ def init_meta():
 
 def load_meta() -> dict:
     """Загружает метаданные фильмов из JSON-файла."""
-    with open(constant.META_JSON, 'r', encoding='UTF-8') as file:
+    with open(constant.META_JSON, 'r', encoding='utf-8-sig') as file:
         return json.load(file)
 
 
@@ -48,14 +105,18 @@ def save_meta(meta: dict):
 
 def load_dataset() -> list:
     """Загружает список фильмов из JSON-файла датасета."""
-    with open(constant.FILE_NAME, 'r', encoding='UTF-8') as file:
-        return json.load(file)
+    with open(constant.FILE_NAME, 'r', encoding='utf-8-sig') as file:
+        data = json.load(file)
+    for movie in data.values():
+        normalize_movie_tags(movie)
+    return data
 
 
 def save_dataset(data: list):
     """Сохраняет список фильмов в JSON-файл датасета."""
     with open(constant.FILE_NAME, 'w', encoding='UTF-8') as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
+        normalized = {title: normalize_movie_tags(movie) for title, movie in data.items()}
+        json.dump(normalized, file, ensure_ascii=False, indent=4)
 
 
 def is_origin_title(new_title: str) -> bool:
@@ -76,7 +137,7 @@ def normalize_main_info(main_info: dict) -> dict:
         elif feature == "year":
             normalized[feature] = int(main_info[feature])
         else:
-            normalized[feature] = float(main_info[feature])
+            normalized[feature] = valid.parse_float(main_info[feature])
     return normalized
 
 
@@ -86,7 +147,7 @@ def normalize_raw_scores(raw: dict) -> dict:
         if feature.endswith("_votes"):
             normalized[feature] = int(raw[feature])
         else:
-            normalized[feature] = float(raw[feature])
+            normalized[feature] = valid.parse_float(raw[feature])
     return normalized
 
 
@@ -171,7 +232,7 @@ def add_movie(movie: dict) -> bool:
     """Добавляет фильм в датасет, используя постоянные raw-поля из meta."""
     main_info = movie["main_info"]
     input_raw_scores = movie["raw_scores"]
-    tags_vibe = movie[constant.TAGS_VIBE_SECTION]
+    tags_vibe = normalize_tags_vibe(movie[constant.TAGS_VIBE_SECTION])
 
     title = str(main_info["title"]).strip()
     user_score = main_info["user_score"]
@@ -281,13 +342,22 @@ def init_weights():
 def load_weights() -> list:
     """Загружает веса модели из JSON-файла."""
     with open(constant.WEIGHTS_JSON, 'r', encoding='UTF-8') as file:
-        return json.load(file)
+        weights = json.load(file)
+    normalized = {}
+    for feature in constant.FEATURES:
+        normalized[feature] = weights.get(feature, constant.DEFAULT_WEIGHTS[feature])
+        for old_feature, active_feature in LEGACY_TAG_FIELDS.items():
+            if active_feature == feature and old_feature in weights and feature not in weights:
+                normalized[feature] = weights[old_feature]
+                break
+    return normalized
 
 
 def save_weights(data: dict):
     """Сохраняет веса модели в JSON-файл."""
     with open(constant.WEIGHTS_JSON, 'w', encoding='UTF-8') as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
+        normalized = {feature: data.get(feature, constant.DEFAULT_WEIGHTS[feature]) for feature in constant.FEATURES}
+        json.dump(normalized, file, ensure_ascii=False, indent=4)
 
 
 def uppdate_weights(weights: dict):
@@ -312,10 +382,15 @@ def init_csv():
             writer.writeheader()
 
 
-def export_dataset_to_csv() -> bool:
+def export_dataset_to_csv(overwrite: bool = False) -> bool:
     data = load_dataset()
     meta = load_meta()
     os.makedirs(constant.DIR_TXT, exist_ok=True)
+
+    if overwrite is False and os.path.exists(constant.EDIT_CSV):
+        print(f'CSV для редактирования уже существует: {constant.EDIT_CSV}')
+        print('Открываю существующий файл без перезаписи.')
+        return True
 
     try:
         with open(constant.EDIT_CSV, 'w', encoding='utf-8-sig', newline='') as file:
@@ -326,8 +401,11 @@ def export_dataset_to_csv() -> bool:
                 row = {}
                 for feature in constant.MAIN_INFO:
                     row[feature] = movie["main_info"][feature]
+                row["user_score"] = format_csv_number(row["user_score"])
                 for feature in constant.RAW_SCORES:
                     row[feature] = movie["raw_scores"][feature]
+                    if feature.endswith("_score"):
+                        row[feature] = format_csv_number(row[feature])
                 for feature in constant.TAGS_VIBE:
                     row[feature] = movie[constant.TAGS_VIBE_SECTION][feature]
                 writer.writerow(row)
@@ -337,8 +415,11 @@ def export_dataset_to_csv() -> bool:
                     row = {}
                     for feature in constant.MAIN_INFO:
                         row[feature] = movie["main_info"][feature]
+                    row["user_score"] = format_csv_number(row["user_score"])
                     for feature in constant.RAW_SCORES:
                         row[feature] = movie["raw_scores"][feature]
+                        if feature.endswith("_score"):
+                            row[feature] = format_csv_number(row[feature])
                     for feature in constant.TAGS_VIBE:
                         row[feature] = ""
                     writer.writerow(row)
@@ -354,8 +435,13 @@ def export_dataset_to_csv() -> bool:
     return True
 
 
+def format_csv_number(value) -> str:
+    return str(value).replace(".", ",")
+
+
 def build_movie_from_row(row: dict, row_number: int) -> dict:
     """Преобразует строку CSV в структуру фильма для add_movie."""
+    row = normalize_csv_row(row)
     title = row["title"].strip()
     user_score = row["user_score"].strip()
     year = row["year"].strip()
@@ -389,7 +475,7 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
             if valid.is_correct_score(value) is False:
                 print(f'Строка {row_number}: некорректное значение {feature}')
                 return None
-            raw_scores[feature] = float(value)
+            raw_scores[feature] = valid.parse_float(value)
 
     tags_vibe = {}
     tags_schema = scheme.get_schema(scheme.TAGS_VIBE)
@@ -403,7 +489,7 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
 
     main_info = {}
     main_info["title"] = title
-    main_info["user_score"] = float(user_score)
+    main_info["user_score"] = valid.parse_float(user_score)
     main_info["year"] = int(year)
 
     movie = {}
@@ -427,15 +513,16 @@ def input_csv(file_name: str = None) -> bool:
             print('CSV-файл пуст!')
             return False
 
-        if reader.fieldnames != constant.CSV_FIELDS:
+        if is_supported_csv_fields(reader.fieldnames) is False:
             print('Ошибка CSV! Заголовки не совпадают с ожидаемыми')
             print('Ожидались:', constant.CSV_FIELDS)
             print('Получены:', reader.fieldnames)
             return False
 
         for row_number, row in enumerate(reader, start=2):
-            if all(row[field].strip() == "" for field in constant.CSV_FIELDS):
+            if all((value or "").strip() == "" for value in row.values()):
                 continue
+            row = normalize_csv_row(row)
 
             movie = build_movie_from_row(row, row_number)
             if movie is None:
@@ -468,17 +555,17 @@ def input_edit_csv() -> bool:
                 print('Edit CSV пуст!')
                 return False
 
-            if reader.fieldnames != constant.CSV_FIELDS:
+            if is_supported_csv_fields(reader.fieldnames) is False:
                 print('Ошибка edit CSV! Заголовки не совпадают с ожидаемыми')
                 print('Ожидались:', constant.CSV_FIELDS)
                 print('Получены:', reader.fieldnames)
                 return False
 
             for row_number, row in enumerate(reader, start=2):
-                values = [row[field].strip() for field in constant.CSV_FIELDS]
-
-                if all(value == "" for value in values):
+                if all((value or "").strip() == "" for value in row.values()):
                     continue
+                row = normalize_csv_row(row)
+                values = [row[field].strip() for field in constant.CSV_FIELDS]
 
                 rows_count += 1
 
@@ -516,9 +603,26 @@ def replace_dataset_from_edit_csv() -> bool:
 
     old_dataset = load_dataset()
     old_meta = load_meta()
+
+    for file_name in [constant.FILE_NAME, constant.META_JSON]:
+        if is_file_writable(file_name) is False:
+            print(f'Не удалось открыть файл для записи: {file_name}')
+            print('Закрой файл в другой программе или проверь права доступа и попробуй снова.')
+            return False
+
     create_backup()
-    clean_dataset()
-    clean_meta()
+    try:
+        clean_dataset()
+        clean_meta()
+    except PermissionError as error:
+        print(f'Не удалось подготовить dataset для импорта: {error.filename}')
+        print('Закрой файл в другой программе или проверь права доступа и попробуй снова.')
+        try:
+            save_dataset(old_dataset)
+            save_meta(old_meta)
+        except PermissionError:
+            print('Не удалось автоматически восстановить dataset. Используй последний backup.')
+        return False
 
     if input_edit_csv() is False:
         save_dataset(old_dataset)
@@ -595,7 +699,7 @@ def restart_csv():
 def create_backup():
     """Создает резервную копию текущего датасета."""
     dataset = load_dataset()
-    date_name = datetime.now().strftime('%d-%m-%Y %H-%M-%S')
+    date_name = datetime.now().strftime('%d-%m-%Y %H-%M-%S-%f')
     backup_file = constant.BACKUP_DIR + date_name + '.json'
     if is_json_exists(backup_file) is False:
         os.makedirs(constant.BACKUP_DIR, exist_ok=True)
@@ -621,3 +725,12 @@ def get_meta_obj(title: str) -> dict:
         if meta_title.lower() == title.lower():
             return obj
     return None
+
+def init_all_dates():
+    "Иницализация всех данных"
+    init_meta()
+    init_dataset()
+    init_weights()
+    init_txt()
+    init_csv()
+    create_backup()

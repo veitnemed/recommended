@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local environments
+.venv/
+venv/
+
+# Local recovery and spreadsheet files
+recovered_edit_dataset.csv
+*.xlsx
