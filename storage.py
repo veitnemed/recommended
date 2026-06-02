@@ -734,3 +734,8 @@ def init_all_dates():
     init_txt()
     init_csv()
     create_backup()
+
+def get_all_titles() -> list:
+    "Возвращает название всех объектов"
+
+    return list(load_dataset().keys())

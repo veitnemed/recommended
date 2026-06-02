@@ -2,6 +2,7 @@ import json
 import os
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+import storage
 
 
 API_URL = "https://api.poiskkino.dev"
@@ -13,24 +14,7 @@ if TOKEN is None:
     except ImportError:
         TOKEN = None
 
-SERIALS = [
-    "Чужие деньги",
-    "Триггер",
-    "Аутсорс",
-    "Чернобыль зона отчуждения",
-    "Игра на выживание",
-    "Хрустальный",
-    "Слово пацана",
-    "Фарма",
-    "Химера",
-    "Санкционер",
-    "Открытый брак",
-    "Калимба",
-    "Урок",
-    "Haappy End",
-    "Индентификация",
-    "Закон каменных джунглей"
-]
+SERIALS = storage.get_all_titles()
 
 
 def api_request(path: str, params: dict = None) -> dict:
@@ -164,25 +148,12 @@ def show_serial_tags(title: str) -> None:
     directors = get_persons(serial, "режиссеры")
     actors = get_persons(serial, "актеры")
 
-    print(f"Найдено: {serial.get('name')} ({serial.get('year')})")
-    print("ID:", serial.get("id"))
-    print("Тип:", serial.get("type"))
+    print(f"\nНайдено: {serial.get('name')} ({serial.get('year')})\n")
     show_list("Жанры", genres)
-    show_list("Страны", countries)
     print("Рейтинг Kinopoisk:", get_rating(serial, "kp"))
     print("Голосов Kinopoisk:", get_votes(serial, "kp"))
     print("Рейтинг IMDb:", get_rating(serial, "imdb"))
     print("Голосов IMDb:", get_votes(serial, "imdb"))
-    print("Возрастной рейтинг:", serial.get("ageRating"))
-    print("Длительность серии:", serial.get("seriesLength"))
-    print("Количество сезонов:", get_seasons_count(serial))
-    print("Статус:", serial.get("status"))
-    print("Входит в топ-10:", serial.get("top10"))
-    print("Место в топ-250:", serial.get("top250"))
-    show_list("Режиссеры", directors)
-    show_list("Актеры", actors)
-    print("Количество ключевых слов:", len(keywords))
-    print("Ключевые слова:", ", ".join(keywords) or "нет данных")
     print("Краткое описание:", serial.get("shortDescription") or "нет данных")
 
 
