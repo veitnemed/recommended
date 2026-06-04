@@ -2,6 +2,7 @@ import json
 import os
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
 import storage
 
 
@@ -43,9 +44,10 @@ def find_serial(title: str) -> dict:
     )
 
     movies = data.get("docs", [])
+    title = title.strip().lower()
 
     for movie in movies:
-        if movie.get("name", "").strip().lower() == title.strip().lower():
+        if movie.get("name", "").strip().lower() == title:
             return movie
 
     if len(movies) > 0:
@@ -127,34 +129,29 @@ def get_votes(serial: dict, source: str):
     return serial.get("votes", {}).get(source)
 
 
-def show_list(title: str, values: list) -> None:
-    print(title + ":", ", ".join(values) or "нет данных")
+def get_description(serial: dict) -> str:
+    description = serial.get("description") or serial.get("shortDescription")
+    if description is None or str(description).strip() == "":
+        return "нет данных"
+    return str(description).strip()
 
 
 def show_serial_tags(title: str) -> None:
     print("=" * 60)
-    print("Ищем:", title)
 
     movie = find_serial(title)
 
     if movie is None:
-        print("Сериал не найден")
+        print("Название:", title)
+        print("Год:", 0)
+        print("Описание:", "сериал не найден")
         return
 
     serial = get_serial_info(movie["id"])
-    genres = get_genres(serial)
-    countries = get_names(serial, "countries")
-    keywords = get_keywords(serial["id"])
-    directors = get_persons(serial, "режиссеры")
-    actors = get_persons(serial, "актеры")
 
-    print(f"\nНайдено: {serial.get('name')} ({serial.get('year')})\n")
-    show_list("Жанры", genres)
-    print("Рейтинг Kinopoisk:", get_rating(serial, "kp"))
-    print("Голосов Kinopoisk:", get_votes(serial, "kp"))
-    print("Рейтинг IMDb:", get_rating(serial, "imdb"))
-    print("Голосов IMDb:", get_votes(serial, "imdb"))
-    print("Краткое описание:", serial.get("shortDescription") or "нет данных")
+    print("Название:", serial.get("name") or title)
+    print("Год:", serial.get("year") or 0)
+    print("Описание:", get_description(serial))
 
 
 def run_test() -> None:

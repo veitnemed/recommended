@@ -38,22 +38,23 @@ def show_train_menu(movies_counter: int, error: int, step: float, plateau_score:
     show_header(movies_counter, error)
     print('ОБУЧЕНИЕ')
     print(f'Шаг: {step} | Плато: {plateau_score} попыток без улучшения\n')
-    print(' 1 >> Перебор весов 0..1')
-    print(' 2 >> Рандомное обучение')
-    print(' 3 >> Train mode 1')
-    print(' 4 >> Train mode 2')
-    print(' 5 >> Прогноз для каждого объекта')
+    print(' 1 >> Координатный поиск')
+    print(' 2 >> Случайная оптимизация')
+    print(' 3 >> Многошаговый координатный поиск')
+    print(' 4 >> Гибридная оптимизация\n')
+
+    print(' 5 >> Параметры обучения')
     print(' 6 >> Сделать прогноз')
-    print(' 7 >> Параметры обучения')
+    print(' 7 >> Leave-one-out проверка\n')
     print(' 0 >> Главное меню\n')
 
 
 def show_weights_menu(movies_counter: int, error: int):
     show_header(movies_counter, error)
     print('ВЕСА')
-    print(' 1 >> Показать веса')
+    print(' 1 >> Показать веса модели')
     print(' 2 >> Расчет влияния каждого параметра')
-    print(' 3 >> Сбросить веса')
+    print(' 3 >> Сбросить веса модели\n')
     print(' 0 >> Главное меню\n')
 
 

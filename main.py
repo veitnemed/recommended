@@ -13,7 +13,7 @@ from functools import partial
 
 
 TRAIN_STEP = constant.STEP
-TRAIN_PLATEAU_SCORE = 20
+TRAIN_PLATEAU_SCORE = 500
 
 def press_enter():
     input('Enter, чтобы продолжить >>')

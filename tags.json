@@ -29,46 +29,6 @@
         ],
         "translation": "Thriller"
     },
-    "imdb_horror": {
-        "label": "Ужасы",
-        "title": "IMDb тег Horror",
-        "question": "Указан ли у сериала тег Horror на IMDb?",
-        "scale": [
-            "0: тег Horror не указан",
-            "1: тег Horror указан"
-        ],
-        "translation": "Horror"
-    },
-    "imdb_comedy": {
-        "label": "Комедия",
-        "title": "IMDb тег Comedy",
-        "question": "Указан ли у сериала тег Comedy на IMDb?",
-        "scale": [
-            "0: тег Comedy не указан",
-            "1: тег Comedy указан"
-        ],
-        "translation": "Comedy"
-    },
-    "imdb_sci_fi": {
-        "label": "Фантастика",
-        "title": "IMDb тег Sci-Fi",
-        "question": "Указан ли у сериала тег Sci-Fi на IMDb?",
-        "scale": [
-            "0: тег Sci-Fi не указан",
-            "1: тег Sci-Fi указан"
-        ],
-        "translation": "Sci-Fi"
-    },
-    "imdb_period_drama": {
-        "label": "Историческая драма",
-        "title": "IMDb тег Period Drama",
-        "question": "Указан ли у сериала тег Period Drama на IMDb?",
-        "scale": [
-            "0: тег Period Drama не указан",
-            "1: тег Period Drama указан"
-        ],
-        "translation": "Period Drama"
-    },
     "imdb_serial_killer": {
         "label": "Серийный убийца",
         "title": "IMDb тег Serial Killer",
@@ -78,15 +38,5 @@
             "1: тег Serial Killer указан"
         ],
         "translation": "Serial Killer"
-    },
-    "imdb_total_tags": {
-        "label": "Количество тегов",
-        "title": "Общее количество IMDb тегов",
-        "question": "Сколько всего тегов указано у сериала на IMDb?",
-        "scale": [
-            "0: тегов нет или данные отсутствуют",
-            "1 и выше: общее количество тегов IMDb"
-        ],
-        "translation": "Total tags"
     }
 }
