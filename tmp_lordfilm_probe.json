@@ -1,0 +1,185 @@
+{
+  "forms": [
+    {
+      "action": "https://vs.lordfilm135.ru/search-result/",
+      "method": "post",
+      "html": "<form id=\"quicksearch\" method=\"post\" action=\"/search-result/\">\n\t\t\t\t\t\t<input type=\"hidden\" name=\"do\" value=\"search\">\n\t\t\t\t\t\t<input type=\"hidden\" name=\"subaction\" value=\"search\">\n\t\t\t\t\t\t<div class=\"search-box\">\n\t\t\t\t\t\t\t<input id=\"story\" name=\"story\" placeholder=\"Введите название\" type=\"text\" autocomplete=\"off\">\n\t\t\t\t\t\t\t<button type=\"submit\"><span class=\"fa fa-search\"></span></button>\n\t\t\t\t\t\t</div>\n\t\t\t\t\t</form>"
+    },
+    {
+      "action": "https://vs.lordfilm135.ru/podborki/",
+      "method": "post",
+      "html": "<form method=\"post\">\n\t\t<div class=\"login-title\">Авторизация</div>\n\t\t<div class=\"login-avatar\"><span class=\"fa fa-user\"></span></div>\n\t\t<div class=\"login-input\"><input type=\"text\" name=\"login_name\" id=\"login_name\" placeholder=\"Ваш логин или e-mail\"></div>\n\t\t<div class=\"login-input\"><input type=\"password\" name=\"login_password\" id=\"login_password\" placeholder=\"Ваш пароль\"></div>\n\t\t<div class=\"login-check\">\n\t\t\t<label for=\"login_not_save\">\n\t\t\t\t<input type=\"checkbox\" name=\"login_not_save\" id=\"login_not_save\" value=\"1\">\n\t\t\t\t<span>Запомнить</span>\n\t\t\t</label> \n\t\t</div>\n\t\t<div class=\"login-btn\"><button onclick=\"submit();\" type=\"submit\" title=\"Вход\">Войти на сайт</button></div>\n\t\t<input name=\"login\" type=\"hidden\" id=\"login\" value=\"submit\">\n\t\t<div class=\"login-btm fx-row\">\n\t\t\t<a href=\"/?do=register\" class=\"log-register\">Регистрация</a>\n\t\t\t<a href=\"https://vs.lordfilm135.ru/index.php?do=lostpassword\">Восстановить пароль</a>\n\t\t</div>\n\t</form>"
+    },
+    {
+      "action": "https://vs.lordfilm135.ru/search-result/",
+      "method": "post",
+      "html": "<form id=\"quicksearch\" method=\"post\" action=\"/search-result/\">\n\t\t\t\t\t\t<input type=\"hidden\" name=\"do\" value=\"search\">\n\t\t\t\t\t\t<input type=\"hidden\" name=\"subaction\" value=\"search\">\n\t\t\t\t\t\t<div class=\"search-box\">\n\t\t\t\t\t\t\t<input id=\"story\" name=\"story\" placeholder=\"Введите название\" type=\"text\">\n\t\t\t\t\t\t\t<button type=\"submit\"><span class=\"fa fa-search\"></span></button>\n\t\t\t\t\t\t</div>\n\t\t\t\t\t</form>"
+    }
+  ],
+  "search_exists": true,
+  "after_search_url": "https://vs.lordfilm135.ru/search-result/",
+  "after_search_title": "Поиск по сайту » Лордфильм - Смотреть фильмы онлайн в хорошем качестве бесплатно",
+  "after_search_text": "ФИЛЬМЫ\nПо жанрам:\nБиографические\nБоевики\nВестерны\nВоенные\nДокументальные\nДетективы\nДрамы\nИсторические\nКороткометражки\nКомедии\nКриминал\nМелодрамы\nМюзикл\nПриключения\nСемейные\nТриллеры\nУжасы\nФантастика\nФэнтези\nПо году:\n2026\n2025\nСериалы 2025\n2024\nПо странам:\nРусские\nДорамы\nЗарубежные\nСССР\nСЕРИАЛЫ\nМУЛЬТФИЛЬМЫ\nВОЙТИ\n Фильмы 2026  Недельный ТОП-50  Новости  Netflix  Marvel  Сериалы 2026  Подборки\nLordFilm » Поиск по сайту\nПоиск по сайту\nИнформация\nПо Вашему запросу найдено 5 ответов (Результаты запроса 1 - 5) :\nТриггер. Фильм\n2023\nТриггер\n7.3\n2018\nЧто, если чрезвычайно развитая ролевая игра с полным погружением вызывает большее привыкание, чем реальность\n7.0\n6.4\n2021\nФантастическая четверка\n3.8\n3.8\n1994\nКладбище домашних животных 2\n6.2\n4.9\n1992\nlordfilm - сайт лордфильм онлайн в хорошем качестве бесплатно.\nlordfilm.com@gmail.com - почта для обратной связи.\n\nГлавное меню\n\nФильмы\nСериалы\nВОЙТИ\nФИЛЬМЫ\nПо жанрам:\nБиографические\nБоевики\nВестерны\nВоенные\nДокументальные\nДетективы\nДрамы\nИсторические\nКороткометражки\nКомедии\nКриминал\nМелодрамы\nМюзикл\nПриключения\nСемейные\nТриллеры\nУжасы\nФантастика\nФэнтези\nПо году:\n2026\n2025\nСериалы 2025\n2024\nПо странам:\nРусские\nДорамы\nЗарубежные\nСССР\nСЕРИАЛЫ\nМУЛЬТФИЛЬМЫ",
+  "first_links": [
+    {
+      "text": "",
+      "href": "https://vs.lordfilm135.ru/"
+    },
+    {
+      "text": "ФИЛЬМЫ",
+      "href": "https://vs.lordfilm135.ru/filmy/"
+    },
+    {
+      "text": "Биографические",
+      "href": "https://vs.lordfilm135.ru/filmy/biografija/"
+    },
+    {
+      "text": "Боевики",
+      "href": "https://vs.lordfilm135.ru/filmy/boevik/"
+    },
+    {
+      "text": "Вестерны",
+      "href": "https://vs.lordfilm135.ru/filmy/vestern/"
+    },
+    {
+      "text": "Военные",
+      "href": "https://vs.lordfilm135.ru/filmy/voennyj/"
+    },
+    {
+      "text": "Документальные",
+      "href": "https://vs.lordfilm135.ru/filmy/dokumentalnyj/"
+    },
+    {
+      "text": "Детективы",
+      "href": "https://vs.lordfilm135.ru/filmy/detektiv/"
+    },
+    {
+      "text": "Драмы",
+      "href": "https://vs.lordfilm135.ru/filmy/drama/"
+    },
+    {
+      "text": "Исторические",
+      "href": "https://vs.lordfilm135.ru/filmy/istoricheskij/"
+    },
+    {
+      "text": "Короткометражки",
+      "href": "https://vs.lordfilm135.ru/filmy/korotkometrazhka/"
+    },
+    {
+      "text": "Комедии",
+      "href": "https://vs.lordfilm135.ru/filmy/komedija/"
+    },
+    {
+      "text": "Криминал",
+      "href": "https://vs.lordfilm135.ru/filmy/kriminal/"
+    },
+    {
+      "text": "Мелодрамы",
+      "href": "https://vs.lordfilm135.ru/filmy/melodrama/"
+    },
+    {
+      "text": "Мюзикл",
+      "href": "https://vs.lordfilm135.ru/filmy/mjuzikl/"
+    },
+    {
+      "text": "Приключения",
+      "href": "https://vs.lordfilm135.ru/filmy/prikljuchenija/"
+    },
+    {
+      "text": "Семейные",
+      "href": "https://vs.lordfilm135.ru/filmy/semejnyj/"
+    },
+    {
+      "text": "Триллеры",
+      "href": "https://vs.lordfilm135.ru/filmy/triller/"
+    },
+    {
+      "text": "Ужасы",
+      "href": "https://vs.lordfilm135.ru/filmy/uzhasy/"
+    },
+    {
+      "text": "Фантастика",
+      "href": "https://vs.lordfilm135.ru/filmy/fantastika/"
+    },
+    {
+      "text": "Фэнтези",
+      "href": "https://vs.lordfilm135.ru/filmy/fjentezi/"
+    },
+    {
+      "text": "2026",
+      "href": "https://vs.lordfilm135.ru/filmy/2026/"
+    },
+    {
+      "text": "2025",
+      "href": "https://vs.lordfilm135.ru/filmy/2025/"
+    },
+    {
+      "text": "Сериалы 2025",
+      "href": "https://vs.lordfilm135.ru/serialy/serialy-2025/"
+    },
+    {
+      "text": "2024",
+      "href": "https://vs.lordfilm135.ru/filmy/2024/"
+    },
+    {
+      "text": "Русские",
+      "href": "https://vs.lordfilm135.ru/filmy/russkie/"
+    },
+    {
+      "text": "Дорамы",
+      "href": "https://vs.lordfilm135.ru/podborki/doramy/"
+    },
+    {
+      "text": "Зарубежные",
+      "href": "https://vs.lordfilm135.ru/filmy/amerikanskie/"
+    },
+    {
+      "text": "СССР",
+      "href": "https://vs.lordfilm135.ru/filmy/sssr/"
+    },
+    {
+      "text": "СЕРИАЛЫ",
+      "href": "https://vs.lordfilm135.ru/serialy/"
+    },
+    {
+      "text": "МУЛЬТФИЛЬМЫ",
+      "href": "https://vs.lordfilm135.ru/mult/"
+    },
+    {
+      "text": "Фильмы 2026",
+      "href": "https://vs.lordfilm135.ru/filmy/2026/"
+    },
+    {
+      "text": "Недельный ТОП-50",
+      "href": "https://vs.lordfilm135.ru/top50/"
+    },
+    {
+      "text": "Новости",
+      "href": "https://vs.lordfilm135.ru/news/"
+    },
+    {
+      "text": "Netflix",
+      "href": "https://vs.lordfilm135.ru/podborki/netflix/"
+    },
+    {
+      "text": "Marvel",
+      "href": "https://vs.lordfilm135.ru/podborki/filmy-marvel/"
+    },
+    {
+      "text": "Сериалы 2026",
+      "href": "https://vs.lordfilm135.ru/serialy/serialy-2026/"
+    },
+    {
+      "text": "Подборки",
+      "href": "https://vs.lordfilm135.ru/podborki/"
+    },
+    {
+      "text": "Фильмы 2026",
+      "href": "https://vs.lordfilm135.ru/filmy/2026/"
+    },
+    {
+      "text": "Недельный ТОП-50",
+      "href": "https://vs.lordfilm135.ru/top50/"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+    "has_drama": {
+        "label": "Драма",
+        "translation": "Drama",
+        "source": "драма"
+    },
+    "has_crime": {
+        "label": "Криминал",
+        "translation": "Crime",
+        "source": "криминал"
+    },
+    "has_thriller": {
+        "label": "Триллер",
+        "translation": "Thriller",
+        "source": "триллер"
+    },
+    "has_comedy": {
+        "label": "Комедия",
+        "translation": "Comedy",
+        "source": "комедия"
+    },
+    "has_detective": {
+        "label": "Детектив",
+        "translation": "Detective",
+        "source": "детектив"
+    },
+    "has_melodrama": {
+        "label": "Мелодрама",
+        "translation": "мелодрама",
+        "source": "мелодрама"
+    },
+    "has_action": {
+        "label": "Боевик",
+        "translation": "боевик",
+        "source": "боевик"
+    },
+    "has_fantasy": {
+        "label": "Фантастика",
+        "translation": "фантастика",
+        "source": "фантастика"
+    }
+}

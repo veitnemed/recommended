@@ -4,6 +4,7 @@ import json
 import os
 
 from config import constant
+from config import genre_tags
 from core import valid
 from data_work.storage_files import is_json_exists
 from data_work.storage_normalize import LEGACY_TAG_FIELDS, normalize_main_info, normalize_movie_tags, normalize_raw_scores
@@ -52,6 +53,15 @@ def is_origin_title(new_title: str) -> bool:
 def get_all_titles() -> list:
     """Возвращает список всех названий в датасете."""
     return list(load_dataset().keys())
+
+
+def find_exact_title(title: str) -> str | None:
+    """Возвращает фактический ключ записи по названию без учета регистра."""
+    expected = str(title).strip().lower()
+    for current_title in load_dataset().keys():
+        if current_title.strip().lower() == expected:
+            return current_title
+    return None
 
 
 def init_meta():
@@ -129,6 +139,50 @@ def get_meta_obj(title: str) -> dict:
     return None
 
 
+def rename_movie_title(old_title: str, new_title: str) -> bool:
+    """Безопасно переименовывает запись в dataset и meta."""
+    old_exact = find_exact_title(old_title)
+    if old_exact is None:
+        print("Ошибка переименования! Старая запись не найдена")
+        return False
+
+    new_title = str(new_title).strip()
+    if valid.is_correct_title(new_title) is False:
+        print("Ошибка переименования! Некорректное новое название")
+        return False
+
+    if old_exact.strip().lower() != new_title.lower() and is_origin_title(new_title) is False:
+        print("Ошибка переименования! Такое название уже существует")
+        return False
+
+    dataset = load_dataset()
+    movie = dataset.pop(old_exact)
+    movie["main_info"] = normalize_main_info({
+        **movie["main_info"],
+        "title": new_title,
+    })
+    dataset[new_title] = movie
+    save_dataset(dataset)
+
+    meta = load_meta()
+    old_meta_title = None
+    for meta_title in meta.keys():
+        if meta_title.strip().lower() == old_exact.strip().lower():
+            old_meta_title = meta_title
+            break
+
+    if old_meta_title is not None:
+        meta_obj = meta.pop(old_meta_title)
+        meta_obj["main_info"] = normalize_main_info({
+            **meta_obj["main_info"],
+            "title": new_title,
+        })
+        meta[new_title] = meta_obj
+        save_meta(meta)
+
+    return True
+
+
 def init_weights():
     """Создает файл весов, если его нет."""
     if is_json_exists(constant.WEIGHTS_JSON) is False:
@@ -147,6 +201,12 @@ def load_weights() -> dict:
             if active_feature == feature and old_feature in weights and feature not in weights:
                 normalized[feature] = weights[old_feature]
                 break
+        legacy_genre_feature = next(
+            (old_feature for old_feature, active_feature in genre_tags.get_legacy_feature_map().items() if active_feature == feature),
+            None
+        )
+        if legacy_genre_feature is not None and legacy_genre_feature in weights and feature not in weights:
+            normalized[feature] = weights[legacy_genre_feature]
     return normalized
 
 

@@ -1,182 +1,272 @@
 # Карта проекта
 
-Проект `Terminal Movies Learn` - консольная лаборатория для личных рекомендаций фильмов и сериалов. Пользователь собирает собственные оценки, рейтинги Kinopoisk/IMDb и субъективные признаки, а программа подбирает веса признаков и сравнивает прогноз с личной оценкой.
+`Terminal Movies Learn` — консольная лаборатория для личной модели вкуса. Пользователь собирает свои оценки, программа подтягивает данные из API, хранит вайб-теги и жанровую разметку, обучает модель и отдельно поддерживает общий пул кандидатов.
 
 ## Быстрый вход
 
-- `main.py` - точка запуска. Инициализирует рабочие файлы, показывает главное меню и переводит пользователя в нужный раздел.
-- `requirements.txt` - внешняя зависимость: `openpyxl`.
-- `README.md` - общее описание идеи, запуска, данных и метрик.
-- `PROJECT_MAP.md` - эта карта проекта.
+- [main.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/main.py:1) — точка входа.
+- [README.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/README.md:1) — пользовательское описание.
+- [PROJECT_MAP.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/PROJECT_MAP.md:1) — эта карта.
+- [requirements.txt](/d:/VS%20PROJJJ/vscode%20projects/recommended/requirements.txt:1) — зависимости.
 
 Запуск:
 
 ```powershell
-pip install -r requirements.txt
-python main.py
+py main.py
 ```
 
 ## Основной поток
 
-1. `main.py` вызывает `storage.init_all_dates()`, чтобы создать/проверить рабочие JSON-файлы и каталоги.
-2. `interface.menu_state.get_menu_state()` загружает датасет, веса, количество объектов и текущую ошибку модели.
-3. `interface.ui` рисует консольное меню.
-4. `interface.request` запрашивает ввод и прогоняет его через валидаторы из `core.valid`.
-5. `interface.global_menu` открывает разделы: данные, обучение, веса, теги, дополнительные действия.
-6. `data_work` читает/пишет данные, Excel, бэкапы, теги и метаданные.
-7. `model_work` считает прогнозы, ошибки, подбирает веса и строит отчеты.
+1. `main.py` вызывает `storage.init_all_dates()`.
+2. Инициализация создаёт рабочие JSON-файлы: датасет, meta, веса, критерии пула, общий пул кандидатов и API-лог.
+3. `interface.menu_state.get_menu_state()` загружает датасет, веса, размер датасета и текущий `MAE`.
+4. `interface.ui` печатает главное меню.
+5. `interface.request` собирает и валидирует пользовательский ввод.
+6. `interface.global_menu` переводит пользователя в нужный раздел.
+7. `data_work` отвечает за хранение, Excel, backup, жанры, TST, переименование записи и общий пул кандидатов.
+8. `model_work` считает признаки, прогнозы, ошибки и обучение.
+
+## Текущее меню
+
+### Главное
+
+1. `Данные`
+2. `Обучение`
+3. `Модель`
+4. `Дополнительно`
+5. `Пулл кандидатов`
+6. `Выгрузить отчёт`
+
+### Данные
+
+- открыть Excel
+- загрузить Excel
+- добавить запись
+- показать мои оценки
+- данные о датасете
+- прочитать оценки TST
+- бэкап
+- переименовать запись
+
+### Обучение
+
+- быстрое обучение
+- случайная оптимизация
+- многошаговый координатный поиск
+- гибридная оптимизация
+- линейная регрессия
+- параметры обучения
+
+### Модель
+
+- признаки:
+  - вайб-тэги
+  - жанровая разметка
+  - показать веса модели
+  - сбросить веса модели
+- тесты эффективности
+- сделать прогноз
+
+### Дополнительно
+
+- просмотр API признаков
+- показать все жанры датасета
+- показать влияние голосов
+- пересчитать raw оценки
+
+### Пулл кандидатов
+
+- собрать пулл кандидатов
+- посмотреть пуллы кандидатов
+- собрать топ из общего пула
+- удалить пулл
+- показать подозрительные дубли
+
+Сверху подменю выводится текущее число кандидатов в общем пуле.
 
 ## Папки и роли
 
 ### `config/`
 
-Центр настроек, схем и постоянных значений.
+Центр схем, динамических каталогов и констант.
 
-- `constant.py` - пути к рабочим данным, списки признаков, дефолтные веса, подписи полей, шаги обучения.
-- `scheme.py` - схема секций объекта: `main_info`, `raw_scores`, `tags_vibe`, вычисляемые поля.
-- `tags.json` - пользовательские субъективные признаки и их правила.
-- `tags_work.py` - совместимость/настройки тегов на уровне конфигурации.
-
-Важные внешние пути из `constant.py`:
-
-- `C:/DATA/movies-learn/dataset.json` - основной датасет.
-- `C:/DATA/movies-learn/weights.json` - веса модели.
-- `C:/META/meta-movies-learn/meta_data.json` - метаданные.
-- `C:/BACKUP/movies-learn/BACKUP/` - резервные копии.
-- `C:/TXT_FILES/movies-learn/edit_dataset.xlsx` - Excel-файл для ручного редактирования.
+- [config/constant.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/constant.py:1) — пути, списки признаков, `bias`, пути к JSON кандидатов и API-логу.
+- [config/scheme.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/scheme.py:1) — схема секций `main_info`, `raw_scores`, `tags_vibe`, `genre`.
+- [config/tags.json](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/tags.json:1) — каталог вайб-тегов.
+- [config/genre_tags.json](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/genre_tags.json:1) — каталог жанровых признаков.
+- [config/genre_tags.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/genre_tags.py:1) — генерация, нормализация и миграция жанровых ключей в стиль `has_*`.
 
 ### `core/`
 
-Низкоуровневые правила, не привязанные к меню.
+Базовая логика без привязки к меню.
 
-- `valid.py` - валидация пользовательского ввода, оценок, годов, голосов, тегов, параметров обучения.
-- `format_score.py` - перевод сырых рейтингов/голосов в признаки модели: популярность, нормализация, преобразование тегов.
+- [core/valid.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/core/valid.py:1) — валидация ввода.
+- [core/format_score.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/core/format_score.py:1) — преобразование рейтингов, голосов и тегов в признаки модели.
 
 ### `data_work/`
 
-Слой хранения и подготовки данных.
+Хранение и подготовка данных.
 
-- `storage.py` - общий фасад, реэкспортирует функции из `storage_*`.
-- `storage_files.py` - создание каталогов, проверка файлов, открытие файлов, бэкапы, восстановление.
-- `storage_data.py` - загрузка/сохранение датасета, весов и метаданных.
-- `storage_movie.py` - добавление объектов, пересчет вычисляемых полей, сбор объекта из строки.
-- `storage_normalize.py` - нормализация строк, сырых рейтингов, тегов и CSV/Excel-полей.
-- `excel_work.py` - экспорт датасета в Excel и замена датасета из Excel.
-- `tags_work.py` - загрузка/сохранение тегов, добавление/удаление тегов в данных и весах.
-- `dataset_stats.py` - статистика по датасету и заполненности признаков.
-- `tst_scores.py` - импорт оценок из отдельного `dataset_from_tst.json`.
+- [data_work/storage.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage.py:1) — фасад над `storage_*` и `candidate_pool`.
+- [data_work/storage_files.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_files.py:1) — файлы, каталоги, backup, стартовая инициализация.
+- [data_work/storage_data.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_data.py:1) — dataset, meta, weights, безопасное переименование записи.
+- [data_work/storage_movie.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_movie.py:1) — добавление записи, валидация и сбор из Excel.
+- [data_work/storage_normalize.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_normalize.py:1) — нормализация raw, vibe и genre.
+- [data_work/excel_work.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/excel_work.py:1) — Excel-экспорт и импорт.
+- [data_work/tags_work.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/tags_work.py:1) — операции с вайб-тегами.
+- [data_work/genre_import.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/genre_import.py:1) — жанровая разметка из API с подтверждением.
+- [data_work/genre_stats.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/genre_stats.py:1) — сводка жанров датасета через API.
+- [data_work/dataset_stats.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/dataset_stats.py:1) — статистика датасета.
+- [data_work/tst_scores.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/tst_scores.py:1) — импорт оценок из TST.
+- [data_work/candidate_pool.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/candidate_pool.py:1) — критерии подбора, общий пул кандидатов, дедупликация, фильтрация просмотренного, удаление пуллов, диагностика подозрительных дублей и сбор признаков для топа без вайб-тегов.
 
 ### `interface/`
 
-Консольный интерфейс и пользовательские сценарии.
+Консольный UI.
 
-- `ui.py` - отрисовка экранов меню, заголовков и результатов.
-- `request.py` - универсальные циклы ввода, дефолты из API, запрос признаков и оценок.
-- `global_menu.py` - основные циклы меню: данные, обучение, веса, теги, дополнительные действия.
-- `interface_funcs.py` - действия меню: показать фильмы, прогноз, веса, статистику, импорт, API-признаки.
-- `menu_state.py` - сбор текущего состояния меню.
-- `tags_menu.py` - сценарии просмотра, добавления и удаления тегов.
-- `backup_menu.py` - сценарий восстановления из резервной копии.
-- `train_params.py` - настройка шага обучения и лимита плато.
+- [interface/ui.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/ui.py:1) — экраны и меню.
+- [interface/request.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/request.py:1) — универсальный ввод, API-defaults, подтверждение или ручная правка жанров при добавлении.
+- [interface/global_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/global_menu.py:1) — маршрутизация по меню, включая отдельный раздел кандидатов.
+- [interface/interface_funcs.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/interface_funcs.py:1) — действия меню.
+- [interface/tags_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/tags_menu.py:1) — управление вайб-тегами.
+- [interface/backup_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/backup_menu.py:1) — backup и восстановление.
+- [interface/train_params.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/train_params.py:1) — параметры эвристических режимов обучения.
 
 ### `model_work/`
 
-Расчеты модели, обучение и диагностика.
+Модель, обучение и диагностика.
 
-- `model.py` - ядро модели: прогноз, MAE, ошибка Kinopoisk, нормализация весов, обучение, отчеты по ошибкам и важности признаков.
-- `train_modes.py` - пользовательские режимы обучения: обычный перебор, поиск до плато, несколько шагов, смешанный режим, шумовой тест.
-- `train_report.py` - генерация текстового отчета по обучению, весам, ошибкам и тегам.
-- `noise_experiment.py` - проверка устойчивости модели к шуму в пользовательских оценках.
+- [model_work/model.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/model.py:1) — ядро модели: `bias`, признаки, прогноз, ошибки, эвристические алгоритмы.
+- [model_work/train_modes.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/train_modes.py:1) — пользовательские режимы обучения поверх эвристик.
+- [model_work/linear_regression_train.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/linear_regression_train.py:1) — `Ridge`, `Lasso`, `ElasticNet`, `SGDRegressor (MAE)`, `scipy minimize (MAE)`.
+- [model_work/train_report.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/train_report.py:1) — текстовый отчёт по обучению.
+- [model_work/noise_experiment.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/noise_experiment.py:1) — устойчивость к шуму.
 
 ### `integrations/`
 
 Внешние источники данных.
 
-- `api.py` - интеграция с Kinopoisk API: поиск сериалов, извлечение рейтингов/голосов/страны/года, форматированный вывод API-объекта.
-- `api_token.py` - ожидаемый локальный файл с токеном, если токен не задан через переменные окружения. В репозитории может отсутствовать.
+- [integrations/api.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/integrations/api.py:1) — поиск сериала, чтение рейтингов, голосов, стран, жанров, описаний, подбор кандидатов по фильтрам и запись API-лога.
 
-Переменные окружения:
+## Признаки модели
 
-- `KINOPOISK_API_URL` - базовый URL API, по умолчанию `https://api.kinopoisk.dev/v1.4`.
-- `KINOPOISK_API_KEY` или `POISKKINO_API_KEY` - токен доступа.
+Текущий вектор признаков собирается так:
 
-### `tests/`
+1. `bias = 1.0`
+2. `computed_scores` из `raw_scores`
+3. `tags_vibe`
+4. `genre`
 
-Набор встроенных проверок и вспомогательных скриптов.
+`genre` динамический:
 
-- `test.py` - основные проверки хранения, добавления объектов, валидации, обучения, бэкапов.
-- `test_api.py` - проверки API-слоя без реальной сети через подставной opener.
-- `test_encoding.py` - проверки UTF-8 и сохранения кириллицы.
-- `test_noise_experiment.py` - проверки шумового эксперимента.
-- `test_feature_api.py` - исследовательский скрипт по жанрам из API.
-- `apply_genre_tags_from_api.py` - вспомогательный скрипт для применения жанровых тегов из API.
-- `apply_tst_scores_from_api.py` отсутствует; импорт оценок идет через `data_work/tst_scores.py`.
+- известные жанры мапятся в осмысленные `has_*`;
+- новые жанры тоже приводятся к стилю `has_english_name`;
+- старые ключи `genre_*` мигрируют при чтении.
 
-## Данные объекта
+## Общий пул кандидатов
 
-Типичный объект фильма/сериала состоит из секций:
+Главная идея:
 
-- `main_info` - `title`, `user_score`, `year`.
-- `raw_scores` - `kp_score`, `kp_votes`, `imdb_score`, `imdb_votes`.
-- `tags_vibe` - пользовательские субъективные признаки из `config/tags.json`.
+- есть один общий `candidate_pool.json`;
+- он считается единственным источником правды;
+- новые наборы критериев добавляют записи именно туда;
+- отдельный просмотр по набору критериев — это просто выборка по `criteria_name`;
+- общий пул автоматически очищается от объектов, уже попавших в основной датасет.
 
-Из `raw_scores` вычисляются признаки модели:
+### Дедупликация
+
+Пул схлопывает дубли по нормализованному названию и году.
+
+Дополнительно используется мягкое сравнение похожих названий:
+
+- нижний регистр;
+- `ё -> е`;
+- удаление пунктуации;
+- схлопывание пробелов;
+- сравнение compact-строк без пробелов;
+- similarity ratio;
+- сравнение набора слов.
+
+Если найдено несколько дублей, остаётся лучший вариант по:
 
 - `kp_score`
-- `kp_popularity`
+- `kp_votes`
 - `imdb_score`
-- `imdb_popularity`
+- `imdb_votes`
 
-Итоговые признаки модели:
+## Топ из общего пула
 
-- вычисляемые признаки из рейтингов и голосов;
-- все активные пользовательские теги.
+Раздел `Пулл кандидатов -> Собрать топ из общего пула`:
 
-## Обучение и метрики
+- читает всех кандидатов из общего пула;
+- собирает признаки без вайб-тегов;
+- использует текущие веса модели;
+- ранжирует по предикту;
+- печатает `Название (год): предикт`.
 
-Главная метрика - `MAE`, средняя абсолютная ошибка между прогнозом модели и личной оценкой пользователя.
+## Добавление новой записи
 
-Основные функции:
+Поток ручного добавления:
 
-- `model.predict_score(features, weights)` - прогноз оценки.
-- `model.mean_absolute_error(data, weights)` - MAE модели.
-- `model.kp_mean_absolute_error(data)` - ошибка рейтинга Kinopoisk относительно личных оценок.
-- `model.fit_weights(...)` - последовательный подбор весов.
-- `model.fit_weights_until_plateau(...)` - случайный поиск до плато.
-- `model.one_to_one_error(...)` - leave-one-out проверка.
-- `model.selection_weights_without_feature(...)` - проверка влияния отдельного признака.
+1. поиск сериала через API;
+2. показ названия, года, страны и краткого описания;
+3. показ жанров из API;
+4. подтверждение жанров или ручная правка;
+5. ввод оценки, вайб-тегов и жанровой разметки;
+6. сохранение записи;
+7. автоматическая очистка общего пула кандидатов от этого сериала.
 
-## Где менять поведение
+## API-лог
 
-- Добавить/удалить пункт меню: `interface/ui.py` и соответствующий цикл в `interface/global_menu.py`.
-- Изменить правила ввода: `core/valid.py`.
-- Изменить структуру фильма: `config/scheme.py`, затем проверить нормализацию в `data_work/storage_normalize.py`.
-- Изменить формулу признаков: `core/format_score.py`.
-- Изменить обучение: `model_work/model.py` и пользовательские режимы в `model_work/train_modes.py`.
-- Изменить работу с файлами/бэкапами: `data_work/storage_files.py`.
-- Изменить Excel-импорт/экспорт: `data_work/excel_work.py`.
-- Изменить API-поиск: `integrations/api.py`.
+Все запросы к API пишутся в:
+
+`C:/DATA/movies-learn/api_requests.log`
+
+Записываются события:
+
+- `api_request_start`
+- `api_request_attempt`
+- `api_request_success`
+- `api_request_http_error`
+- `api_request_network_error`
+- `api_request_timeout`
+- `api_request_os_error`
+- `api_request_failed`
+- `api_json_ok`
+- `api_bad_request_parameters`
+
+## Где чаще всего менять поведение
+
+- поменять меню: `interface/ui.py`, `interface/global_menu.py`
+- поменять схему данных: `config/scheme.py`, затем проверить `storage_normalize.py`
+- поменять правила жанров: `config/genre_tags.py`
+- поменять формулу признаков: `core/format_score.py`, `model_work/model.py`
+- поменять логику общего пула: `data_work/candidate_pool.py`
+- поменять безопасное переименование записи: `data_work/storage_data.py`
+- поменять API-интеграцию и логирование: `integrations/api.py`
+- поменять эвристическое обучение: `model_work/model.py`, `model_work/train_modes.py`
+- поменять линейное обучение: `model_work/linear_regression_train.py`
+- поменять Excel: `data_work/excel_work.py`
 
 ## Проверки
 
-Базовые проверки можно запускать так:
+Базовые:
 
 ```powershell
 py tests\test.py
-py tests\test_api.py
-py tests\test_encoding.py
-py tests\test_noise_experiment.py
+py -c "import tests.test_encoding as t; t.run_tests()"
 ```
 
-Перед крупными изменениями полезно отдельно проверить:
+После заметных изменений особенно полезно проверить:
 
-- добавление нового объекта;
-- экспорт/импорт Excel;
-- пересчет вычисляемых полей;
+- ручное добавление записи;
+- переименование записи;
+- Excel-экспорт и импорт;
+- жанровую разметку;
+- сбор кандидатов при рабочем API;
+- удаление пулла;
+- просмотр по конкретному набору критериев;
+- топ из общего пула;
+- диагностику подозрительных дублей;
 - обучение и сохранение весов;
-- добавление/удаление тегов;
-- восстановление из бэкапа.
-
-## Текущее состояние репозитория
-
-В рабочем дереве уже есть много измененных и новых файлов. Эта карта добавлена отдельным файлом и не меняет существующий код.
+- восстановление из backup.

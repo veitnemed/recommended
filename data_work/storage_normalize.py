@@ -1,6 +1,7 @@
 """Приводит данные фильма, тегов и строк таблицы к актуальной схеме."""
 
 from config import constant
+from config import genre_tags
 from config import scheme
 from core import valid
 
@@ -27,10 +28,21 @@ def normalize_tags_vibe(tags_vibe: dict) -> dict:
     return normalized
 
 
+def normalize_genre_tags(movie_genre_tags: dict) -> dict:
+    """Приводит жанровую разметку фильма к актуальной схеме."""
+    normalized = {feature: 0 for feature in constant.GENRE}
+    for feature, value in movie_genre_tags.items():
+        active_feature = genre_tags.map_feature_name(feature)
+        if active_feature in normalized:
+            normalized[active_feature] = value
+    return normalized
+
+
 def normalize_movie_tags(movie: dict) -> dict:
     """Нормализует теги внутри записи фильма."""
     if constant.TAGS_VIBE_SECTION in movie:
         movie[constant.TAGS_VIBE_SECTION] = normalize_tags_vibe(movie[constant.TAGS_VIBE_SECTION])
+    movie[constant.GENRE_SECTION] = normalize_genre_tags(movie.get(constant.GENRE_SECTION, {}))
     return movie
 
 
@@ -42,6 +54,8 @@ def normalize_csv_row(row: dict) -> dict:
             normalized[active_feature] = normalized[old_feature]
         normalized.pop(old_feature, None)
     for feature in constant.TAGS_VIBE:
+        normalized.setdefault(feature, "0")
+    for feature in constant.GENRE:
         normalized.setdefault(feature, "0")
     return normalized
 
@@ -84,6 +98,19 @@ def is_valid_tags_vibe(tags_vibe: dict) -> bool:
 
     for feature, value in tags_vibe.items():
         max_value = tags_schema[feature].get("max_value", 1)
+        if valid.is_tags_score(value, max_value) is False:
+            return False
+    return True
+
+
+def is_valid_genre_tags(genre_tags: dict) -> bool:
+    """Проверяет секцию жанровой разметки фильма."""
+    genre_schema = scheme.get_schema(scheme.GENRE)
+    if set(genre_tags.keys()) != set(genre_schema.keys()):
+        return False
+
+    for feature, value in genre_tags.items():
+        max_value = genre_schema[feature].get("max_value", 1)
         if valid.is_tags_score(value, max_value) is False:
             return False
     return True

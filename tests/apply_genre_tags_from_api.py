@@ -1,4 +1,4 @@
-"""Одноразово заменяет vibe-теги на жанровые и размечает датасет через API."""
+"""Собирает жанровые теги из API и размечает датасет без дубликатов."""
 
 import datetime
 import json
@@ -104,35 +104,70 @@ def get_genres(movie_json: dict) -> list:
     return genres
 
 
+def collect_known_genre_tags(data: dict, country: str = "Россия") -> list:
+    """Собирает уникальные жанровые теги в порядке NEW_TAGS."""
+    detected = set()
+
+    for dataset_title, movie in data.items():
+        title = get_title(dataset_title, movie)
+        result = api.find_series_raw(title, country)
+        if result["ok"] is False:
+            continue
+
+        for genre in get_genres(result["data"]):
+            tag = GENRE_TO_TAG.get(genre)
+            if tag is not None:
+                detected.add(tag)
+
+    return [tag for tag in NEW_TAGS.keys() if tag in detected]
+
+
+def build_tag_settings(tag_names: list) -> dict:
+    """Собирает схему тегов только для найденных жанров."""
+    return {tag: NEW_TAGS[tag] for tag in tag_names}
+
+
+def build_movie_tags(movie: dict, tag_names: list) -> dict:
+    """Собирает жанровые флаги для одного объекта по найденному каталогу."""
+    return {
+        tag: int(movie.get(constant.TAGS_VIBE_SECTION, {}).get(tag, 0))
+        for tag in tag_names
+    }
+
+
 def run() -> None:
-    """Заменяет теги и размечает датасет по жанрам API."""
+    """Размечает датасет по жанрам API и сохраняет уникальный каталог тегов."""
+    data = load_json(constant.FILE_NAME)
+    if len(data) == 0:
+        print("Dataset пуст. Жанровые теги не создаются.")
+        return
+
+    new_tag_names = collect_known_genre_tags(data)
+    if len(new_tag_names) == 0:
+        print("В датасете не найдено поддерживаемых жанров.")
+        return
+
     storage.create_backup()
     tags_work.backup_tag_files()
 
-    data = load_json(constant.FILE_NAME)
     weights = load_json(constant.WEIGHTS_JSON)
     old_tags = set(tags_work.load_tags().keys())
-    new_tag_names = list(NEW_TAGS.keys())
 
     not_found = []
     errors = []
     marked = {tag: 0 for tag in new_tag_names}
 
-    for idx, (dataset_title, movie) in enumerate(data.items(), start=1):
+    for dataset_title, movie in data.items():
         title = get_title(dataset_title, movie)
-        print(f"{idx}/{len(data)}: {title}")
-
-        old_movie_tags = movie.get(constant.TAGS_VIBE_SECTION, {})
-        movie_tags = {
-            tag: int(old_movie_tags.get(tag, 0))
-            for tag in new_tag_names
-        }
         result = api.find_series_raw(title, "Россия")
+
         if result["ok"] is False:
             if result["error"] in {"not_found", "country_not_found"}:
                 not_found.append(title)
             else:
                 errors.append((title, result["error"], result["details"]))
+
+            movie_tags = build_movie_tags(movie, new_tag_names)
             movie[constant.TAGS_VIBE_SECTION] = movie_tags
             for tag, value in movie_tags.items():
                 marked[tag] += value
@@ -141,7 +176,7 @@ def run() -> None:
         movie_tags = {tag: 0 for tag in new_tag_names}
         for genre in get_genres(result["data"]):
             tag = GENRE_TO_TAG.get(genre)
-            if tag is not None:
+            if tag is not None and tag in movie_tags:
                 movie_tags[tag] = 1
 
         for tag, value in movie_tags.items():
@@ -149,7 +184,7 @@ def run() -> None:
 
         movie[constant.TAGS_VIBE_SECTION] = movie_tags
 
-    save_json(tags_work.TAGS_JSON, NEW_TAGS)
+    save_json(tags_work.TAGS_JSON, build_tag_settings(new_tag_names))
     save_json(constant.FILE_NAME, data)
 
     for tag in old_tags:

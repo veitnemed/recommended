@@ -1,6 +1,7 @@
 """Описывает секции данных фильма и правила полей."""
 
 import copy
+from config import genre_tags
 from data_work import tags_work
 
 
@@ -9,6 +10,7 @@ RAW_SCORES = "raw_scores"
 GENRE = "genre"
 TAGS_VIBE = "tags_vibe"
 
+TAG_FIELDS = tags_work.get_tag_fields()
 
 SHEME_VALIDATORS = {
     MAIN_INFO: {
@@ -47,15 +49,14 @@ SHEME_VALIDATORS = {
             "formated": "imdb_popularity"
         }
     },
-    GENRE: {
+    GENRE: {},
+    TAGS_VIBE: {
         feature: {
             "tag": ["tags_score"],
             "type": int,
-            "max_value": None if feature == "imdb_total_tags" else 1
-        }
-        for feature in tags_work.get_tag_fields()
-    },
-    TAGS_VIBE: {}
+            "max_value": 1
+        } for feature in TAG_FIELDS
+    }
 }
 
 SHEME_ADD = copy.deepcopy(SHEME_VALIDATORS)
@@ -64,13 +65,21 @@ SHEME_ADD[MAIN_INFO]["title"]["tag"].append("origin_title")
 
 def get_fields(selection_name: str) -> list:
     """Возвращает поля секции схемы."""
-    sheme_copy = copy.deepcopy(SHEME_VALIDATORS)
-    return list(sheme_copy[selection_name].keys())
+    sheme_copy = get_schema(selection_name)
+    return list(sheme_copy.keys())
 
 
 def get_schema(selection_name: str) -> dict:
     """Возвращает схему секции."""
     sheme_copy = copy.deepcopy(SHEME_VALIDATORS)
+    if selection_name == GENRE:
+        return {
+            feature: {
+                "tag": ["tags_score"],
+                "type": int,
+                "max_value": 1
+            } for feature in genre_tags.get_genre_fields()
+        }
     return sheme_copy[selection_name]
 
 

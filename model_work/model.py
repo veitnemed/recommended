@@ -24,12 +24,17 @@ def get_user_score(movie: dict) -> float:
 
 def get_features(movie: dict) -> dict:
     """Собирает признаки фильма для модели."""
-    features = {}
+    features = {
+        constant.BIAS_FEATURE: 1.0
+    }
 
     for feature in movie["computed_scores"]:
         features[feature] = movie["computed_scores"][feature]
 
     for feature, value in format_score.tags_to_features(movie[constant.TAGS_VIBE_SECTION]).items():
+        features[feature] = value
+
+    for feature, value in format_score.tags_to_features(movie.get(constant.GENRE_SECTION, {}), constant.GENRE_SECTION).items():
         features[feature] = value
 
     return features

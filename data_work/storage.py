@@ -4,3 +4,4 @@ from data_work.storage_data import *
 from data_work.storage_files import *
 from data_work.storage_movie import *
 from data_work.storage_normalize import *
+from data_work.candidate_pool import *

@@ -6,8 +6,10 @@ from core import format_score as format
 from core import valid
 from data_work.storage_data import add_movies_to_meta, get_meta_obj, is_origin_title, load_dataset, save_dataset
 from data_work.storage_normalize import (
+    is_valid_genre_tags,
     is_valid_tags_vibe,
     normalize_csv_row,
+    normalize_genre_tags,
     normalize_main_info,
     normalize_raw_scores,
     normalize_tags_vibe,
@@ -57,6 +59,7 @@ def add_movie(movie: dict) -> bool:
     main_info = movie["main_info"]
     input_raw_scores = movie["raw_scores"]
     tags_vibe = normalize_tags_vibe(movie[constant.TAGS_VIBE_SECTION])
+    genre_tags = normalize_genre_tags(movie.get(constant.GENRE_SECTION, {}))
 
     title = str(main_info["title"]).strip()
     user_score = main_info["user_score"]
@@ -81,8 +84,8 @@ def add_movie(movie: dict) -> bool:
         print('Ошибка добавления! Некорректные tags_vibe')
         return False
 
-    if is_valid_tags_vibe(tags_vibe) is False:
-        print('Ошибка добавления! Неверное значение субъективных параметров')
+    if is_valid_genre_tags(genre_tags) is False:
+        print('Ошибка добавления! Некорректная жанровая разметка')
         return False
 
     meta_obj = get_meta_obj(title)
@@ -101,10 +104,14 @@ def add_movie(movie: dict) -> bool:
     raw_scores = normalize_raw_scores(raw_scores)
     new_main_info = normalize_main_info(main_info)
     computed_scores = format.raw_to_struct(raw_scores, new_main_info)
-    features = {}
+    features = {
+        constant.BIAS_FEATURE: 1.0
+    }
     for feature in computed_scores:
         features[feature] = computed_scores[feature]
     for feature, value in format.tags_to_features(tags_vibe).items():
+        features[feature] = value
+    for feature, value in format.tags_to_features(genre_tags, constant.GENRE_SECTION).items():
         features[feature] = value
 
     if valid.is_valid_features(features) is False:
@@ -120,13 +127,23 @@ def add_movie(movie: dict) -> bool:
     new_movie["raw_scores"] = raw_scores
     new_movie["computed_scores"] = computed_scores
     new_movie[constant.TAGS_VIBE_SECTION] = tags_vibe
+    new_movie[constant.GENRE_SECTION] = genre_tags
 
     data[title] = new_movie
     save_dataset(data)
+
+    try:
+        from data_work import candidate_pool
+        pool = candidate_pool.load_candidate_pool()
+        pool = candidate_pool.remove_watched_candidates(pool)
+        candidate_pool.save_candidate_pool(pool)
+    except Exception:
+        pass
+
     return True
 
 
-def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict) -> bool:
+def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict, genre_tags: dict = None) -> bool:
     """Добавляет фильм через старый формат аргументов."""
     main_info = {}
     main_info["title"] = title
@@ -138,6 +155,7 @@ def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict) -
     movie["main_info"] = main_info
     movie["raw_scores"] = raw_scores
     movie[constant.TAGS_VIBE_SECTION] = tags_vibe
+    movie[constant.GENRE_SECTION] = {} if genre_tags is None else genre_tags
 
     return add_movie(movie)
 
@@ -190,6 +208,16 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
             return None
         tags_vibe[feature] = int(value)
 
+    genre_values = {}
+    genre_schema = scheme.get_schema(scheme.GENRE)
+    for feature in constant.GENRE:
+        value = row[feature].strip()
+        max_value = genre_schema[feature].get("max_value", 1)
+        if valid.is_tags_score(value, max_value) is False:
+            print(f'Строка {row_number}: некорректное значение {feature}')
+            return None
+        genre_values[feature] = int(value)
+
     main_info = {}
     main_info["title"] = title
     main_info["user_score"] = valid.parse_float(user_score)
@@ -199,4 +227,5 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
     movie["main_info"] = main_info
     movie["raw_scores"] = raw_scores
     movie[constant.TAGS_VIBE_SECTION] = tags_vibe
+    movie[constant.GENRE_SECTION] = genre_values
     return movie

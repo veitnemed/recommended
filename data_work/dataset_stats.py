@@ -54,7 +54,7 @@ def build_dataset_info_lines(data: dict) -> list:
         return lines
 
     ordered_features = []
-    fields_order = constant.MAIN_INFO + constant.RAW_SCORES + constant.COMPUTED_SCORES + constant.TAGS_VIBE
+    fields_order = constant.MAIN_INFO + [constant.BIAS_FEATURE] + constant.RAW_SCORES + constant.COMPUTED_SCORES + constant.TAGS_VIBE
     for feature in fields_order:
         if feature in stats and feature not in ordered_features:
             ordered_features.append(feature)

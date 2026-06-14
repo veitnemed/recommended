@@ -90,10 +90,8 @@ def test_tags_json_are_utf8() -> None:
     print("\n2) Проверяем config/tags.json")
     tags = tags_work.load_tags()
     raw_tags = (ROOT_DIR / "config" / "tags.json").read_bytes()
-
-    assert_check("label читается без искажений", tags["thriller_or_dramma"]["label"] == "Триллер или драмма")
-    assert_check("scale читается без искажений", tags["thriller_or_dramma"]["scale"] == ["Нет", "Да"])
-    assert_check("JSON хранит UTF-8 байты, а не escape-последовательности", "Триллер".encode("utf-8") in raw_tags)
+    assert_check("Пустой каталог вайб-тегов читается корректно", isinstance(tags, dict))
+    assert_check("Пустой tags.json хранится как UTF-8 JSON", raw_tags.strip() == b"{}")
 
 
 def test_storage_cyrillic_roundtrip() -> None:

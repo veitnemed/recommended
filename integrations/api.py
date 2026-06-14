@@ -2,14 +2,22 @@
 
 import json
 import os
+import time
+from datetime import datetime
 from json import JSONDecodeError
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from config import constant
+
 
 API_URL = os.getenv("KINOPOISK_API_URL", "https://api.kinopoisk.dev/v1.4")
 TOKEN = os.getenv("KINOPOISK_API_KEY") or os.getenv("POISKKINO_API_KEY")
+SECONDARY_TOKEN = (
+    os.getenv("KINOPOISK_API_KEY_SECONDARY")
+    or os.getenv("POISKKINO_API_KEY_SECONDARY")
+)
 DEFAULT_LIMIT = 10
 SERIES_TYPES = {"tv-series", "series", "mini-series", "animated-series"}
 
@@ -21,6 +29,24 @@ if TOKEN is None:
             from api_token import TOKEN
         except ImportError:
             TOKEN = None
+
+if SECONDARY_TOKEN is None:
+    try:
+        from integrations.api_token import TOKEN_SECONDARY as SECONDARY_TOKEN
+    except ImportError:
+        try:
+            from api_token import TOKEN_SECONDARY as SECONDARY_TOKEN
+        except ImportError:
+            SECONDARY_TOKEN = None
+
+
+def get_api_tokens(preferred_token: str = None) -> list:
+    """Возвращает список API-ключей в порядке использования."""
+    tokens = []
+    for value in [preferred_token, SECONDARY_TOKEN]:
+        if value is not None and value not in tokens:
+            tokens.append(value)
+    return tokens
 
 
 def make_response(ok: bool, data=None, error: str = None, details: str = None) -> dict:
@@ -36,6 +62,21 @@ def make_response(ok: bool, data=None, error: str = None, details: str = None) -
 def normalize_text(value) -> str:
     """Приводит пользовательский ввод к строке без лишних пробелов."""
     return str(value or "").strip()
+
+
+def write_api_log(event: str, **fields) -> None:
+    """Пишет строку лога API в JSONL-файл."""
+    try:
+        os.makedirs(constant.DATA_DIR, exist_ok=True)
+        payload = {
+            "ts": datetime.now().isoformat(timespec="seconds"),
+            "event": event,
+        }
+        payload.update(fields)
+        with open(constant.API_LOG_FILE, "a", encoding="utf-8") as file:
+            file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 
 def validate_series_request(title, country) -> dict:
@@ -61,31 +102,162 @@ def build_search_url(title: str, limit: int = DEFAULT_LIMIT) -> str:
     return f"{API_URL}/movie/search?{query}"
 
 
-def fetch_json(url: str, token: str, timeout: int = 10, opener=urlopen) -> dict:
+def build_discover_url(filters: dict, page: int = 1, limit: int = DEFAULT_LIMIT) -> str:
+    """Собирает URL подбора сериалов по фильтрам."""
+    params = {
+        "page": page,
+        "limit": limit,
+        "sortField": "votes.kp",
+        "sortType": "-1",
+        "isSeries": "true",
+    }
+
+    min_year = filters.get("min_year")
+    max_year = filters.get("max_year")
+    if min_year is not None or max_year is not None:
+        year_from = min_year if min_year is not None else 2000
+        year_to = max_year if max_year is not None else constant.NOW_YEAR
+        params["year"] = f"{year_from}-{year_to}"
+
+    min_kp = filters.get("min_kp")
+    if min_kp is not None:
+        params["rating.kp"] = f"{min_kp}-10"
+
+    min_imdb = filters.get("min_imdb")
+    if min_imdb is not None:
+        params["rating.imdb"] = f"{min_imdb}-10"
+
+    min_kp_votes = filters.get("min_kp_votes")
+    if min_kp_votes is not None:
+        params["votes.kp"] = f"{min_kp_votes}-5000000"
+
+    min_imdb_votes = filters.get("min_imdb_votes")
+    if min_imdb_votes is not None:
+        params["votes.imdb"] = f"{min_imdb_votes}-1000000"
+
+    query = urlencode(params, doseq=True)
+    return f"{API_URL}/movie?{query}"
+
+
+def fetch_json(url: str, token: str, timeout: int = 20, opener=urlopen, retries: int = 2) -> dict:
     """Загружает JSON с обработкой сетевых ошибок и ошибок формата ответа."""
-    if token is None:
+    tokens = get_api_tokens(token)
+    if len(tokens) == 0:
+        write_api_log("api_missing_token", url=url)
         return make_response(False, error="missing_token", details="Не задан KINOPOISK_API_KEY.")
 
-    request = Request(url, headers={
-        "X-API-KEY": token,
-        "Accept": "application/json",
-    })
+    write_api_log("api_request_start", url=url, timeout=timeout, retries=retries)
+    last_error = None
+    raw = None
+    total_attempts = len(tokens) * (retries + 1)
+    global_attempt = 0
+
+    for token_index, current_token in enumerate(tokens):
+        for attempt in range(retries + 1):
+            global_attempt += 1
+            request = Request(url, headers={
+                "X-API-KEY": current_token,
+                "Accept": "application/json",
+            })
+            write_api_log(
+                "api_request_attempt",
+                url=url,
+                attempt=global_attempt,
+                total_attempts=total_attempts,
+                token_index=token_index + 1,
+                using_secondary=token_index > 0,
+            )
+            try:
+                with opener(request, timeout=timeout) as response:
+                    raw = response.read().decode("utf-8")
+                write_api_log(
+                    "api_request_success",
+                    url=url,
+                    attempt=global_attempt,
+                    token_index=token_index + 1,
+                    using_secondary=token_index > 0,
+                    status=getattr(response, "status", None),
+                    bytes=len(raw),
+                )
+                break
+            except HTTPError as error:
+                write_api_log(
+                    "api_request_http_error",
+                    url=url,
+                    attempt=global_attempt,
+                    token_index=token_index + 1,
+                    using_secondary=token_index > 0,
+                    code=error.code,
+                    reason=str(getattr(error, "reason", "")),
+                )
+                if error.code == 403:
+                    if attempt < retries:
+                        time.sleep(3 + attempt * 3)
+                        continue
+                    if token_index + 1 < len(tokens):
+                        write_api_log(
+                            "api_switch_token_after_403",
+                            url=url,
+                            failed_token_index=token_index + 1,
+                            next_token_index=token_index + 2,
+                        )
+                        break
+                if error.code == 400:
+                    write_api_log("api_bad_request_parameters", url=url)
+                return make_response(False, error="http_error", details=f"HTTP {error.code}")
+            except URLError as error:
+                write_api_log(
+                    "api_request_network_error",
+                    url=url,
+                    attempt=global_attempt,
+                    token_index=token_index + 1,
+                    using_secondary=token_index > 0,
+                    reason=str(error.reason),
+                )
+                last_error = make_response(False, error="network_error", details=str(error.reason))
+            except TimeoutError:
+                write_api_log(
+                    "api_request_timeout",
+                    url=url,
+                    attempt=global_attempt,
+                    token_index=token_index + 1,
+                    using_secondary=token_index > 0,
+                )
+                last_error = make_response(False, error="timeout", details="Внешний API не ответил вовремя.")
+            except OSError as error:
+                write_api_log(
+                    "api_request_os_error",
+                    url=url,
+                    attempt=global_attempt,
+                    token_index=token_index + 1,
+                    using_secondary=token_index > 0,
+                    reason=str(error),
+                )
+                last_error = make_response(False, error="network_error", details=str(error))
+
+            if attempt < retries:
+                time.sleep(1 + attempt)
+        if raw is not None:
+            break
+    else:
+        write_api_log(
+            "api_request_failed",
+            url=url,
+            error=last_error["error"] if last_error else None,
+            details=last_error["details"] if last_error else None,
+        )
+        return last_error
 
     try:
-        with opener(request, timeout=timeout) as response:
-            raw = response.read().decode("utf-8")
-    except HTTPError as error:
-        return make_response(False, error="http_error", details=f"HTTP {error.code}")
-    except URLError as error:
-        return make_response(False, error="network_error", details=str(error.reason))
-    except TimeoutError:
-        return make_response(False, error="timeout", details="Внешний API не ответил вовремя.")
-    except OSError as error:
-        return make_response(False, error="network_error", details=str(error))
-
-    try:
-        return make_response(True, data=json.loads(raw))
+        data = json.loads(raw)
+        write_api_log(
+            "api_json_ok",
+            url=url,
+            docs_count=len(get_docs(data)) if isinstance(data, dict) else None,
+        )
+        return make_response(True, data=data)
     except JSONDecodeError:
+        write_api_log("api_invalid_json", url=url)
         return make_response(False, error="invalid_json", details="Внешний API вернул не JSON.")
 
 
@@ -397,6 +569,39 @@ def find_series_raw(title, country="Россия", token: str = TOKEN, opener=ur
         )
 
     return make_response(True, data=series)
+
+
+def discover_series_by_filters(filters: dict, page: int = 1, limit: int = 50, token: str = TOKEN, opener=urlopen) -> dict:
+    """Возвращает сериалы из общего каталога API по фильтрам."""
+    country = normalize_text(filters.get("country") or "Россия")
+    url = build_discover_url(filters, page=page, limit=limit)
+    response = fetch_json(url, token=token, opener=opener)
+    if response["ok"] is False:
+        if response["error"] == "network_error":
+            details = response["details"] or "network_error"
+            return make_response(
+                False,
+                error="network_error",
+                details=f"{details}. URL: {url}"
+            )
+        return response
+
+    docs = get_docs(response["data"])
+    series_docs = [
+        movie for movie in docs
+        if isinstance(movie, dict) and is_series(movie) and movie_has_country(movie, country)
+    ]
+    return make_response(True, data=series_docs)
+
+
+def check_api_available(token: str = TOKEN, opener=urlopen) -> dict:
+    """Проверяет базовую доступность API коротким запросом."""
+    url = f"{API_URL}/movie/search?query=test&limit=1&page=1"
+    response = fetch_json(url, token=token, opener=opener, timeout=10, retries=0)
+    if response["ok"] is False:
+        details = response["details"] or response["error"] or "unknown_error"
+        return make_response(False, error=response["error"], details=f"{details}. URL: {url}")
+    return make_response(True, data=True)
 
 
 def request_series_info(token: str = TOKEN, opener=urlopen) -> dict:

@@ -8,7 +8,6 @@ from datetime import datetime
 from pathlib import Path
 
 TAGS_JSON = str(Path(__file__).resolve().parents[1] / "config" / "tags.json")
-DEFAULT_TAG = "tag0"
 
 
 def load_tags() -> dict:
@@ -136,45 +135,23 @@ def delete_tag_from_data(feature: str) -> None:
 
 
 def remove_default_tag_if_only_tag(tags: dict) -> dict:
-    """Удаляет tag0 перед добавлением первого настоящего тега."""
-    if list(tags.keys()) != [DEFAULT_TAG]:
-        return tags
-
-    delete_tag_from_data(DEFAULT_TAG)
-    tags.pop(DEFAULT_TAG, None)
-    save_tags(tags)
+    """Оставлено для совместимости со старым кодом."""
     return tags
 
 
 def delete_all_tags() -> None:
-    """Удаляет все теги и оставляет технический tag0."""
+    """Удаляет все вайб-теги без технических заглушек."""
     from config import constant
 
     old_tags = load_tags()
 
     dataset = load_json(constant.FILE_NAME)
     for movie in dataset.values():
-        movie[constant.TAGS_VIBE_SECTION] = {
-            DEFAULT_TAG: 0
-        }
+        movie[constant.TAGS_VIBE_SECTION] = {}
     save_json(constant.FILE_NAME, dataset)
 
     weights = load_json(constant.WEIGHTS_JSON)
     for feature in old_tags.keys():
         weights.pop(feature, None)
-    weights[DEFAULT_TAG] = 0
     save_json(constant.WEIGHTS_JSON, weights)
-
-    tags = {
-        DEFAULT_TAG: {
-            "label": "Технический тег",
-            "title": "Технический тег",
-            "question": "Технический тег-заглушка?",
-            "scale": [
-                "Нет",
-                "Да"
-            ],
-            "translation": DEFAULT_TAG
-        }
-    }
-    save_tags(tags)
+    save_tags({})
