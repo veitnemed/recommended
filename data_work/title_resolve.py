@@ -4,10 +4,10 @@ from config import constant
 from config import genre_tags
 from config import scheme
 from data_work import sql_search
-from integrations import api
+from apis import api
 
 try:
-    from integrations import api_tmdb
+    from apis import api_tmdb
 except ImportError:  # pragma: no cover - TMDb fallback is optional for old environments.
     api_tmdb = None
 

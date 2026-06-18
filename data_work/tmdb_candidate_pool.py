@@ -12,8 +12,8 @@ from typing import Any
 
 from data_work import candidate_pool as legacy_candidate_pool
 from data_work import sql_search
-from integrations import api as kp_api
-from integrations import api_tmdb
+from apis import api as kp_api
+from apis import api_tmdb
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]

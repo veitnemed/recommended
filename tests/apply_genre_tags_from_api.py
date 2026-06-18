@@ -14,7 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 from config import constant
 from data_work import storage
 from data_work import tags_work
-from integrations import api
+from apis import api
 from model_work import model
 
 NEW_TAGS = {

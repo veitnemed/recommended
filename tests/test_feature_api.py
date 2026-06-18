@@ -9,7 +9,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from data_work import storage
-from integrations import api
+from apis import api
 
 
 def get_dataset_title(dataset_title: str, movie: dict) -> str:

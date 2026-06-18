@@ -6,7 +6,7 @@ from config import constant
 from config import genre_tags
 from config import scheme
 from data_work import storage
-from integrations import api
+from apis import api
 
 CONFIRM_YES = {"y", "yes", "да", "д", "1"}
 CONFIRM_NO = {"n", "no", "нет", "н", "0"}

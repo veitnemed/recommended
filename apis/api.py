@@ -24,7 +24,7 @@ SERIES_TYPES = {"tv-series", "series", "mini-series", "animated-series"}
 
 if TOKEN is None:
     try:
-        from integrations.api_token import TOKEN
+        from apis.api_token import TOKEN
     except ImportError:
         try:
             from api_token import TOKEN
@@ -33,7 +33,7 @@ if TOKEN is None:
 
 if SECONDARY_TOKEN is None:
     try:
-        from integrations.api_token import TOKEN_SECONDARY as SECONDARY_TOKEN
+        from apis.api_token import TOKEN_SECONDARY as SECONDARY_TOKEN
     except ImportError:
         try:
             from api_token import TOKEN_SECONDARY as SECONDARY_TOKEN

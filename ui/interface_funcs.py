@@ -15,7 +15,7 @@ from ui import title_presenters
 from data_work import storage
 from ui import ui
 from common import valid
-from integrations import api
+from apis import api
 
 
 def show_all_movies():
