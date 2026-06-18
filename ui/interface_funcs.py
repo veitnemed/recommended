@@ -2,7 +2,7 @@
 
 from config import constant
 from common import format_score as format
-from data_work import candidate_pool
+from candidates import candidate_pool
 from data_work import dataset_stats
 from data_work import genre_import
 from data_work import genre_stats
