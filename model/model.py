@@ -2,7 +2,7 @@
 
 from config import constant
 from common import format_score
-from data_work import storage
+from storage import data as storage_data
 
 def iter_movies(data):
     """Возвращает список фильмов из датасета любого поддерживаемого формата."""
@@ -106,7 +106,7 @@ def save_weights_if_loo_improved(
     source_name: str = "Обучение модели",
 ) -> bool:
     """Сохраняет веса только если новый LOO MAE лучше сохраненного значения."""
-    current_loo_mae = storage.get_saved_loo_mae()
+    current_loo_mae = storage_data.get_saved_loo_mae()
 
     print(f"LOO MAE новых весов: {new_loo_mae:.4f}")
     if current_loo_mae is None:
@@ -118,8 +118,8 @@ def save_weights_if_loo_improved(
         print(f"Веса отклонены: LOO MAE не улучшился ({source_name}).")
         return False
 
-    storage.save_weights(new_weights)
-    storage.set_saved_loo_mae(new_loo_mae)
+    storage_data.save_weights(new_weights)
+    storage_data.set_saved_loo_mae(new_loo_mae)
     print(f"Веса сохранены: LOO MAE улучшился ({source_name}).")
     return True
 

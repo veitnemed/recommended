@@ -5,7 +5,7 @@ from datetime import datetime
 
 from config import constant
 from dataset import dataset_stats
-from data_work import storage
+from storage import data as storage_data
 from dataset import tags_work
 from model import model
 
@@ -102,8 +102,8 @@ def build_train_report(data: dict, weights: dict) -> list:
 
 def export_train_report() -> str:
     """Выгружает отчет об обучении в TXT-файл."""
-    data = storage.load_dataset()
-    weights = storage.load_weights()
+    data = storage_data.load_dataset()
+    weights = storage_data.load_weights()
     reports_dir = os.path.join(constant.DIR_TXT, REPORTS_DIR_NAME)
     os.makedirs(reports_dir, exist_ok=True)
 

@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from apis import imdb_sql as sql_search
-from data_work import storage
+from storage import data as storage_data
 from config import constant
 
 
@@ -64,7 +64,7 @@ def run_all_titles() -> None:
     args = parse_args()
     if args.dataset:
         constant.FILE_NAME = str(Path(args.dataset))
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     titles = list(data.items())
     if args.limit is not None:
         titles = titles[: max(args.limit, 0)]

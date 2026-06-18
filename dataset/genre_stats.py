@@ -2,7 +2,7 @@
 
 from collections import Counter
 
-from data_work import storage
+from storage import data as storage_data
 from apis import kp_api as api
 
 
@@ -94,7 +94,7 @@ def print_genre_report(result: dict) -> None:
 
 def show_dataset_genres(country: str = "Россия") -> None:
     """Показывает все жанры текущего датасета, загруженные из API."""
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     if len(data) == 0:
         print("Датасет пуст.")
         return

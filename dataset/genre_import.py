@@ -5,7 +5,8 @@ from typing import Callable
 from config import constant
 from config import genre_tags
 from config import scheme
-from data_work import storage
+from storage import data as storage_data
+from storage import files as storage_files
 from apis import kp_api as api
 
 CONFIRM_YES = {"y", "yes", "да", "д", "1"}
@@ -76,7 +77,7 @@ def ask_confirm(prompt: Callable[[str], str], text: str) -> bool:
 
 def apply_genre_markup(country: str = "Россия", prompt: Callable[[str], str] = input) -> dict:
     """Загружает жанры для текущего датасета и сохраняет подтвержденные изменения."""
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     summary = {
         "total": len(data),
         "updated": 0,
@@ -138,12 +139,12 @@ def apply_genre_markup(country: str = "Россия", prompt: Callable[[str], st
         genre_tags.ensure_genre_fields(list(added_genre_names))
         constant.refresh_dynamic_fields()
 
-        storage.create_backup()
-        storage.save_dataset(data)
-        weights = storage.load_weights()
+        storage_files.create_backup()
+        storage_data.save_dataset(data)
+        weights = storage_data.load_weights()
         for feature in constant.GENRE:
             weights.setdefault(feature, 0)
-        storage.save_weights(weights)
+        storage_data.save_weights(weights)
         print("Жанровая разметка сохранена.")
     else:
         print("Подтвержденных изменений нет.")

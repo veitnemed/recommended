@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from data_work import storage
+from storage import data as storage_data
 from apis import kp_api as api
 
 
@@ -100,7 +100,7 @@ def print_genre_report(result: dict) -> None:
 
 def run() -> None:
     """Запускает подсчет жанров по текущему датасету."""
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     if len(data) == 0:
         print("Датасет пуст.")
         return

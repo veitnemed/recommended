@@ -391,7 +391,7 @@ def print_weights_summary(weights: dict, top_n: int = 10) -> None:
 
 def run_loo_training(data, weights) -> None:
     """Подбирает Ridge alpha по LOO, обучает финальную модель и сохраняет результат."""
-    from data_work import storage
+    from storage import data as storage_data
 
     movies = model.iter_movies(data)
     if len(movies) < 3:
@@ -408,7 +408,7 @@ def run_loo_training(data, weights) -> None:
     before_metrics = collect_loo_metrics(
         data=movies,
         weights=weights,
-        loo_mae=storage.get_saved_loo_mae(),
+        loo_mae=storage_data.get_saved_loo_mae(),
     )
     print_metrics_report(
         title="ДО LOO ОБУЧЕНИЯ",
@@ -449,8 +449,8 @@ def run_loo_training(data, weights) -> None:
         start_weights=weights,
         alpha=best_alpha,
     )
-    storage.save_weights(final_weights)
-    storage.set_saved_loo_mae(best_loo_mae)
+    storage_data.save_weights(final_weights)
+    storage_data.set_saved_loo_mae(best_loo_mae)
 
     print("LOO обучение завершено.")
     print(f"Лучший Ridge alpha: {best_alpha}")
@@ -459,11 +459,11 @@ def run_loo_training(data, weights) -> None:
     print("weights.json обновлён.")
     print("config/model_metrics.json обновлён.")
     print("")
-    saved_weights = storage.load_weights()
+    saved_weights = storage_data.load_weights()
     after_metrics = collect_loo_metrics(
         data=movies,
         weights=saved_weights,
-        loo_mae=storage.get_saved_loo_mae(),
+        loo_mae=storage_data.get_saved_loo_mae(),
     )
     print_metrics_report(
         title="ПОСЛЕ LOO ОБУЧЕНИЯ",

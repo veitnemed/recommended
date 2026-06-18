@@ -10,7 +10,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config import constant
-from data_work import storage
+from storage import data as storage_data
+from dataset import storage_movie
 from dataset import tags_work
 
 
@@ -43,9 +44,9 @@ def setup_temp_project():
     constant.DIR_META = str(root / "meta")
     constant.META_JSON = str(root / "meta" / "meta_data.json")
 
-    storage.init_dataset()
-    storage.init_meta()
-    storage.init_weights()
+    storage_data.init_dataset()
+    storage_data.init_meta()
+    storage_data.init_weights()
 
     return temp_dir, old_paths
 
@@ -99,10 +100,10 @@ def test_storage_cyrillic_roundtrip() -> None:
     temp_dir, old_paths = setup_temp_project()
     try:
         movie = make_cyrillic_movie()
-        assert_check("Фильм с русским title добавляется", storage.add_movie(movie))
+        assert_check("Фильм с русским title добавляется", storage_movie.add_movie(movie))
 
-        dataset = storage.load_dataset()
-        meta = storage.load_meta()
+        dataset = storage_data.load_dataset()
+        meta = storage_data.load_meta()
         dataset_bytes = Path(constant.FILE_NAME).read_bytes()
 
         assert_check("Ключ dataset не искажается", CYRILLIC_TITLE in dataset)
@@ -115,7 +116,7 @@ def test_storage_cyrillic_roundtrip() -> None:
             json.dumps(dataset, ensure_ascii=False, indent=4),
             encoding="utf-8-sig",
         )
-        assert_check("Файл с UTF-8 BOM тоже читается", CYRILLIC_TITLE in storage.load_dataset())
+        assert_check("Файл с UTF-8 BOM тоже читается", CYRILLIC_TITLE in storage_data.load_dataset())
     finally:
         restore_project_paths(temp_dir, old_paths)
 

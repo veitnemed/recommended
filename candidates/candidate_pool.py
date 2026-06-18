@@ -282,9 +282,9 @@ def deduplicate_pool(pool: dict) -> dict:
 
 def build_watched_signatures() -> set:
     """Собирает сигнатуры уже просмотренных объектов из основного датасета."""
-    from data_work import storage
+    from storage import data as storage_data
 
-    dataset = storage.load_dataset()
+    dataset = storage_data.load_dataset()
     signatures = set()
     for movie in dataset.values():
         main_info = movie.get("main_info", {})

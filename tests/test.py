@@ -16,7 +16,10 @@ from config import constant
 from common import format_score
 from model import model
 from model import linear_regression_train
-from data_work import storage
+from storage import data as storage_data
+from storage import files as storage_files
+from storage import normalize as storage_normalize
+from dataset import storage_movie
 from dataset import excel_work
 from candidates import candidate_pool
 from apis import imdb_sql as sql_search
@@ -90,9 +93,9 @@ def setup_temp_project():
     constant.DIR_META = str(root / "meta")
     constant.META_JSON = str(root / "meta" / "meta_data.json")
 
-    storage.init_dataset()
-    storage.init_meta()
-    storage.init_weights()
+    storage_data.init_dataset()
+    storage_data.init_meta()
+    storage_data.init_weights()
 
     return temp_dir, old_paths
 
@@ -110,8 +113,8 @@ def test_files_created() -> None:
     assert_check("Файл dataset.json открывается", Path(constant.FILE_NAME).exists())
     assert_check("Файл meta_data.json открывается", Path(constant.META_JSON).exists())
     assert_check("Файл weights.json открывается", Path(constant.WEIGHTS_JSON).exists())
-    assert_check("Dataset изначально пустой", storage.load_dataset() == {})
-    assert_check("Meta изначально пустая", storage.load_meta() == {})
+    assert_check("Dataset изначально пустой", storage_data.load_dataset() == {})
+    assert_check("Meta изначально пустая", storage_data.load_meta() == {})
 
 
 def test_add_new_movie() -> None:
@@ -119,10 +122,10 @@ def test_add_new_movie() -> None:
     print("\n2) Проверяем добавление новой записи")
     movie = make_movie()
 
-    assert_check("Запись добавляется", storage.add_movie(movie))
+    assert_check("Запись добавляется", storage_movie.add_movie(movie))
 
-    dataset = storage.load_dataset()
-    meta = storage.load_meta()
+    dataset = storage_data.load_dataset()
+    meta = storage_data.load_meta()
 
     assert_check("В dataset появилась 1 запись", len(dataset) == 1)
     assert_check("Title сохранен в dataset", dataset["Test Movie"]["main_info"]["title"] == "Test Movie")
@@ -135,20 +138,20 @@ def test_add_new_movie() -> None:
 def test_meta_overrides_raw_scores() -> None:
     """Проверяет приоритет raw-данных из meta."""
     print("\n3) Проверяем приоритет meta")
-    storage.clean_dataset()
+    storage_data.clean_dataset()
 
     first_movie = make_movie(title="Known Movie", raw_score=9.0)
-    assert_check("Первая запись создает meta", storage.add_movie(first_movie))
-    storage.clean_dataset()
+    assert_check("Первая запись создает meta", storage_movie.add_movie(first_movie))
+    storage_data.clean_dataset()
 
     second_movie = make_movie(title="Known Movie", raw_score=1.0)
     changed_tag = constant.TAGS_VIBE[0] if constant.TAGS_VIBE else None
     if changed_tag is not None:
         second_movie[constant.TAGS_VIBE_SECTION][changed_tag] = 1
 
-    assert_check("Повторная запись с тем же title добавляется в пустой dataset", storage.add_movie(second_movie))
+    assert_check("Повторная запись с тем же title добавляется в пустой dataset", storage_movie.add_movie(second_movie))
 
-    saved_movie = storage.load_dataset()["Known Movie"]
+    saved_movie = storage_data.load_dataset()["Known Movie"]
     assert_check("Raw kp_score взят из meta, а не из нового ввода", saved_movie["raw_scores"]["kp_score"] == 9.0)
     if changed_tag is not None:
         assert_check("Tag взят из нового ввода", saved_movie[constant.TAGS_VIBE_SECTION][changed_tag] == 1)
@@ -157,17 +160,17 @@ def test_meta_overrides_raw_scores() -> None:
 def test_duplicate_rejected() -> None:
     """Проверяет запрет дублей."""
     print("\n4) Проверяем запрет дублей")
-    storage.clean_dataset()
+    storage_data.clean_dataset()
     movie = make_movie(title="Duplicate Movie")
 
-    assert_check("Первая запись добавляется", storage.add_movie(movie))
+    assert_check("Первая запись добавляется", storage_movie.add_movie(movie))
 
     with contextlib.redirect_stdout(io.StringIO()):
-        second_result = storage.add_movie(movie)
+        second_result = storage_movie.add_movie(movie)
 
     assert_check("Повторная запись не добавляется", second_result.ok is False)
     assert_check("Причина отказа - дубль title", second_result.reason == "duplicate_title")
-    assert_check("В dataset осталась 1 запись", len(storage.load_dataset()) == 1)
+    assert_check("В dataset осталась 1 запись", len(storage_data.load_dataset()) == 1)
 
 
 def test_feature_formatting() -> None:
@@ -245,14 +248,14 @@ def test_tag_compatibility() -> None:
         "has_mystic": 1,
         "has_romantic_tension": 1,
     }
-    normalized = storage.normalize_tags_vibe(old_tags)
+    normalized = storage_normalize.normalize_tags_vibe(old_tags)
 
     assert_check("Tag order matches the new scheme", constant.TAGS_VIBE == expected_tags)
     assert_check("Legacy tags are removed after migration", list(normalized) == expected_tags)
     assert_check("Missing active tags default to zero", all(feature in normalized for feature in constant.TAGS_VIBE))
     if constant.TAGS_VIBE:
         changed_tag = constant.TAGS_VIBE[0]
-        assert_check("Invalid binary tag is rejected", storage.is_valid_tags_vibe({**normalized, changed_tag: 2}) is False)
+        assert_check("Invalid binary tag is rejected", storage_normalize.is_valid_tags_vibe({**normalized, changed_tag: 2}) is False)
 
 
 def test_training() -> None:
@@ -261,7 +264,7 @@ def test_training() -> None:
     if linear_regression_train.is_method_available("mae_scipy") is False:
         print("SKIP: scipy minimize (MAE) недоступен в текущем окружении.")
         return
-    storage.clean_dataset()
+    storage_data.clean_dataset()
 
     movies = [
         make_movie("A", user_score=8.0, raw_score=8.0),
@@ -269,9 +272,9 @@ def test_training() -> None:
         make_movie("C", user_score=9.0, raw_score=9.0),
     ]
     for movie in movies:
-        assert_check(f"Запись {movie['main_info']['title']} добавляется", storage.add_movie(movie))
+        assert_check(f"Запись {movie['main_info']['title']} добавляется", storage_movie.add_movie(movie))
 
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     start_error = model.mean_absolute_error(data, constant.DEFAULT_WEIGHTS)
     new_weights = linear_regression_train.fit_linear_weights(
         data=data,
@@ -292,20 +295,20 @@ def test_training() -> None:
 def test_backup_restore() -> None:
     """Проверяет восстановление датасета из backup."""
     print("\n9) Проверяем восстановление backup")
-    storage.clean_dataset()
+    storage_data.clean_dataset()
 
     first_movie = make_movie("Backup A", user_score=7.0, raw_score=7.0)
     second_movie = make_movie("Backup B", user_score=9.0, raw_score=9.0)
 
-    assert_check("Первая запись добавляется", storage.add_movie(first_movie))
-    storage.create_backup()
-    backup_path = storage.get_latest_backups(1)[0]
+    assert_check("Первая запись добавляется", storage_movie.add_movie(first_movie))
+    storage_files.create_backup()
+    backup_path = storage_files.get_latest_backups(1)[0]
 
-    assert_check("Вторая запись добавляется", storage.add_movie(second_movie))
-    assert_check("В датасете временно 2 записи", len(storage.load_dataset()) == 2)
+    assert_check("Вторая запись добавляется", storage_movie.add_movie(second_movie))
+    assert_check("В датасете временно 2 записи", len(storage_data.load_dataset()) == 2)
 
-    records_count = storage.restore_backup(backup_path)
-    data = storage.load_dataset()
+    records_count = storage_files.restore_backup(backup_path)
+    data = storage_data.load_dataset()
 
     assert_check("Backup восстановил 1 запись", records_count == 1)
     assert_check("Первая запись осталась", "Backup A" in data)

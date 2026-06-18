@@ -12,7 +12,8 @@ from model import model
 from ui import candidate_pool_ui
 from ui import request
 from ui import title_presenters
-from data_work import storage
+from storage import data as storage_data
+from dataset import storage_movie
 from ui import ui
 from common import valid
 from apis import kp_api as api
@@ -20,7 +21,7 @@ from apis import kp_api as api
 
 def show_all_movies():
     """Показывает все фильмы из датасета."""
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     if len(data) == 0:
         print('Датасет пуст!')
         return
@@ -51,7 +52,7 @@ def request_object() -> None:
         return
 
     movie_request = request.request_all_scores(defaults)
-    result = storage.add_movie(movie_request, print_message=False)
+    result = storage_movie.add_movie(movie_request, print_message=False)
     print(result.message)
 
 
@@ -94,7 +95,7 @@ def mark_candidate_as_watched() -> None:
         print("Кандидат неполный: нет KP/IMDb данных.")
         print("Можно продолжить вручную, но проверь raw_scores.\n")
     movie_request = request.request_all_scores(defaults)
-    result = storage.add_movie(
+    result = storage_movie.add_movie(
         movie_request,
         meta_payload=meta_payload,
         pool_candidate=candidate,
@@ -122,13 +123,13 @@ def show_weights_model(weights):
 
 def reset_weights_model():
     """Сбрасывает веса модели."""
-    storage.save_weights(constant.DEFAULT_WEIGHTS.copy())
+    storage_data.save_weights(constant.DEFAULT_WEIGHTS.copy())
     print('Веса сброшены на значения по умолчанию.')
 
 
 def votes_impact():
     """Показывает влияние количества голосов на популярность."""
-    data = storage.load_meta()
+    data = storage_data.load_meta()
     for title, obj in data.items():
         raw_scores = obj.get("raw_scores", obj.get("raw"))
         main_info = obj.get("main_info", {})
@@ -144,7 +145,7 @@ def votes_impact():
 def show_feature_importance(weights, full_error):
     """Показывает влияние каждого признака."""
     ui.clean_terminal()
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     if len(data) == 0:
         print('Датасет пуст!')
         return
@@ -201,7 +202,7 @@ def show_feature_importance(weights, full_error):
 
 def show_data_info():
     """Показывает сводку по датасету."""
-    data = storage.load_dataset()
+    data = storage_data.load_dataset()
     for line in dataset_stats.build_dataset_info_lines(data):
         print(line)
 
@@ -209,7 +210,7 @@ def show_data_info():
 def rename_movie_record() -> None:
     """Переименовывает запись в основном датасете и meta."""
     ui.clean_terminal()
-    titles = storage.get_all_titles()
+    titles = storage_data.get_all_titles()
     if len(titles) == 0:
         print("Датасет пуст!")
         return
@@ -227,7 +228,7 @@ def rename_movie_record() -> None:
         funcs_list=[valid.is_correct_title]
     )
 
-    if storage.rename_movie_title(old_title, new_title):
+    if storage_data.rename_movie_title(old_title, new_title):
         print("Название записи обновлено.")
     else:
         print("Переименование не выполнено.")
@@ -770,7 +771,7 @@ def show_global_candidate_top() -> None:
     )
     top_n = min(int(top_n_value), len(ready_candidates))
 
-    weights = storage.load_weights()
+    weights = storage_data.load_weights()
     scored_candidates = candidate_pool.rank_candidates_by_predict(ready_candidates, weights)
 
     print(f"\nТоп {top_n} из общего пула:\n")
@@ -917,7 +918,7 @@ def show_candidate_contributions() -> None:
         contribution_limit = 10
     contribution_limit = max(1, min(contribution_limit, 30))
 
-    weights = storage.load_weights()
+    weights = storage_data.load_weights()
     reports = [
         candidate_pool.candidate_feature_contributions(candidate, weights)
         for candidate in candidates

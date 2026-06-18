@@ -1,18 +1,18 @@
 """Показывает backup-файлы датасета и восстанавливает выбранный backup."""
 
-from data_work import storage
+from storage import files as storage_files
 
 
 def open_backup_menu() -> None:
     """Открывает меню выбора backup-файла для восстановления датасета."""
-    backups = storage.get_latest_backups(10)
+    backups = storage_files.get_latest_backups(10)
     if len(backups) == 0:
         print("Backup-файлы не найдены.")
         return
 
     print("\nБЭКАП ДАТАСЕТА\n")
     for idx, file_path in enumerate(backups, start=1):
-        print(f"{idx}) {storage.get_backup_label(file_path)}")
+        print(f"{idx}) {storage_files.get_backup_label(file_path)}")
     print("0) Назад")
 
     answer = input("\nВыбери backup для загрузки >> ").strip()
@@ -34,7 +34,7 @@ def open_backup_menu() -> None:
         return
 
     try:
-        records_count = storage.restore_backup(file_path)
+        records_count = storage_files.restore_backup(file_path)
     except ValueError as error:
         print(f"Ошибка backup: {error}")
         return

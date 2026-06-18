@@ -8,7 +8,9 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
 from config import constant
-from data_work import storage
+from storage import data as storage_data
+from storage import files as storage_files
+from dataset import storage_movie
 from dataset.dataset_records import update_dataset_record
 
 
@@ -73,8 +75,8 @@ def apply_header_column_widths(worksheet, padding: int = 4) -> None:
 
 def export_dataset_to_excel(overwrite: bool = False) -> bool:
     """Выгружает датасет в Excel."""
-    data = storage.load_dataset()
-    meta = storage.load_meta()
+    data = storage_data.load_dataset()
+    meta = storage_data.load_meta()
     os.makedirs(constant.DIR_TXT, exist_ok=True)
 
     if overwrite is False and os.path.exists(constant.EDIT_EXCEL):
@@ -160,7 +162,7 @@ def load_movies_from_excel() -> list:
                 field: "" if value is None else str(value)
                 for field, value in zip(fieldnames, values)
             }
-            movie = storage.build_movie_from_row(row, row_number)
+            movie = storage_movie.build_movie_from_row(row, row_number)
             if movie is None:
                 return None
             movies.append(movie)
@@ -234,16 +236,16 @@ def replace_dataset_from_excel() -> bool:
     if movies is None:
         return False
 
-    dataset = storage.load_dataset()
+    dataset = storage_data.load_dataset()
     if validate_excel_titles(movies, dataset) is False:
         return False
 
-    if storage.is_file_writable(constant.FILE_NAME) is False:
+    if storage_files.is_file_writable(constant.FILE_NAME) is False:
         print(f'Не удалось открыть файл для записи: {constant.FILE_NAME}')
         print('Закрой файл в другой программе или проверь права доступа и попробуй снова.')
         return False
 
-    storage.create_backup()
+    storage_files.create_backup()
     updated_count = 0
     unchanged_count = 0
 
@@ -252,7 +254,7 @@ def replace_dataset_from_excel() -> bool:
         patch_payload = build_patch_payload(movie)
         result = update_dataset_record(title, patch_payload, source_name="Excel import")
         if result.ok is False:
-            storage.save_dataset(dataset)
+            storage_data.save_dataset(dataset)
             print('Excel-импорт остановлен.')
             print(f'Проблемная строка: {title}')
             print(f'reason: {result.reason}')

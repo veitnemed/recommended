@@ -12,7 +12,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config import constant
-from data_work import storage
+from storage import files as storage_files
 from dataset import tags_work
 from apis import kp_api as api
 from model import model
@@ -147,7 +147,7 @@ def run() -> None:
         print("В датасете не найдено поддерживаемых жанров.")
         return
 
-    storage.create_backup()
+    storage_files.create_backup()
     tags_work.backup_tag_files()
 
     weights = load_json(constant.WEIGHTS_JSON)

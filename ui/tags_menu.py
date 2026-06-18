@@ -1,6 +1,6 @@
 """Содержит интерактивные действия меню настройки тегов."""
 
-from data_work import storage
+from storage import files as storage_files
 from dataset import tags_work
 
 
@@ -49,7 +49,7 @@ def request_new_tag() -> None:
         print('Ошибка! Все поля должны быть заполнены.')
         return
 
-    storage.create_backup()
+    storage_files.create_backup()
     tags_work.backup_tag_files()
     tags_work.add_tag_to_data(feature)
     tags[feature] = settings
@@ -67,7 +67,7 @@ def request_delete_all_tags() -> None:
         print('Удаление отменено.')
         return
 
-    storage.create_backup()
+    storage_files.create_backup()
     tags_work.backup_tag_files()
     tags_work.delete_all_tags()
     tags_work.move_edit_files_to_backup()
@@ -99,7 +99,7 @@ def request_delete_tag() -> None:
         print('Удаление отменено.')
         return
 
-    storage.create_backup()
+    storage_files.create_backup()
     tags_work.backup_tag_files()
     tags_work.delete_tag_from_data(feature)
     tags.pop(feature)

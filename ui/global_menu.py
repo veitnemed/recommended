@@ -5,7 +5,9 @@ from functools import partial
 from config import constant
 from dataset import excel_work
 from dataset import rating_comparison
-from data_work import storage
+from storage import files as storage_files
+from dataset import storage_movie
+from candidates import candidate_pool
 from ui import backup_menu
 from ui import interface_funcs
 from ui import menu_state
@@ -31,7 +33,7 @@ def open_data_menu():
             return
         if command == "1":
             if excel_work.export_dataset_to_excel():
-                storage.open_file(constant.EDIT_EXCEL)
+                storage_files.open_file(constant.EDIT_EXCEL)
         elif command == "2":
             excel_work.replace_dataset_from_excel()
         elif command == "3":
@@ -134,7 +136,7 @@ def open_efficiency_menu():
         elif command == "5":
             interface_funcs.votes_impact()
         elif command == "6":
-            updated_count = storage.rework_formated_scores()
+            updated_count = storage_movie.rework_formated_scores()
             print(f'Пересчитано записей: {updated_count}')
 
         ui.press_enter()
@@ -176,7 +178,7 @@ def open_extra_menu():
         elif command == "3":
             interface_funcs.votes_impact()
         elif command == "4":
-            updated_count = storage.rework_formated_scores()
+            updated_count = storage_movie.rework_formated_scores()
             print(f'Пересчитано записей: {updated_count}')
         elif command == "5":
             interface_funcs.search_sql_title_by_name()
@@ -188,7 +190,7 @@ def open_candidate_pool_menu():
     while True:
         ui.clean_terminal()
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        candidates_count = len(storage.load_candidate_pool())
+        candidates_count = len(candidate_pool.load_candidate_pool())
         ui.show_candidate_pool_menu(movies_counter, round(abs_error, 2), candidates_count)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])

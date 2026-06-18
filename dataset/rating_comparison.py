@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 from pathlib import Path
 
-from data_work import storage
+from storage import data as storage_data
 from dataset.dataset_records import update_dataset_record
 from ui import ui
 
@@ -26,7 +26,7 @@ def _to_float(value) -> float | None:
 def get_scored_records(dataset: dict | None = None) -> list[dict]:
     """Returns dataset records that have a valid user_score."""
     if dataset is None:
-        dataset = storage.load_dataset()
+        dataset = storage_data.load_dataset()
 
     records = []
     for title, movie in dataset.items():
