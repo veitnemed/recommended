@@ -4,13 +4,13 @@ from functools import partial
 
 from config import constant
 from data_work import excel_work
+from data_work import rating_comparison
 from data_work import storage
 from interface import backup_menu
 from interface import interface_funcs
 from interface import menu_state
 from interface import request
 from interface import tags_menu
-from interface import train_params
 from interface import ui
 from model_work import linear_regression_train
 from model_work import model
@@ -26,7 +26,7 @@ def open_data_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_data_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
         if command == "0":
             return
         if command == "1":
@@ -41,10 +41,8 @@ def open_data_menu():
         elif command == "5":
             interface_funcs.show_data_info()
         elif command == "6":
-            interface_funcs.read_tst_scores()
-        elif command == "7":
             backup_menu.open_backup_menu()
-        elif command == "8":
+        elif command == "7":
             interface_funcs.rename_movie_record()
 
         ui.press_enter()
@@ -55,52 +53,28 @@ def open_train_menu():
     while True:
         ui.clean_terminal()
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        ui.show_train_menu(
-            movies_counter,
-            round(abs_error, 2),
-            train_params.TRAIN_STEP,
-            train_params.TRAIN_PLATEAU_SCORE
-        )
+        ui.show_train_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
         if command == "0":
             return
         if command == "1":
-            train_modes.train_model(
-                data=data,
-                weights=weights,
-                fit_func=model.fit_weights,
-                title='Быстрое обучение',
-                step=train_params.TRAIN_STEP
-            )
-        elif command == "2":
-            train_modes.train_model(
-                data=data,
-                weights=weights,
-                fit_func=model.fit_weights_until_plateau,
-                title='Случайная оптимизация',
-                step=train_params.TRAIN_STEP,
-                score=train_params.TRAIN_PLATEAU_SCORE
-            )
-        elif command == "3":
-            train_modes.auto_train_grid_steps(
-                data=data,
-                weights=weights,
-                title='Многошаговый координатный поиск'
-            )
-        elif command == "4":
-            train_modes.auto_train_mix_mode(
-                data=data,
-                weights=weights,
-                title='Гибридная оптимизация'
-            )
-        elif command == "5":
             linear_regression_train.train_linear_model(
                 data=data,
                 weights=weights,
             )
-        elif command == "6":
-            train_params.setup_train_params()
+        elif command == "2":
+            rating_comparison.start_rating_comparison()
+        elif command == "3":
+            train_modes.run_noise_sensitivity(
+                data=data,
+                weights=weights,
+            )
+        elif command == "4":
+            linear_regression_train.run_loo_training(
+                data=data,
+                weights=weights,
+            )
 
         ui.press_enter()
 
@@ -156,7 +130,6 @@ def open_efficiency_menu():
             train_modes.run_noise_sensitivity(
                 data=data,
                 weights=weights,
-                step=train_params.TRAIN_STEP
             )
         elif command == "5":
             interface_funcs.votes_impact()
@@ -206,8 +179,7 @@ def open_extra_menu():
             updated_count = storage.rework_formated_scores()
             print(f'Пересчитано записей: {updated_count}')
         elif command == "5":
-            interface_funcs.show_kino_teatr_scraper_test()
-
+            interface_funcs.search_sql_title_by_name()
         ui.press_enter()
 
 
@@ -223,27 +195,81 @@ def open_candidate_pool_menu():
         if command == "0":
             return
         if command == "1":
-            interface_funcs.collect_candidate_pool()
+            open_candidate_pool_collect_menu()
         elif command == "2":
             interface_funcs.show_candidate_pool()
         elif command == "3":
             interface_funcs.show_global_candidate_top()
         elif command == "4":
-            interface_funcs.delete_candidate_pool()
-        elif command == "5":
             interface_funcs.mark_candidate_as_watched()
+        elif command == "5":
+            open_candidate_pool_management_menu()
         elif command == "6":
+            open_candidate_pool_diagnostics_menu()
+
+        ui.press_enter()
+
+
+def open_candidate_pool_collect_menu():
+    """Открывает подменю сборки нового пула кандидатов."""
+    while True:
+        ui.clean_terminal()
+        ui.show_candidate_pool_collect_menu()
+
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
+        if command == "0":
+            return
+        if command == "1":
+            interface_funcs.run_tmdb_candidate_pool_flow()
+        elif command == "2":
+            interface_funcs.collect_candidate_pool()
+        elif command == "3":
+            interface_funcs.run_tmdb_candidate_pool_flow()
+
+        ui.press_enter()
+
+
+def open_candidate_pool_management_menu():
+    """Открывает подменю управления сохранёнными пулами."""
+    while True:
+        ui.clean_terminal()
+        ui.show_candidate_pool_management_menu()
+
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
+        if command == "0":
+            return
+        if command == "1":
+            interface_funcs.delete_candidate_pool()
+        elif command == "2":
+            interface_funcs.edit_candidate_pool_filters()
+        elif command == "3":
+            interface_funcs.import_tmdb_result_to_common_pool_flow()
+
+        ui.press_enter()
+
+
+def open_candidate_pool_diagnostics_menu():
+    """Открывает подменю диагностики и обслуживания пула."""
+    while True:
+        ui.clean_terminal()
+        ui.show_candidate_pool_diagnostics_menu()
+
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
+        if command == "0":
+            return
+        if command == "1":
             interface_funcs.show_suspicious_candidate_duplicates()
+        elif command == "2":
+            interface_funcs.retry_kp_for_incomplete_candidates()
+        elif command == "3":
+            interface_funcs.show_candidate_contributions()
 
         ui.press_enter()
 
 
 def export_report():
     """Выгружает отчет по текущему состоянию модели."""
-    train_report.export_train_report(
-        train_params.TRAIN_STEP,
-        train_params.TRAIN_PLATEAU_SCORE
-    )
+    train_report.export_train_report()
 
 
 def open_tags_menu():

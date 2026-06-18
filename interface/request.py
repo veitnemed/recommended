@@ -1,13 +1,13 @@
 """Запрашивает данные у пользователя и собирает объект фильма."""
 
-from data_work import storage
-from core import valid
-from core import format_score
-from config import genre_tags
-from config import scheme
 import copy
+
 from config import constant
-from integrations import api
+from config import scheme
+from core import format_score
+from core import valid
+from data_work import title_resolve
+from interface import title_presenters
 
 
 def get_request_schema() -> dict:
@@ -23,6 +23,7 @@ def get_request_schema() -> dict:
         for section_name in sections
     }
 
+
 def get_validators(tags_validators: list, max_value: int = 1) -> list:
     """Собирает валидаторы для поля схемы."""
     validators = []
@@ -32,7 +33,7 @@ def get_validators(tags_validators: list, max_value: int = 1) -> list:
         else:
             validators.append(valid.VALIDATORS[tag])
     return validators
-    
+
 
 def get_label(feature: str) -> str:
     """Возвращает подпись поля."""
@@ -46,14 +47,13 @@ def get_section_label(section_name: str) -> str:
 
 def loop_input(text, funcs_list):
     """Запрашивает ввод до прохождения проверок."""
-    
     while True:
         value = input(text)
         for func in funcs_list:
             if func(value) is False:
                 break
         else:
-            break      
+            break
     return value
 
 
@@ -79,33 +79,99 @@ def short_text(value, limit: int = 50) -> str:
     return text[:limit] + "..."
 
 
-def extract_api_genres(series: dict) -> list:
-    """Извлекает список жанров из ответа API."""
-    genres = []
-    for item in series.get("genres", []) or []:
-        if isinstance(item, dict) and item.get("name"):
-            genres.append(str(item["name"]).strip())
-        elif isinstance(item, str):
-            genres.append(item.strip())
-    return genres
+def _available_genre_options() -> list[tuple[str, str]]:
+    """Возвращает доступные жанры модели в порядке текущей схемы."""
+    options = []
+    for feature in constant.GENRE:
+        label = get_label(feature)
+        options.append((feature, label))
+    return options
 
 
-def build_genre_defaults(genres: list) -> dict:
-    """Собирает значения genre по списку жанров."""
-    genre_tags.ensure_genre_fields(genres)
-    constant.refresh_dynamic_fields()
+def choose_genre_names_by_numbers(
+    current_genres: list | None = None,
+    *,
+    prompt_title: str = "Выберите жанры по номерам через пробел.",
+    prompt_hint: str = "Можно оставить пусто, тогда список жанров останется как есть.",
+    input_label: str = "Номера жанров",
+) -> list:
+    """Дает выбрать известные жанры модели по номерам."""
+    if current_genres is None:
+        current_genres = []
 
-    genre_defaults = {feature: 0 for feature in constant.GENRE}
-    for genre_name in genres:
-        feature = genre_tags.genre_to_feature_name(genre_name)
-        if feature in genre_defaults:
-            genre_defaults[feature] = 1
-    return genre_defaults
+    options = _available_genre_options()
+    if len(options) == 0:
+        print("Список жанров пока пуст.")
+        return current_genres
+
+    print(prompt_title)
+    print(f"{prompt_hint}\n")
+    for idx, (_, label) in enumerate(options, start=1):
+        print(f"{idx}. {label}")
+
+    current_label = ", ".join(current_genres) if len(current_genres) > 0 else "пусто"
+    while True:
+        answer = input(f"\n{input_label} [{current_label}] >> ").strip()
+        if answer == "":
+            return current_genres
+        if answer == "0":
+            return []
+
+        parts = answer.split()
+        selected_indexes = []
+        for part in parts:
+            try:
+                index = int(part)
+            except ValueError:
+                selected_indexes = []
+                break
+            if 1 <= index <= len(options):
+                selected_indexes.append(index)
+            else:
+                selected_indexes = []
+                break
+
+        if len(selected_indexes) == 0:
+            print("Введите номера жанров через пробел, например: 1 2 3. Для очистки можно ввести 0.")
+            continue
+
+        selected_genres = []
+        for index in selected_indexes:
+            genre_name = options[index - 1][1]
+            if genre_name not in selected_genres:
+                selected_genres.append(genre_name)
+        return selected_genres
+
+
+def choose_genre_values_by_numbers(default_values: dict | None = None) -> dict:
+    """Собирает секцию genre через выбор жанров по номерам."""
+    if default_values is None:
+        default_values = {}
+
+    options = _available_genre_options()
+    selected_features = [
+        feature for feature, _ in options
+        if int(default_values.get(feature, 0) or 0) == 1
+    ]
+    selected_labels = [get_label(feature) for feature in selected_features]
+
+    selected_genres = choose_genre_names_by_numbers(
+        selected_labels,
+        prompt_title="Доступные жанры модели:",
+        prompt_hint="Выберите жанры по номерам через пробел. Пустой ввод оставит значения по умолчанию, 0 очистит выбор.",
+        input_label="Номера жанров",
+    )
+
+    selected_set = set(selected_genres)
+    genre_values = {}
+    for feature, label in options:
+        genre_values[feature] = 1 if label in selected_set else 0
+    return genre_values
 
 
 def confirm_or_edit_api_genres(series: dict) -> list:
     """Показывает жанры из API и дает принять или изменить их."""
-    genres = extract_api_genres(series)
+    genres = title_resolve.extract_api_genres(series)
     genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
 
     print(f"Краткое описание: {short_text(series.get('description'), 80)}")
@@ -114,34 +180,174 @@ def confirm_or_edit_api_genres(series: dict) -> list:
     if answer in ("yes", "y", "да"):
         return genres
 
-    print("Введите жанры через запятую.")
-    print("Можно оставить пусто, тогда жанровая разметка стартует пустой.")
-    manual_line = input("Жанры >> ").strip()
-    return extract_api_genres({"genres": manual_line.split(",")}) if manual_line != "" else []
+    known_genres, unknown_genres = title_resolve.split_known_genres(genres)
+    if len(unknown_genres) > 0:
+        print(f"Как подсказка будут проигнорированы неизвестные жанры: {', '.join(unknown_genres)}")
+    return choose_genre_names_by_numbers(
+        known_genres,
+        prompt_title="Выберите жанры для сохранения по номерам.",
+        prompt_hint="Пустой ввод оставит текущий набор, 0 очистит жанры.",
+        input_label="Номера жанров",
+    )
 
 
-def build_api_defaults(series: dict, genres: list | None = None) -> dict:
-    """Собирает значения API для подстановки в ручную форму."""
-    if genres is None:
-        genres = extract_api_genres(series)
+def confirm_or_edit_model_genres(series: dict) -> list:
+    """Показывает жанры для модели без автодобавления новых feature."""
+    genres = title_resolve.extract_api_genres(series)
+    known_genres, unknown_genres = title_resolve.split_known_genres(genres)
+    genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
+    known_line = ", ".join(known_genres) if len(known_genres) > 0 else "нет"
 
-    genre_defaults = build_genre_defaults(genres)
+    print(f"Краткое описание: {short_text(series.get('description'), 80)}")
+    print(f"Жанры из API: {genres_line}")
+    print(f"В модель попадут: {known_line}")
+    if len(unknown_genres) > 0:
+        print(f"Игнор как подсказка: {', '.join(unknown_genres)}")
 
-    return {
-        scheme.MAIN_INFO: {
-            "title": series.get("title"),
-            "user_score": None,
-            "year": series.get("year"),
-        },
-        scheme.RAW_SCORES: {
-            "kp_score": series.get("kp_score"),
-            "kp_votes": series.get("kp_votes"),
-            "imdb_score": series.get("imdb_score"),
-            "imdb_votes": series.get("imdb_votes"),
-        },
-        scheme.TAGS_VIBE: {},
-        scheme.GENRE: genre_defaults,
+    answer = input("Принять жанры для модели? yes / edit / off >> ").strip().lower()
+    if answer in ("yes", "y", "да"):
+        return known_genres
+    if answer in ("off", "n", "no", "нет"):
+        return []
+
+    return choose_genre_names_by_numbers(
+        known_genres,
+        prompt_title="Выберите жанры для модели по номерам.",
+        prompt_hint="Пустой ввод оставит текущий набор, 0 очистит жанры.",
+        input_label="Номера жанров",
+    )
+
+
+def build_manual_defaults(input_title: str, base_defaults: dict | None = None) -> dict:
+    """Собирает минимальные defaults для ручного добавления без SQL/API."""
+    defaults = title_resolve.merge_defaults(
+        title_resolve.build_empty_add_defaults(input_title),
+        base_defaults or {},
+    )
+    defaults.setdefault(scheme.MAIN_INFO, {})["title"] = (
+        defaults.get(scheme.MAIN_INFO, {}).get("title") or input_title
+    )
+    return defaults
+
+
+def format_source(source: str | None) -> str:
+    labels = {
+        "imdb_sql": "IMDb SQL",
+        "kp_api": "KP API",
+        "tmdb_api": "TMDb API",
+        "input": "ручной ввод",
     }
+    return labels.get(source or "", "не заполнено")
+
+
+def format_value_with_source(value, source: str | None) -> str:
+    if value is None or value == "":
+        return "не заполнено"
+    return f"{value} ({format_source(source)})"
+
+
+def format_score_pair(score, votes, score_source: str | None, votes_source: str | None) -> str:
+    if score is None and votes is None:
+        return "не заполнено"
+    score_text = "-" if score is None else str(score)
+    votes_text = "-" if votes is None else str(votes)
+    if score_source == votes_source:
+        return f"{score_text} / голосов {votes_text} ({format_source(score_source)})"
+    return (
+        f"{score_text} ({format_source(score_source)}) / "
+        f"голосов {votes_text} ({format_source(votes_source)})"
+    )
+
+
+def print_autofill_status(resolved: dict, *, manual_mode: bool) -> None:
+    """Показывает, откуда взялись defaults для формы добавления."""
+    statuses = resolved.get("statuses", {})
+    defaults = resolved.get("defaults") or build_manual_defaults(resolved.get("title", ""))
+    raw_scores = defaults.get(scheme.RAW_SCORES, {})
+    sources = resolved.get("sources", {})
+    source_values = resolved.get("source_values", {})
+    genres = source_values.get("genres") or []
+    genres_text = ", ".join(genres) if len(genres) > 0 else "не заполнено"
+    genres_source = sources.get("genres")
+    description = source_values.get("description")
+
+    print("\nАвтозаполнение:")
+    print(f"SQL: {statuses.get('sql', 'не найдено')}")
+    print(f"KP API: {statuses.get('kp_api', 'не найдено')}")
+    print(f"TMDb API: {statuses.get('tmdb_api', 'не найдено')}")
+    print("")
+    print(
+        "IMDb: "
+        + format_score_pair(
+            raw_scores.get("imdb_score"),
+            raw_scores.get("imdb_votes"),
+            sources.get("imdb_score"),
+            sources.get("imdb_votes"),
+        )
+    )
+    print(
+        "KP: "
+        + format_score_pair(
+            raw_scores.get("kp_score"),
+            raw_scores.get("kp_votes"),
+            sources.get("kp_score"),
+            sources.get("kp_votes"),
+        )
+    )
+    print(f"Жанры: {genres_text} ({format_source(genres_source)})" if genres else "Жанры: не заполнено")
+    print(f"Описание: {format_value_with_source(short_text(description, 80), sources.get('description'))}")
+    print(f"Режим: {'ручная разметка' if manual_mode else 'автозаполнение + ручная проверка'}")
+
+
+def ask_manual_addition() -> bool:
+    answer = input("\nДанные не удалось получить автоматически.\nДобавить запись вручную? [y/N] ").strip().lower()
+    return answer in {"y", "yes", "да", "д"}
+
+
+def resolve_title_for_training(title: str, country: str = "Россия", confirm_genres: bool = False) -> dict | None:
+    """Ищет объект через SQL, затем обогащает через API и собирает defaults."""
+    resolved = title_resolve.resolve_title_data_for_add(title, country)
+    sql_data = resolved["sql_data"]
+    api_data = resolved["api_data"]
+
+    if sql_data is not None:
+        title_presenters.print_sql_training_preview(sql_data)
+    else:
+        print(f"\nSQL не нашёл точный базовый объект: {resolved['sql_result'].get('details')}")
+
+    api_defaults = {}
+    if api_data is not None:
+        title_presenters.print_api_training_preview(api_data)
+        api_genres = title_resolve.extract_api_genres(api_data)
+        if confirm_genres:
+            print("")
+            api_genres = confirm_or_edit_model_genres(api_data)
+        api_defaults = title_resolve.build_api_defaults(api_data, api_genres)
+    elif resolved["api_error"] is not None:
+        error = resolved["api_error"]
+        print(f"\nAPI не обогатил объект: {error.get('details') or error.get('error')}")
+
+    if resolved["found"] is False:
+        print("\nНе удалось найти объект ни в SQL, ни в API.")
+        if ask_manual_addition() is False:
+            return None
+
+        defaults = build_manual_defaults(resolved["title"])
+        print_autofill_status(resolved, manual_mode=True)
+        return defaults
+
+    defaults = resolved["defaults"]
+    if confirm_genres and api_data is not None:
+        defaults[scheme.GENRE] = dict(api_defaults.get(scheme.GENRE, {}))
+
+    print_autofill_status(resolved, manual_mode=api_data is None)
+    title_presenters.print_final_training_preview(defaults)
+    answer = input("\nЭто нужный объект? Введи yes >> ").strip().lower()
+    if answer != "yes":
+        print("Операция отменена.")
+        return None
+
+    return defaults
 
 
 def request_api_defaults(confirm_genres: bool = False) -> dict:
@@ -151,30 +357,7 @@ def request_api_defaults(confirm_genres: bool = False) -> dict:
         funcs_list=[valid.is_correct_title]
     )
     country = "Россия"
-    result = api.find_series(title, country)
-
-    if result["ok"] is False:
-        print(f'API не нашёл подходящий сериал: {result["details"]}')
-        return None
-
-    series = result["data"]
-    print("\nНайден сериал:")
-    print(f'Название: {series.get("title")}')
-    print(f'Год: {series.get("year")}')
-    print(f'Страна: {", ".join(series.get("countries", []))}')
-    print(f'Описание: {short_text(series.get("description"), 50)}')
-
-    answer = input("\nЭто нужный сериал? Введи yes >> ").strip().lower()
-    if answer != "yes":
-        print("Операция отменена.")
-        return None
-
-    genres = None
-    if confirm_genres:
-        print("")
-        genres = confirm_or_edit_api_genres(series)
-
-    return build_api_defaults(series, genres)
+    return resolve_title_for_training(title, country, confirm_genres)
 
 
 def request_predict_features(defaults: dict) -> dict:
@@ -220,14 +403,7 @@ def request_predict_features(defaults: dict) -> dict:
         tags_vibe[feature] = int(answer)
 
     print(f'\n--- {get_section_label(scheme.GENRE)} ---')
-    for feature, field_settings in funcs[scheme.GENRE].items():
-        default_value = defaults.get(scheme.GENRE, {}).get(feature, 0)
-        answer = loop_input_with_default(
-            text=f'>> {get_label(feature)} [{default_value}]: ',
-            funcs_list=get_validators(field_settings["tag"], field_settings.get("max_value", 1)),
-            default_value=default_value
-        )
-        genre_values[feature] = int(answer)
+    genre_values = choose_genre_values_by_numbers(defaults.get(scheme.GENRE, {}))
 
     features = {
         constant.BIAS_FEATURE: 1.0
@@ -251,6 +427,7 @@ def show_score_help(feature: str) -> None:
     for line in help_info["scale"]:
         print(f"  {line}")
 
+
 def request_all_scores(defaults: dict = None) -> dict:
     """Запрашивает все данные фильма."""
     if defaults is None:
@@ -264,17 +441,21 @@ def request_all_scores(defaults: dict = None) -> dict:
 
         print(f'\n--- {get_section_label(section_name)} ---')
 
+        if section_name == scheme.GENRE:
+            movie[section_name] = choose_genre_values_by_numbers(defaults.get(section_name, {}))
+            continue
+
         for feature, field_settings in section_fields.items():
             if section_name == scheme.TAGS_VIBE:
                 show_score_help(feature)
 
             tags_validators = field_settings["tag"]
             type_func = field_settings["type"]
-            funcs = get_validators(tags_validators, field_settings.get("max_value", 1))
+            field_validators = get_validators(tags_validators, field_settings.get("max_value", 1))
             default_value = defaults.get(section_name, {}).get(feature)
             answer = loop_input_with_default(
                 text=f'>> {get_label(feature)} [{default_value}]: ',
-                funcs_list=funcs,
+                funcs_list=field_validators,
                 default_value=default_value
             )
             if type_func is float:

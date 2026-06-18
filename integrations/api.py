@@ -4,6 +4,7 @@ import json
 import os
 import time
 from datetime import datetime
+from difflib import SequenceMatcher
 from json import JSONDecodeError
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -298,6 +299,80 @@ def choose_series(docs: list, country: str) -> dict:
     return None
 
 
+def normalize_title_for_match(title: str) -> str:
+    text = normalize_text(title).casefold()
+    for char in [".", ",", "!", "?", ":", ";", "\"", "'", "`", "«", "»", "(", ")", "[", "]"]:
+        text = text.replace(char, " ")
+    return " ".join(text.split())
+
+
+def movie_title_candidates(movie: dict) -> list:
+    titles = []
+    for key in ("name", "alternativeName", "enName"):
+        value = normalize_text(movie.get(key))
+        if value != "" and value not in titles:
+            titles.append(value)
+    return titles
+
+
+def title_match_score(query_title: str, movie: dict) -> float:
+    query = normalize_title_for_match(query_title)
+    if query == "":
+        return 0
+
+    best = 0.0
+    for title in movie_title_candidates(movie):
+        candidate = normalize_title_for_match(title)
+        if candidate == "":
+            continue
+        if candidate == query:
+            best = max(best, 1.0)
+        elif query in candidate or candidate in query:
+            best = max(best, 0.9)
+        else:
+            best = max(best, SequenceMatcher(None, query, candidate).ratio())
+    return best
+
+
+def choose_best_series(docs: list, country: str = "", title: str = "", year=None) -> tuple[dict | None, str | None]:
+    """Chooses the best API series result by country, title and year."""
+    series_docs = [movie for movie in docs if isinstance(movie, dict) and is_series(movie)]
+    if len(series_docs) == 0:
+        return None, "not_found"
+
+    country = normalize_text(country)
+    if country != "":
+        country_docs = [movie for movie in series_docs if movie_has_country(movie, country)]
+        if len(country_docs) == 0:
+            return None, "country_not_found"
+    else:
+        country_docs = series_docs
+
+    expected_year = None
+    try:
+        expected_year = int(year) if year not in (None, "") else None
+    except (TypeError, ValueError):
+        expected_year = None
+
+    def score(movie: dict) -> tuple:
+        movie_year = movie.get("year")
+        year_score = 0
+        if expected_year is not None and movie_year is not None:
+            try:
+                year_delta = abs(int(movie_year) - expected_year)
+                year_score = 2 if year_delta == 0 else 1 if year_delta <= 1 else 0
+            except (TypeError, ValueError):
+                year_score = 0
+        return (
+            title_match_score(title, movie),
+            year_score,
+            safe_nested(movie, "votes", "kp") or 0,
+            safe_nested(movie, "rating", "kp") or 0,
+        )
+
+    return max(country_docs, key=score), None
+
+
 def safe_nested(data: dict, section: str, field: str):
     """Достает вложенное поле из словаря, если оно есть."""
     value = data.get(section)
@@ -511,64 +586,50 @@ def format_api_movie_lines(movie: dict) -> list:
     return lines
 
 
-def find_series(title, country, token: str = TOKEN, opener=urlopen) -> dict:
+def find_series(title, country, year=None, token: str = TOKEN, opener=urlopen) -> dict:
     """Ищет сериал по названию и стране, возвращая JSON-совместимый словарь."""
     validation = validate_series_request(title, country)
     if validation["ok"] is False:
         return validation
 
-    params = validation["data"]
-    response = fetch_json(build_search_url(params["title"]), token=token, opener=opener)
+    title = validation["data"]["title"]
+    country = validation["data"]["country"]
+    url = build_search_url(title, limit=DEFAULT_LIMIT)
+    response = fetch_json(url, token=token, opener=opener)
     if response["ok"] is False:
         return response
-
     docs = get_docs(response["data"])
-    if len(docs) == 0:
-        return make_response(
-            False,
-            error="not_found",
-            details="По внешнему API ничего не найдено.",
-        )
+    series_docs = [movie for movie in docs if isinstance(movie, dict) and is_series(movie)]
+    if len(series_docs) == 0:
+        return make_response(False, error="not_found", details="series_not_found")
 
-    series = choose_series(docs, params["country"])
-    if series is None:
-        return make_response(
-            False,
-            error="country_not_found",
-            details="Сериал найден, но подходящей страны в результатах нет.",
-        )
-
-    return make_response(True, data=extract_series_info(series))
+    selected, reason = choose_best_series(series_docs, country=country, title=title, year=year)
+    if selected is None:
+        return make_response(False, error=reason, details=f"series_{reason}")
+    return make_response(True, data=extract_series_info(selected))
 
 
-def find_series_raw(title, country="Россия", token: str = TOKEN, opener=urlopen) -> dict:
+def find_series_raw(title, country="Россия", year=None, token: str = TOKEN, opener=urlopen) -> dict:
     """Ищет сериал и возвращает полный JSON найденного объекта из списка API."""
     validation = validate_series_request(title, country)
     if validation["ok"] is False:
         return validation
 
-    params = validation["data"]
-    response = fetch_json(build_search_url(params["title"]), token=token, opener=opener)
+    title = validation["data"]["title"]
+    country = validation["data"]["country"]
+    url = build_search_url(title, limit=DEFAULT_LIMIT)
+    response = fetch_json(url, token=token, opener=opener)
     if response["ok"] is False:
         return response
-
     docs = get_docs(response["data"])
-    if len(docs) == 0:
-        return make_response(
-            False,
-            error="not_found",
-            details="По внешнему API ничего не найдено.",
-        )
+    series_docs = [movie for movie in docs if isinstance(movie, dict) and is_series(movie)]
+    if len(series_docs) == 0:
+        return make_response(False, error="not_found", details="series_not_found")
 
-    series = choose_series(docs, params["country"])
-    if series is None:
-        return make_response(
-            False,
-            error="country_not_found",
-            details="Сериал найден в выдаче, но подходящей страны среди сериалов нет.",
-        )
-
-    return make_response(True, data=series)
+    selected, reason = choose_best_series(series_docs, country=country, title=title, year=year)
+    if selected is None:
+        return make_response(False, error=reason, details=f"series_{reason}")
+    return make_response(True, data=selected)
 
 
 def discover_series_by_filters(filters: dict, page: int = 1, limit: int = 50, token: str = TOKEN, opener=urlopen) -> dict:

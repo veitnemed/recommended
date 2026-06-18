@@ -6,14 +6,16 @@ from data_work import candidate_pool
 from data_work import dataset_stats
 from data_work import genre_import
 from data_work import genre_stats
-from data_work import tst_scores
+from data_work import sql_search
+from data_work import title_resolve
 from model_work import model
+from interface import candidate_pool_ui
 from interface import request
+from interface import title_presenters
 from data_work import storage
 from interface import ui
 from core import valid
 from integrations import api
-from integrations import kino_teatr_scraper
 
 
 def show_all_movies():
@@ -49,18 +51,14 @@ def request_object() -> None:
         return
 
     movie_request = request.request_all_scores(defaults)
-    result = storage.add_movie(movie_request)
-
-    if result:
-        print('Новая запись добавлена!')
-    else:
-        print('Ошибка! Новая запись не добавлена')
+    result = storage.add_movie(movie_request, print_message=False)
+    print(result.message)
 
 
 def mark_candidate_as_watched() -> None:
     """Переносит кандидата из пула в основной датасет через обычный сценарий добавления."""
     ui.clean_terminal()
-    selected = candidate_pool.choose_existing_criteria()
+    selected = candidate_pool_ui.choose_existing_criteria()
     if selected is None:
         return
 
@@ -89,16 +87,20 @@ def mark_candidate_as_watched() -> None:
     candidate = candidates[int(selected_index) - 1]
 
     print("")
-    defaults = request.build_api_defaults(candidate)
+    transfer_payload = title_resolve.build_candidate_transfer_payload(candidate)
+    defaults = transfer_payload["defaults"]
+    meta_payload = transfer_payload["meta_payload"]
+    if candidate_pool.is_candidate_incomplete(candidate):
+        print("Кандидат неполный: нет KP/IMDb данных.")
+        print("Можно продолжить вручную, но проверь raw_scores.\n")
     movie_request = request.request_all_scores(defaults)
-    result = storage.add_movie(movie_request)
-
-    if result:
-        removed = candidate_pool.remove_candidate_from_pool(candidate)
-        print('Новая запись добавлена!')
-        print(f'Из общего пула удалено совпадений: {removed}')
-    else:
-        print('Ошибка! Новая запись не добавлена')
+    result = storage.add_movie(
+        movie_request,
+        meta_payload=meta_payload,
+        pool_candidate=candidate,
+        print_message=False,
+    )
+    print(result.message)
 
 
 def show_mean_error(data, weights):
@@ -163,7 +165,10 @@ def show_feature_importance(weights, full_error):
             "delta": error_without_feature - full_error,
         }
 
+    from model_work import linear_regression_train
+
     print('Оценка вклада признаков\n')
+    print(f"Метод обучения для benchmark: {linear_regression_train.BENCHMARK_METHOD_LABEL}")
     print(f"Текущая ошибка полной модели: {round(full_error * 10, 2)} %\n")
 
     for group_title, features in groups:
@@ -239,35 +244,6 @@ def load_genre_markup():
     print(f"Ошибок API: {len(result['errors'])}")
 
 
-def read_tst_scores():
-    """Читает оценки из TST JSON и обновляет оценки совпавших сериалов."""
-    try:
-        result = tst_scores.apply_tst_scores()
-    except FileNotFoundError:
-        print(f'Файл TST не найден: {constant.TST_SCORES_JSON}')
-        return
-    except ValueError as error:
-        print(f'Ошибка чтения TST: {error}')
-        return
-
-    print('Оценки TST прочитаны.')
-    print(f'Всего в TST: {result["total"]}')
-    print(f'Обновлено оценок: {result["updated"]}')
-    print(f'Без изменений: {result["unchanged"]}')
-    print(f'Не найдены в датасете: {len(result["not_found"])}')
-    print(f'Некорректные оценки: {len(result["invalid"])}')
-
-    if len(result["not_found"]) > 0:
-        print('\nПервые ненайденные:')
-        for title in result["not_found"][:10]:
-            print(f'- {title}')
-
-    if len(result["invalid"]) > 0:
-        print('\nПервые с некорректной оценкой:')
-        for title in result["invalid"][:10]:
-            print(f'- {title}')
-
-
 def show_api_features():
     """Ищет сериал через API и печатает полный JSON найденного объекта."""
     title = request.loop_input(
@@ -285,89 +261,29 @@ def show_api_features():
         print(line)
 
 
-def format_scraper_value(value) -> str:
-    """Форматирует пустые значения для отчета скрапера."""
-    if value is None or value == "" or value == []:
-        return "нет данных"
-    if isinstance(value, list):
-        return ", ".join(str(item) for item in value) if len(value) > 0 else "нет данных"
-    return str(value)
+def print_sql_title_result(data: dict) -> None:
+    """Печатает компактную карточку результата SQL-поиска."""
+    title_presenters.print_sql_title_result(data)
 
 
-def format_scraper_rating(value) -> str:
-    """Форматирует оценку или показывает, что ее нет."""
-    if value is None:
-        return "-"
-    return str(value)
-
-
-def print_kino_teatr_result_item(item: dict, index: int | None = None) -> None:
-    """Печатает один найденный элемент Kino-Teatr в коротком виде."""
-    prefix = f"{index}) " if index is not None else ""
-    ratings = item.get("ratings") or {}
-    countries = item.get("countries") or []
-    country = item.get("country") or ", ".join(countries)
-    metrics = item.get("available_metrics") or []
-
-    print(f"{prefix}{format_scraper_value(item.get('title'))} ({format_scraper_value(item.get('year'))})")
-    print(f"   Страна: {format_scraper_value(country)}")
-    print(f"   Жанры: {format_scraper_value(item.get('genres'))}")
-    print(f"   Режиссер: {format_scraper_value(item.get('director'))}")
-    print(f"   Сценаристы: {request.short_text(format_scraper_value(item.get('screenwriters')), 160)}")
-    print(f"   Актеры: {request.short_text(format_scraper_value(item.get('actors')), 160)}")
-    print(f"   Производство: {format_scraper_value(item.get('production'))}")
-    print(f"   Премьера: {format_scraper_value(item.get('premiere'))}")
-    print(f"   Серий: {format_scraper_value(item.get('episodes'))}")
-    print(
-        "   Рейтинг сайта: "
-        f"{format_scraper_rating(ratings.get('site_rating'))} "
-        f"/ голосов {format_scraper_rating(ratings.get('site_rating_votes'))}"
-    )
-    print(
-        "   Ожидания: "
-        f"{format_scraper_rating(ratings.get('expectation_score'))} "
-        f"/ голосов {format_scraper_rating(ratings.get('expectation_votes'))}"
-    )
-    print(f"   Метрики: {format_scraper_value(metrics)}")
-    print(f"   Описание: {request.short_text(format_scraper_value(item.get('description')), 240)}")
-    print(f"   Обновлено: {format_scraper_value(item.get('last_update'))}")
-    print(f"   Совпадение: {format_scraper_value(item.get('match_score'))}")
-    print(f"   URL: {format_scraper_value(item.get('url'))}")
-    print(f"   Постер: {format_scraper_value(item.get('poster'))}")
-
-
-def show_kino_teatr_scraper_test() -> None:
-    """Запрашивает название и печатает информативный отчет Kino-Teatr-скрапера."""
+def search_sql_title_by_name() -> None:
+    """Ищет тайтл в локальной SQLite-базе IMDb по названию."""
     title = request.loop_input(
-        text='Название для Kino-Teatr >> ',
-        funcs_list=[valid.is_correct_title]
+        text="Название >> ",
+        funcs_list=[lambda value: str(value).strip() != ""]
     )
-
-    print("\nЗапускаю поиск Kino-Teatr...")
-    result = kino_teatr_scraper.find_title(title, limit=5)
+    country = request.loop_input_with_default(
+        text="Страна [Россия] >> ",
+        funcs_list=[lambda value: str(value).strip() != ""],
+        default_value="Россия"
+    )
+    result = sql_search.search_title_in_sql(title, country)
 
     if result["ok"] is False:
-        print(f'Kino-Teatr scraper не вернул данные: {result["details"] or result["error"]}')
+        print(f"Тайтл не найден: {result['details'] or result['error']}")
         return
 
-    data = result["data"]
-    best = data.get("best")
-    results = data.get("results") or []
-
-    print("\nKino-Teatr scraper: краткий отчет")
-    print("=" * 60)
-    print(f"Запрос: {data.get('query')}")
-    print(f"Источник: {data.get('source_url')}")
-    print(f"Найдено результатов: {len(results)}")
-
-    if best is not None:
-        print("\nЛучшее совпадение:")
-        print_kino_teatr_result_item(best)
-
-    if len(results) > 0:
-        print("\nПервые результаты:")
-        for idx, item in enumerate(results[:5], start=1):
-            print_kino_teatr_result_item(item, index=idx)
+    print_sql_title_result(result["data"])
 
 
 def show_dataset_genres() -> None:
@@ -379,7 +295,7 @@ def show_dataset_genres() -> None:
 def collect_candidate_pool() -> None:
     """Собирает пул кандидатов по сохраненным критериям."""
     ui.clean_terminal()
-    selected = candidate_pool.choose_or_create_criteria()
+    selected = candidate_pool_ui.choose_or_create_criteria()
     if selected is None:
         print("Критерии не выбраны.")
         return
@@ -410,10 +326,365 @@ def collect_candidate_pool() -> None:
             print(f"- {error}")
 
 
+def _parse_bounded_int(value: str, default: int, min_value: int, max_value: int) -> int:
+    try:
+        number = int(str(value or "").strip())
+    except ValueError:
+        number = default
+    return max(min_value, min(number, max_value))
+
+
+def _parse_optional_bounded_int(value: str, min_value: int, max_value: int) -> int | None:
+    text = str(value or "").strip()
+    if text == "":
+        return None
+    try:
+        number = int(text)
+    except ValueError:
+        return None
+    return max(min_value, min(number, max_value))
+
+
+def _parse_optional_bounded_float(value: str, min_value: float, max_value: float) -> float | None:
+    text = str(value or "").strip().replace(",", ".")
+    if text == "":
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        return None
+    return max(min_value, min(number, max_value))
+
+
+def _parse_iso_country_code(value: str) -> str | None:
+    country = str(value or "").strip().upper()
+    if len(country) == 2 and country.isascii() and country.isalpha():
+        return country
+    return None
+
+
+def _fit_title(title: str, width: int = 32) -> str:
+    """Ограничивает ширину названия, чтобы строка Top-20 не переносилась в узкой консоли."""
+    text = str(title or "Без названия")
+    if len(text) > width:
+        text = text[: width - 1] + "…"
+    return text.ljust(width)
+
+
+def _print_tmdb_candidate_top(candidates: list, limit: int = 20) -> None:
+    print("\nTop-20 TMDb candidate_pool:\n")
+    for index, candidate in enumerate(candidates[:limit], start=1):
+        final_score = float(candidate.get("final_score") or 0)
+        country_score = float(candidate.get("country_score") or 0)
+        print(
+            f"{index:>2}. {_fit_title(candidate.get('title'))} | "
+            f"final={final_score:.3f} | "
+            f"country={country_score:.2f} | "
+            f"TMDb={candidate.get('tmdb_rating') or '-'}/{candidate.get('tmdb_votes') or 0} | "
+            f"IMDb={candidate.get('imdb_rating') or '-'}/{candidate.get('imdb_votes') or 0}"
+        )
+
+
+def _print_tmdb_candidate_test_details(candidates: list, limit: int = 5) -> None:
+    print("\nКандидаты test-run:\n")
+    for index, candidate in enumerate(candidates[:limit], start=1):
+        print(f"{index}. {candidate.get('title') or 'Без названия'}")
+        print(f"   TMDb: {candidate.get('tmdb_score') or candidate.get('tmdb_rating') or '-'} / {candidate.get('tmdb_votes') or 0}")
+        print(f"   IMDb: {candidate.get('imdb_score') or candidate.get('imdb_rating') or '-'} / {candidate.get('imdb_votes') or 0}")
+        print(f"   KP: {candidate.get('kp_status') or 'not_requested'}")
+        print(f"   KP score: {candidate.get('kp_score') or candidate.get('kp_rating') or '-'} / {candidate.get('kp_votes') or 0}")
+        print(f"   signals: {', '.join(candidate.get('signals') or []) or 'нет'}\n")
+
+
+def _print_tmdb_candidate_stats(result: dict) -> None:
+    stats = result.get("stats") or {}
+    discover_filters = stats.get("discover_filters") or {}
+    print("\nСтатистика TMDb candidate_pool:")
+    print("TMDb Discover filters:")
+    print(f"Минимальный год: {discover_filters.get('year_min') if discover_filters.get('year_min') is not None else 'не важно'}")
+    print(f"Максимальный год: {discover_filters.get('year_max') if discover_filters.get('year_max') is not None else 'не важно'}")
+    print(f"Минимальный TMDb рейтинг: {discover_filters.get('min_tmdb_score') if discover_filters.get('min_tmdb_score') is not None else 'не важно'}")
+    print(f"Минимум голосов TMDb: {discover_filters.get('min_tmdb_votes') if discover_filters.get('min_tmdb_votes') is not None else 'не важно'}")
+    print(f"Найдено через TMDb Discover: {stats.get('discover_total', 0)}")
+    print(f"Удалено дублей: {stats.get('duplicates_removed', 0)}")
+    print(f"Пропущено уже просмотренных: {stats.get('watched_skipped', 0)}")
+    print(f"Запрошено TMDb Details: {stats.get('details_requested', 0)}")
+    print(f"С IMDb ID: {stats.get('has_imdb_id', 0)}")
+    print(f"Найдено в IMDb dataset: {stats.get('found_in_imdb_sql', 0)}")
+    print(f"KP найдено в кэше: {stats.get('kp_cache_hit', 0)}")
+    print(f"KP API запросов: {stats.get('kp_api_requested', 0)}")
+    print(f"KP API найдено: {stats.get('kp_api_found', 0)}")
+    print(f"KP API не найдено: {stats.get('kp_api_not_found', 0)}")
+    print(f"KP API отклонено match-check: {stats.get('kp_api_rejected_by_match', 0)}")
+    print(f"KP API ошибок: {stats.get('kp_api_errors', 0)}")
+    print(f"KP API пропущено из-за кэша: {stats.get('kp_api_skipped_cache', 0)}")
+    print(f"KP ожидает добора из-за лимита: {stats.get('kp_pending_limit', 0)}")
+    print(f"Неполных кандидатов по KP: {stats.get('kp_incomplete_candidates', 0)}")
+    print(f"Полностью обогащённых кандидатов: {stats.get('complete_candidates', 0)}")
+    print(f"Прошли country_score: {stats.get('country_passed', 0)}")
+    print(f"Отклонено adult/titleType: {stats.get('adult_title_type_rejected', 0)}")
+    print(f"Итоговых кандидатов: {stats.get('final_candidates', 0)}")
+
+
+def _tmdb_mode_label(mode: str) -> str:
+    labels = {
+        "quality": "лучшие по качеству",
+        "hidden_gems": "скрытые находки",
+    }
+    return labels.get(mode, mode)
+
+
+def run_tmdb_candidate_pool_flow() -> None:
+    """Запускает новый TMDb candidate_pool v1 без смешивания со старым общим пулом."""
+    from pathlib import Path
+
+    from data_work import sql_search
+    from data_work.tmdb_candidate_pool import (
+        build_candidate_pool,
+        save_candidate_pool_result,
+        save_candidate_pool_test_result,
+    )
+
+    ui.clean_terminal()
+    print("TMDb candidate_pool v1\n")
+    print("Страна:")
+    print("1 >> Россия RU")
+    print("2 >> Ввести код страны вручную")
+    country_answer = input("Выбор [1] >> ").strip()
+    if country_answer == "":
+        country = "RU"
+    elif country_answer == "1":
+        country = "RU"
+    elif country_answer == "2":
+        country = _parse_iso_country_code(
+            input("Введите код страны ISO-2, например KR, US, GB, DE: ")
+        )
+        if country is None:
+            print("Ошибка: введите корректный двухбуквенный код ISO-2 латиницей.")
+            return
+    else:
+        print("Ошибка: выберите 1 или 2.")
+        return
+
+    print("\nРежим:")
+    print("1 >> Лучшие по качеству")
+    print("2 >> Скрытые находки")
+    mode_answer = input("Выбор [1] >> ").strip()
+    if mode_answer in ("", "1"):
+        mode = "quality"
+    elif mode_answer == "2":
+        mode = "hidden_gems"
+    else:
+        print("Ошибка: выберите 1 или 2.")
+        return
+
+    print("\nРежим запуска:")
+    print("1 >> Обычный")
+    print("2 >> Тестовый прогон без перезаписи основного файла")
+    run_mode_answer = input("Выбор [1] >> ").strip()
+    if run_mode_answer in ("", "1"):
+        is_test_run = False
+    elif run_mode_answer == "2":
+        is_test_run = True
+    else:
+        print("Ошибка: выберите 1 или 2.")
+        return
+
+    if is_test_run:
+        pages = 1
+        details_answer = input("\nСколько кандидатов детально обработать в test-run [5] >> ").strip()
+        details_limit = _parse_bounded_int(details_answer, default=5, min_value=1, max_value=300)
+    else:
+        pages_answer = input("\nСколько страниц TMDb Discover? По умолчанию 3: ").strip()
+        pages = _parse_bounded_int(pages_answer, default=3, min_value=1, max_value=20)
+        details_answer = input("Сколько кандидатов отправить в TMDb Details? По умолчанию 50: ").strip()
+        details_limit = _parse_bounded_int(details_answer, default=50, min_value=1, max_value=300)
+
+    year_min = _parse_optional_bounded_int(input("\nМинимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
+    year_max = _parse_optional_bounded_int(input("Максимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
+    min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
+    min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
+
+    print("\nБудет запущен TMDb candidate_pool v1:\n")
+    print(f"Страна: {country}")
+    print(f"Режим: {_tmdb_mode_label(mode)}")
+    print(f"Режим запуска: {'тестовый прогон' if is_test_run else 'обычный'}")
+    print(f"Страниц TMDb Discover: {pages}")
+    print(f"Лимит TMDb Details: {details_limit}")
+    print(f"Минимальный год: {year_min if year_min is not None else 'не важно'}")
+    print(f"Максимальный год: {year_max if year_max is not None else 'не важно'}")
+    print(f"Минимальный TMDb рейтинг: {min_tmdb_score if min_tmdb_score is not None else 'не важно'}")
+    print(f"Минимум голосов TMDb: {min_tmdb_votes if min_tmdb_votes is not None else 'не важно'}")
+    print("KP API: включён после локального KP cache, при ошибке сбор продолжается без KP.")
+    if is_test_run:
+        print("\nПлан тестового режима:")
+        print(f"Лимит TMDb Details: {details_limit}")
+        print(f"Будет детально обработано не больше {details_limit} кандидатов.")
+        print("Основной candidate_pool_RU_quality.json не будет перезаписан.")
+
+    confirmation = input("\nПродолжить? [y/N]: ").strip().casefold()
+    if confirmation not in {"y", "yes", "д", "да"}:
+        print("Операция отменена.")
+        return
+
+    if Path(sql_search.DEFAULT_DB_PATH).is_file() is False:
+        print("Ошибка: не найдена локальная IMDb SQLite база. Проверь путь в настройках.")
+        return
+
+    try:
+        result = build_candidate_pool(
+            country=country,
+            pages=pages,
+            details_limit=details_limit,
+            mode=mode,
+            year_min=year_min,
+            year_max=year_max,
+            min_tmdb_score=min_tmdb_score,
+            min_tmdb_votes=min_tmdb_votes,
+        )
+        if is_test_run:
+            print("Сохранение test candidate_pool: Ожидание")
+            json_path, csv_path = save_candidate_pool_test_result(result)
+            print("Сохранение test candidate_pool: Успешно")
+        else:
+            print("Сохранение candidate_pool: Ожидание")
+            json_path, csv_path = save_candidate_pool_result(result)
+            print("Сохранение candidate_pool: Успешно")
+    except RuntimeError as error:
+        text = str(error)
+        if "TMDB_TOKEN" in text:
+            print("Ошибка: не найден TMDB_TOKEN. Проверь .env / переменные окружения.")
+        elif "TMDB" in text or "getaddrinfo" in text or "подключиться" in text:
+            print("Ошибка доступа к TMDb. Если кэш есть, проверь, может ли генератор работать из кэша.")
+            print(text)
+        else:
+            print(f"Ошибка: {text}")
+        return
+    except OSError as error:
+        print(f"Ошибка файловой системы: {error}")
+        return
+
+    if is_test_run:
+        print("\nТестовый прогон завершён.")
+        print(f"Основной candidate_pool_{country}_{mode}.json не изменялся.")
+        print(f"Файл тестового результата: {json_path}")
+        stats = result.get("stats") or {}
+        print("\nТестовый режим:")
+        print(f"Найдено через TMDb Discover: {stats.get('discover_total', 0)}")
+        print(f"Лимит TMDb Details: {details_limit}")
+        print(f"Будет детально обработано не больше {details_limit} кандидатов.")
+    else:
+        print("\nTMDb candidate_pool v1 готов.")
+    print(f"JSON: {json_path}")
+    print(f"CSV: {csv_path}")
+    _print_tmdb_candidate_stats(result)
+
+    candidates = result.get("candidates") or []
+    if len(candidates) > 0:
+        if is_test_run:
+            _print_tmdb_candidate_test_details(candidates)
+        else:
+            _print_tmdb_candidate_top(candidates)
+    else:
+        print("Итоговый список кандидатов пуст.")
+
+
+def import_tmdb_result_to_common_pool_flow() -> None:
+    """Импортирует отдельный TMDb v1 result JSON в общий candidate_pool после подтверждения."""
+    import json
+
+    from data_work.tmdb_candidate_pool import (
+        import_tmdb_result_to_common_pool,
+        list_tmdb_result_files,
+        tmdb_import_default_criteria_name,
+    )
+
+    ui.clean_terminal()
+    files = list_tmdb_result_files()
+    if len(files) == 0:
+        print("TMDb result JSON в data/candidate_pool не найдены.")
+        return
+
+    print("TMDb result JSON:\n")
+    for index, path in enumerate(files, start=1):
+        print(f"{index} >> {path.name}")
+
+    selected = request.loop_input(
+        text="\nВыберите файл для импорта >> ",
+        funcs_list=[lambda value: value.isdigit() and 1 <= int(value) <= len(files)]
+    )
+    result_path = files[int(selected) - 1]
+
+    try:
+        with open(result_path, "r", encoding="utf-8-sig") as file:
+            result = json.load(file)
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"Не удалось прочитать файл: {error}")
+        return
+
+    candidates = result.get("candidates") if isinstance(result, dict) else []
+    if isinstance(candidates, list) is False:
+        print("В файле нет списка candidates.")
+        return
+
+    default_criteria_name = tmdb_import_default_criteria_name(result) or ""
+    criteria_answer = input(f"criteria_name [{default_criteria_name}] >> ").strip()
+    criteria_name = criteria_answer or default_criteria_name
+    if criteria_name == "":
+        print("criteria_name не должен быть пустым.")
+        return
+
+    print("\nPreview импорта TMDb result:")
+    print(f"Файл: {result_path}")
+    print(f"Кандидатов в файле: {len(candidates)}")
+    print("Будет добавлено/обновлено в общий пул после дедупликации.")
+    print("Источник: tmdb_imdb_kp_v1")
+    print(f"criteria_name: {criteria_name}")
+
+    answer = input("\nИмпортировать в общий candidate_pool? [y/N] ").strip().casefold()
+    if answer not in {"y", "yes", "д", "да"}:
+        print("Импорт отменён.")
+        return
+
+    stats = import_tmdb_result_to_common_pool(result_path, criteria_name=criteria_name)
+    if stats.get("ok") is False:
+        print(f"Импорт не выполнен: {stats.get('error')}")
+        return
+
+    print("\nИмпорт TMDb result завершён.")
+    print(f"Прочитано: {stats['read']}")
+    print(f"Добавлено новых: {stats['added']}")
+    print(f"Обновлено существующих: {stats['updated']}")
+    print(f"Пропущено already watched: {stats['watched_skipped']}")
+    print(f"Пропущено как дубли: {stats['duplicates']}")
+    print(f"Ошибок: {stats['errors']}")
+    print(f"Текущий размер общего пула: {stats.get('pool_size', 0)}")
+
+
+def edit_candidate_pool_filters() -> None:
+    """Редактирует фильтры сохраненного набора критериев пула."""
+    ui.clean_terminal()
+    selected = candidate_pool_ui.choose_existing_criteria()
+    if selected is None:
+        return
+
+    criteria_name, criteria = selected
+    print(f"\nФильтрация для пула: {criteria_name}")
+    print(f"Текущий KP: {criteria.get('min_kp', 'не важно')}")
+    print(f"Текущие жанры: {', '.join(criteria.get('genres', [])) or 'не важно'}")
+    print(f"Исключить жанры: {', '.join(criteria.get('excluded_genres', [])) or 'не важно'}\n")
+
+    updated = candidate_pool_ui.update_criteria_filters(criteria_name, criteria)
+    print("Фильтрация обновлена.")
+    print(f"KP: {updated.get('min_kp', 'не важно')}")
+    print(f"Жанры: {', '.join(updated.get('genres', [])) or 'не важно'}")
+    print(f"Жанры исключить: {', '.join(updated.get('excluded_genres', [])) or 'не важно'}")
+
+
 def show_candidate_pool() -> None:
     """Показывает кандидатов выбранного пула в консоли."""
     ui.clean_terminal()
-    selected = candidate_pool.choose_existing_criteria()
+    selected = candidate_pool_ui.choose_existing_criteria()
     if selected is None:
         return
 
@@ -433,12 +704,21 @@ def show_candidate_pool() -> None:
         year = candidate.get("year") or "?"
         kp_score = candidate.get("kp_score")
         imdb_score = candidate.get("imdb_score")
-        kp_votes = candidate.get("kp_votes") or 0
+        kp_votes = candidate.get("kp_votes")
         genres = ", ".join(candidate.get("genres", [])) or "нет"
         description = request.short_text(candidate.get("description"), 80) or "без описания"
+        kp_status = candidate.get("kp_status")
+        is_complete = candidate.get("is_complete")
+
+        kp_score_label = kp_score if kp_score is not None else "-"
+        imdb_score_label = imdb_score if imdb_score is not None else "-"
+        kp_votes_label = kp_votes if kp_votes is not None else "-"
 
         print(f"{idx}) {title} ({year})")
-        print(f"   KP: {kp_score} | IMDb: {imdb_score} | KP votes: {kp_votes}")
+        print(f"   KP: {kp_score_label} | IMDb: {imdb_score_label} | KP votes: {kp_votes_label}")
+        if kp_status is not None or is_complete is not None:
+            complete_label = "yes" if is_complete is True else "no"
+            print(f"   KP status: {kp_status or 'unknown'} | complete: {complete_label}")
         print(f"   Жанры: {genres}")
         print(f"   Описание: {description}\n")
 
@@ -451,40 +731,294 @@ def show_global_candidate_top() -> None:
         print("Общий пул кандидатов пуст.")
         return
 
+    filters = _request_prediction_candidate_filters(candidates)
+    filtered_candidates = candidate_pool.filter_saved_candidates_for_prediction(candidates, filters)
+    if len(filtered_candidates) == 0:
+        print("\nПо выбранным фильтрам кандидатов не найдено.")
+        return
+
+    ready_candidates = [
+        candidate for candidate in filtered_candidates
+        if candidate_pool.is_candidate_ready_for_prediction(candidate)
+    ]
+    incomplete_candidates = [
+        candidate for candidate in filtered_candidates
+        if candidate_pool.is_candidate_incomplete(candidate)
+    ]
+    skipped_incomplete = len(filtered_candidates) - len(ready_candidates)
+
+    print(f"\nКандидатов всего в pool: {len(candidates)}")
+    print(f"После выбранного фильтра: {len(filtered_candidates)}")
+    print(f"Готовых к предикту: {len(ready_candidates)}")
+    print(f"Пропущено неполных: {skipped_incomplete}")
+    if skipped_incomplete > 0:
+        print("\nНеполные кандидаты не участвовали в обычном предикте.")
+        print("Причина: нет части KP/IMDb данных или is_complete=false.")
+        print("Чтобы попробовать добрать KP-данные, запусти:")
+        print("10 >> Добрать KP для неполных кандидатов")
+        print("\nНеполные кандидаты:\n")
+        _print_incomplete_candidates_preview(incomplete_candidates, limit=5)
+
+    if len(ready_candidates) == 0:
+        print("\nНет готовых кандидатов для предикта.")
+        print("Можно изменить фильтры или запустить добор KP для неполных кандидатов.")
+        return
+
     top_n_value = request.loop_input(
-        text="Топ N из общего пула >> ",
+        text="\nТоп N из общего пула >> ",
         funcs_list=[valid.is_correct_top_n]
     )
-    top_n = min(int(top_n_value), len(candidates))
+    top_n = min(int(top_n_value), len(ready_candidates))
 
     weights = storage.load_weights()
-    no_vibe_features = [
-        feature for feature in constant.FEATURES
-        if feature not in constant.TAGS_VIBE
-    ]
-    prediction_weights = model.make_group_weights(weights, no_vibe_features)
-
-    scored_candidates = []
-    for candidate in candidates:
-        features = candidate_pool.build_candidate_features(candidate)
-        predict = model.predict_score(features, prediction_weights)
-        scored_candidates.append({
-            "title": candidate.get("title") or "Без названия",
-            "year": candidate.get("year") or "?",
-            "predict": predict,
-        })
-
-    scored_candidates.sort(key=lambda item: item["predict"], reverse=True)
+    scored_candidates = candidate_pool.rank_candidates_by_predict(ready_candidates, weights)
 
     print(f"\nТоп {top_n} из общего пула:\n")
     for row in scored_candidates[:top_n]:
         print(f"{row['title']} ({row['year']}): {row['predict']:.2f}")
 
 
+def _print_candidate_contribution_group(title: str, rows: list, limit: int) -> None:
+    print(f"   {title}:")
+    if len(rows) == 0:
+        print("   нет")
+        return
+
+    for idx, row in enumerate(rows[:limit], start=1):
+        print(
+            f"   {idx}. {row['label']} ({row['feature']}): "
+            f"{row['impact']:+.4f} = {row['value']:.4f} * {row['weight']:+.4f}"
+        )
+
+
+def _print_incomplete_candidates_preview(candidates: list, limit: int = 5) -> None:
+    if len(candidates) == 0:
+        return
+
+    preview = candidates[:limit]
+    for index, candidate in enumerate(preview, start=1):
+        title = candidate.get("title") or "Без названия"
+        year = candidate.get("year") or "?"
+        kp_status = candidate.get("kp_status") or "unknown"
+        complete_label = "yes" if candidate.get("is_complete") is True else "no"
+        print(f"{index}. {title} ({year}) | KP status: {kp_status} | complete: {complete_label}")
+
+    remaining = len(candidates) - len(preview)
+    if remaining > 0:
+        print(f"\n...и ещё {remaining}")
+
+
+def _parse_optional_csv_list(value: str) -> list[str]:
+    values = []
+    for item in str(value or "").split(","):
+        text = item.strip()
+        if text != "":
+            values.append(text)
+    return values
+
+
+def _choose_prediction_criteria_name() -> str | None:
+    all_criteria = candidate_pool.load_candidate_criteria()
+    criteria_names = sorted(all_criteria.keys())
+    if len(criteria_names) == 0:
+        return None
+
+    print("\nВыбрать набор criteria_name?")
+    print(" 0 >> Все")
+    for idx, name in enumerate(criteria_names, start=1):
+        print(f" {idx} >> {candidate_pool.build_criteria_label(name, all_criteria[name])}")
+
+    selected = request.loop_input(
+        text="\nВыбор [0] >> ",
+        funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(criteria_names))]
+    )
+    if selected in {"", "0"}:
+        return None
+    return criteria_names[int(selected) - 1]
+
+
+def _choose_prediction_source(candidates: list) -> str | None:
+    sources = sorted({
+        str(candidate.get("source") or "").strip()
+        for candidate in candidates
+        if str(candidate.get("source") or "").strip() != ""
+    })
+    if len(sources) == 0:
+        return None
+
+    print("\nВыбрать source?")
+    print(" 0 >> Все")
+    for idx, source in enumerate(sources, start=1):
+        print(f" {idx} >> {source}")
+
+    selected = request.loop_input(
+        text="\nSource [0] >> ",
+        funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(sources))]
+    )
+    if selected in {"", "0"}:
+        return None
+    return sources[int(selected) - 1]
+
+
+def _request_prediction_candidate_filters(candidates: list) -> dict:
+    print("\nФильтр кандидатов перед предиктом:\n")
+    criteria_name = _choose_prediction_criteria_name()
+    source = _choose_prediction_source(candidates)
+    country = input("\nСтрана [не важно] >> ").strip() or None
+    year_min = _parse_optional_bounded_int(input("Минимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
+    year_max = _parse_optional_bounded_int(input("Максимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
+    include_genres = _parse_optional_csv_list(input("Включить жанры через запятую [не важно] >> ").strip())
+    exclude_genres = _parse_optional_csv_list(input("Исключить жанры через запятую [не важно] >> ").strip())
+    min_kp_score = _parse_optional_bounded_float(input("Минимальный KP [не важно] >> ").strip(), 0.0, 10.0)
+    min_kp_votes = _parse_optional_bounded_int(input("Минимум голосов KP [не важно] >> ").strip(), 0, 10_000_000)
+    min_imdb_score = _parse_optional_bounded_float(input("Минимальный IMDb [не важно] >> ").strip(), 0.0, 10.0)
+    min_imdb_votes = _parse_optional_bounded_int(input("Минимум голосов IMDb [не важно] >> ").strip(), 0, 10_000_000)
+    min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb [не важно] >> ").strip(), 0.0, 10.0)
+    min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
+    only_complete_answer = input("Только complete-кандидаты? [Y/n] >> ").strip().casefold()
+    only_complete = only_complete_answer not in {"n", "no", "н", "нет"}
+
+    return {
+        "criteria_name": criteria_name,
+        "source": source,
+        "country": country,
+        "year_min": year_min,
+        "year_max": year_max,
+        "include_genres": include_genres,
+        "exclude_genres": exclude_genres,
+        "min_kp_score": min_kp_score,
+        "min_kp_votes": min_kp_votes,
+        "min_imdb_score": min_imdb_score,
+        "min_imdb_votes": min_imdb_votes,
+        "min_tmdb_score": min_tmdb_score,
+        "min_tmdb_votes": min_tmdb_votes,
+        "only_complete": only_complete,
+    }
+
+
+def show_candidate_contributions() -> None:
+    """Показывает вклады признаков для топа кандидатов из общего пула."""
+    ui.clean_terminal()
+    candidates = candidate_pool.get_all_candidates()
+    if len(candidates) == 0:
+        print("Общий пул кандидатов пуст.")
+        return
+
+    top_n_value = request.loop_input(
+        text="Сколько кандидатов показать >> ",
+        funcs_list=[valid.is_correct_top_n]
+    )
+    top_n = min(int(top_n_value), len(candidates))
+
+    contribution_limit_value = input("Сколько вкладов показывать на знак [10] >> ").strip()
+    try:
+        contribution_limit = int(contribution_limit_value or 10)
+    except ValueError:
+        contribution_limit = 10
+    contribution_limit = max(1, min(contribution_limit, 30))
+
+    weights = storage.load_weights()
+    reports = [
+        candidate_pool.candidate_feature_contributions(candidate, weights)
+        for candidate in candidates
+    ]
+    reports.sort(key=lambda row: row["predict"], reverse=True)
+
+    print("\nВклады для кандидатов")
+    print("Примечание: предикт считается без вайб-тегов, потому что у кандидатов их ещё нет.\n")
+
+    for idx, report in enumerate(reports[:top_n], start=1):
+        criteria_name = report.get("criteria_name") or "без критерия"
+        print(f"{idx}. {report['title']} ({report['year']})")
+        print(f"   Критерий: {criteria_name}")
+        print(f"   Прогноз модели: {report['predict']:.4f}")
+        _print_candidate_contribution_group(
+            "Топ положительных вкладов",
+            report["positive"],
+            contribution_limit,
+        )
+        _print_candidate_contribution_group(
+            "Топ отрицательных вкладов",
+            report["negative"],
+            contribution_limit,
+        )
+        print("")
+
+
+def retry_kp_for_incomplete_candidates() -> None:
+    """Запускает повторный добор KP-данных для неполных кандидатов общего пула."""
+    ui.clean_terminal()
+    pool = candidate_pool.load_candidate_pool()
+    if len(pool) == 0:
+        print("Общий пул кандидатов пуст.")
+        return
+
+    all_incomplete = candidate_pool.get_incomplete_candidates(pool)
+    print("Добор KP для неполных кандидатов\n")
+    print(f"Неполных кандидатов всего: {len(all_incomplete)}")
+    if len(all_incomplete) == 0:
+        print("Добор не требуется.")
+        return
+
+    all_criteria = candidate_pool.load_candidate_criteria()
+    criteria_names = sorted(all_criteria.keys())
+    print("\nНабор критериев:")
+    print(" 0 >> Все неполные кандидаты")
+    for idx, name in enumerate(criteria_names, start=1):
+        scoped_count = len(candidate_pool.get_incomplete_candidates(pool, criteria_name=name))
+        print(f" {idx} >> {candidate_pool.build_criteria_label(name, all_criteria[name])} | incomplete={scoped_count}")
+
+    selected = request.loop_input(
+        text="\nВыбор [0] >> ",
+        funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(criteria_names))]
+    )
+    criteria_name = None
+    if selected != "" and selected != "0":
+        criteria_name = criteria_names[int(selected) - 1]
+
+    scoped_incomplete = candidate_pool.get_incomplete_candidates(pool, criteria_name=criteria_name)
+    if len(scoped_incomplete) == 0:
+        print("Для выбранного набора неполных кандидатов нет.")
+        return
+
+    limit_answer = input("Лимит попыток [10] >> ").strip()
+    try:
+        limit = int(limit_answer or 10)
+    except ValueError:
+        limit = 10
+    limit = max(1, min(limit, len(scoped_incomplete)))
+    selected_candidates = scoped_incomplete[:limit]
+
+    print("\nБудет запущен добор KP:")
+    print(f"Критерий: {criteria_name or 'все'}")
+    print(f"Неполных найдено: {len(scoped_incomplete)}")
+    print(f"Попыток будет выполнено: {limit}")
+    print("\nПервые кандидаты на добор:\n")
+    _print_incomplete_candidates_preview(selected_candidates, limit=limit)
+    answer = input("\nЗапустить добор KP для этих кандидатов? [y/N] ").strip().casefold()
+    if answer not in {"y", "yes", "д", "да"}:
+        print("Добор KP отменён.")
+        return
+
+    stats = candidate_pool.retry_kp_enrichment_for_pool(
+        limit=limit,
+        criteria_name=criteria_name,
+    )
+
+    print("\nДобор KP завершён.")
+    print(f"Неполных найдено: {stats['incomplete_found']}")
+    print(f"Попыток выполнено: {stats['attempted']}")
+    print(f"KP найден: {stats['kp_found']}")
+    print(f"KP не найден: {stats['kp_not_found']}")
+    print(f"Ошибок API: {stats['api_errors']}")
+    print(f"Стали complete: {stats['became_complete']}")
+    print(f"Остались incomplete: {stats['remaining_incomplete']}")
+
+
 def delete_candidate_pool() -> None:
     """Удаляет набор критериев и связанные с ним объекты из общего пула."""
     ui.clean_terminal()
-    selected = candidate_pool.choose_existing_criteria()
+    selected = candidate_pool_ui.choose_existing_criteria()
     if selected is None:
         return
 
@@ -525,3 +1059,4 @@ def show_suspicious_candidate_duplicates() -> None:
             f"| критерий: {right.get('criteria_name')}"
         )
         print("")
+

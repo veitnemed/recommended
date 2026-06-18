@@ -1,0 +1,493 @@
+"""TMDb helpers for TV search, discover, cached details and CLI probing."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+API_URL = "https://api.themoviedb.org/3"
+IMAGE_URL = "https://image.tmdb.org/t/p/original"
+DEFAULT_LANGUAGE = "ru-RU"
+DEFAULT_REGION = "RU"
+TMDB_CACHE_DIR = ROOT_DIR / "data" / "cache" / "tmdb"
+DISCOVER_CACHE_DIR = TMDB_CACHE_DIR / "discover"
+DETAILS_CACHE_DIR = TMDB_CACHE_DIR / "details"
+
+
+def find_dotenv(path: str | Path = ".env") -> Path | None:
+    env_path = Path(path)
+    if env_path.is_absolute() and env_path.is_file():
+        return env_path
+
+    candidates = []
+    for base in [Path.cwd(), Path(__file__).resolve().parent]:
+        candidates.append(base / env_path)
+        candidates.extend(parent / env_path for parent in base.parents)
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def load_dotenv(path: str | Path = ".env") -> None:
+    env_path = find_dotenv(path)
+    if env_path is None:
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line == "" or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def load_tmdb_token() -> str:
+    for env_file in [".env", ".env.local", "tmdb.env"]:
+        load_dotenv(env_file)
+    token = os.getenv("TMDB_TOKEN", "").strip()
+    if token == "":
+        raise RuntimeError("TMDB_TOKEN не найден. Добавьте его в .env.local или переменную окружения.")
+    return token
+
+
+def get_token() -> str:
+    return load_tmdb_token()
+
+
+def ensure_cache_dirs() -> None:
+    DISCOVER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    DETAILS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def read_json(path: Path) -> dict[str, Any] | None:
+    if path.is_file() is False:
+        return None
+    with open(path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+def write_json(path: Path, data: dict[str, Any] | list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
+
+
+def cache_key(path: str, params: dict[str, Any] | None = None) -> str:
+    payload = {
+        "path": path,
+        "params": sorted((params or {}).items()),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def tmdb_get(
+    path: str,
+    params: dict[str, Any] | None = None,
+    *,
+    token: str | None = None,
+) -> dict[str, Any]:
+    token = token or load_tmdb_token()
+    query = urlencode(params or {}, doseq=True)
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    url = f"{API_URL}{normalized_path}"
+    if query:
+        url = f"{url}?{query}"
+
+    request = Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+    except HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"TMDB вернул HTTP {error.code}: {details}") from error
+    except URLError as error:
+        raise RuntimeError(f"Не удалось подключиться к TMDB: {error.reason}") from error
+
+    return json.loads(raw)
+
+
+def cached_tmdb_get(
+    path: str,
+    params: dict[str, Any] | None,
+    cache_path: Path,
+    *,
+    force_refresh: bool = False,
+    token: str | None = None,
+) -> dict[str, Any]:
+    ensure_cache_dirs()
+    if force_refresh is False:
+        cached = read_json(cache_path)
+        if cached is not None:
+            return cached
+    payload = tmdb_get(path, params=params, token=token)
+    write_json(cache_path, payload)
+    return payload
+
+
+def search_tv_by_name(
+    query: str,
+    language: str = DEFAULT_LANGUAGE,
+    *,
+    token: str | None = None,
+) -> list[dict[str, Any]]:
+    payload = tmdb_get(
+        "/search/tv",
+        {
+            "query": query,
+            "language": language,
+            "include_adult": "false",
+            "page": 1,
+        },
+        token=token,
+    )
+    return payload.get("results") or []
+
+
+def search_tv(title: str, token: str) -> list[dict[str, Any]]:
+    return search_tv_by_name(title, DEFAULT_LANGUAGE, token=token)
+
+
+def discover_tv_candidates(
+    country: str,
+    genres_any: list[int],
+    without_genres: list[int],
+    vote_average_gte: float,
+    vote_count_gte: int,
+    year_min: int | None = None,
+    year_max: int | None = None,
+    language: str = DEFAULT_LANGUAGE,
+    max_pages: int = 5,
+    sort_by: str = "vote_count.desc",
+    with_original_language: str | None = None,
+    force_refresh: bool = False,
+    token: str | None = None,
+) -> list[dict[str, Any]]:
+    all_results: list[dict[str, Any]] = []
+    max_pages = max(1, int(max_pages))
+
+    for page in range(1, max_pages + 1):
+        params: dict[str, Any] = {
+            "with_origin_country": country,
+            "with_genres": "|".join(str(item) for item in genres_any),
+            "without_genres": ",".join(str(item) for item in without_genres),
+            "vote_average.gte": vote_average_gte,
+            "vote_count.gte": vote_count_gte,
+            "include_adult": "false",
+            "sort_by": sort_by,
+            "language": language,
+            "page": page,
+        }
+        if with_original_language:
+            params["with_original_language"] = with_original_language
+        if year_min is not None:
+            params["first_air_date.gte"] = f"{int(year_min)}-01-01"
+        if year_max is not None:
+            params["first_air_date.lte"] = f"{int(year_max)}-12-31"
+
+        key = cache_key("/discover/tv", params)
+        cache_path = DISCOVER_CACHE_DIR / f"{key}.json"
+        payload = cached_tmdb_get(
+            "/discover/tv",
+            params,
+            cache_path,
+            force_refresh=force_refresh,
+            token=token,
+        )
+        page_results = payload.get("results") or []
+        all_results.extend(page_results)
+
+        total_pages = int(payload.get("total_pages") or page)
+        if page >= total_pages:
+            break
+
+    return all_results
+
+
+def get_tv_details(
+    tmdb_id: int,
+    language: str = DEFAULT_LANGUAGE,
+    *,
+    force_refresh: bool = False,
+    token: str | None = None,
+) -> dict[str, Any]:
+    params = {
+        "language": language,
+        "append_to_response": "external_ids,content_ratings,watch/providers,credits",
+    }
+    safe_language = language.replace("-", "_")
+    cache_path = DETAILS_CACHE_DIR / f"{int(tmdb_id)}_{safe_language}.json"
+    return cached_tmdb_get(
+        f"/tv/{int(tmdb_id)}",
+        params,
+        cache_path,
+        force_refresh=force_refresh,
+        token=token,
+    )
+
+
+def names_from_items(items: list[dict[str, Any]] | None, key: str = "name") -> list[str]:
+    names: list[str] = []
+    for item in items or []:
+        if isinstance(item, dict) is False:
+            continue
+        value = str(item.get(key) or "").strip()
+        if value and value not in names:
+            names.append(value)
+    return names
+
+
+def country_codes_from_items(items: list[dict[str, Any]] | None) -> list[str]:
+    codes: list[str] = []
+    for item in items or []:
+        code = str(item.get("iso_3166_1") or "").strip().upper()
+        if code and code not in codes:
+            codes.append(code)
+    return codes
+
+
+def image_link(path: str | None) -> str | None:
+    if not path:
+        return None
+    return f"{IMAGE_URL}{path}"
+
+
+def get_content_rating(details: dict[str, Any], region: str = DEFAULT_REGION) -> str | None:
+    ratings = details.get("content_ratings", {}).get("results") or []
+    for item in ratings:
+        if item.get("iso_3166_1") == region and item.get("rating"):
+            return item["rating"]
+    for item in ratings:
+        if item.get("rating"):
+            return f"{item.get('iso_3166_1')}: {item.get('rating')}"
+    return None
+
+
+def get_watch_providers(details: dict[str, Any], region: str = DEFAULT_REGION) -> list[str]:
+    region_data = details.get("watch/providers", {}).get("results", {}).get(region) or {}
+    names: list[str] = []
+    for section in ("flatrate", "free", "ads", "rent", "buy"):
+        for provider in region_data.get(section) or []:
+            name = provider.get("provider_name")
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def get_ru_content_rating(details: dict[str, Any]) -> str:
+    return get_content_rating(details, DEFAULT_REGION) or "-"
+
+
+def get_year(date_value: str | None) -> int | None:
+    if not date_value:
+        return None
+    try:
+        return int(str(date_value)[:4])
+    except ValueError:
+        return None
+
+
+def normalize_people(items: list[dict[str, Any]] | None, limit: int, role_key: str) -> list[dict[str, Any]]:
+    people: list[dict[str, Any]] = []
+    for person in (items or [])[:limit]:
+        if isinstance(person, dict) is False:
+            continue
+        name = person.get("name")
+        if not name:
+            continue
+        people.append({
+            "name": name,
+            "role": person.get(role_key),
+        })
+    return people
+
+
+def normalize_tmdb_tv(raw_details: dict[str, Any]) -> dict[str, Any]:
+    external_ids = raw_details.get("external_ids") or {}
+    credits = raw_details.get("credits") or {}
+    first_air_date = raw_details.get("first_air_date")
+    production_countries = raw_details.get("production_countries") or []
+
+    return {
+        "tmdb_id": raw_details.get("id"),
+        "imdb_id": external_ids.get("imdb_id"),
+        "tvdb_id": external_ids.get("tvdb_id"),
+        "kp_id": None,
+        "title": raw_details.get("name"),
+        "original_title": raw_details.get("original_name"),
+        "year": get_year(first_air_date),
+        "first_air_date": first_air_date,
+        "last_air_date": raw_details.get("last_air_date"),
+        "status": raw_details.get("status"),
+        "type": raw_details.get("type"),
+        "in_production": raw_details.get("in_production"),
+        "original_language": raw_details.get("original_language"),
+        "tmdb_origin_countries": raw_details.get("origin_country") or [],
+        "tmdb_production_countries": names_from_items(production_countries),
+        "tmdb_country_codes": country_codes_from_items(production_countries),
+        "genres_tmdb": names_from_items(raw_details.get("genres")),
+        "networks": names_from_items(raw_details.get("networks")),
+        "production_companies": names_from_items(raw_details.get("production_companies")),
+        "number_of_seasons": raw_details.get("number_of_seasons"),
+        "number_of_episodes": raw_details.get("number_of_episodes"),
+        "tmdb_rating": raw_details.get("vote_average"),
+        "tmdb_votes": raw_details.get("vote_count"),
+        "tmdb_popularity": raw_details.get("popularity"),
+        "overview": raw_details.get("overview"),
+        "poster_path": raw_details.get("poster_path"),
+        "poster_url": image_link(raw_details.get("poster_path")),
+        "backdrop_path": raw_details.get("backdrop_path"),
+        "backdrop_url": image_link(raw_details.get("backdrop_path")),
+        "content_rating": get_content_rating(raw_details),
+        "watch_providers_ru": get_watch_providers(raw_details, DEFAULT_REGION),
+        "actors_top": normalize_people(credits.get("cast"), 8, "character"),
+        "crew_top": normalize_people(credits.get("crew"), 5, "job"),
+        "imdb_rating": None,
+        "imdb_votes": None,
+        "imdb_title_type": None,
+        "imdb_is_adult": None,
+        "imdb_start_year": None,
+        "imdb_end_year": None,
+        "imdb_runtime_minutes": None,
+        "imdb_genres": [],
+        "country_score": 0.0,
+        "country_signals": [],
+        "quality_score": 0.0,
+        "hidden_gem_score": 0.0,
+        "final_score": 0.0,
+        "signals": [],
+        "source": "tmdb_discover",
+        "source_query": {},
+    }
+
+
+def is_russian_candidate(show: dict[str, Any]) -> bool:
+    origin_country = show.get("origin_country") or []
+    original_language = show.get("original_language")
+    return "RU" in origin_country or original_language == "ru"
+
+
+def choose_best_result(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    russian_results = [show for show in results if is_russian_candidate(show)]
+    candidates = russian_results or results
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: (item.get("vote_count") or 0, item.get("popularity") or 0))
+
+
+def format_list(values: list[Any] | None) -> str:
+    if not values:
+        return "-"
+    return ", ".join(str(value) for value in values)
+
+
+def format_people(people: list[dict[str, Any]] | None, limit: int = 8) -> str:
+    people = people or []
+    names = []
+    for person in people[:limit]:
+        name = person.get("name")
+        role = person.get("role")
+        if name and role:
+            names.append(f"{name} ({role})")
+        elif name:
+            names.append(name)
+    return ", ".join(names) if names else "-"
+
+
+def build_report(details: dict[str, Any]) -> list[str]:
+    data = normalize_tmdb_tv(details)
+    lines = [
+        "Основная информация TMDB",
+        "=" * 60,
+        f"TMDB ID: {data.get('tmdb_id')}",
+        f"Название: {data.get('title') or '-'}",
+        f"Оригинальное название: {data.get('original_title') or '-'}",
+        f"Год старта: {data.get('year') or '-'}",
+        f"Первый эфир: {data.get('first_air_date') or '-'}",
+        f"Последний эфир: {data.get('last_air_date') or '-'}",
+        f"Статус: {data.get('status') or '-'}",
+        f"Тип: {data.get('type') or '-'}",
+        f"В производстве: {'да' if data.get('in_production') else 'нет'}",
+        f"Оригинальный язык: {data.get('original_language') or '-'}",
+        f"Страны происхождения: {format_list(data.get('tmdb_origin_countries'))}",
+        f"Страны производства: {format_list(data.get('tmdb_production_countries'))}",
+        f"Жанры: {format_list(data.get('genres_tmdb'))}",
+        f"Сети: {format_list(data.get('networks'))}",
+        f"Производство: {format_list(data.get('production_companies'))}",
+        f"Сезонов: {data.get('number_of_seasons') or '-'}",
+        f"Серий: {data.get('number_of_episodes') or '-'}",
+        f"Рейтинг TMDB: {data.get('tmdb_rating') or '-'}",
+        f"Голосов TMDB: {data.get('tmdb_votes') or '-'}",
+        f"Популярность: {data.get('tmdb_popularity') or '-'}",
+        f"Возрастной рейтинг: {data.get('content_rating') or '-'}",
+        f"Где смотреть RU: {format_list(data.get('watch_providers_ru'))}",
+        f"IMDb ID: {data.get('imdb_id') or '-'}",
+        f"TVDB ID: {data.get('tvdb_id') or '-'}",
+        f"Постер: {data.get('poster_url') or '-'}",
+        f"Фон: {data.get('backdrop_url') or '-'}",
+        "",
+        "Описание",
+        "-" * 60,
+        data.get("overview") or "-",
+        "",
+        "Команда и актёры",
+        "-" * 60,
+        f"Актёры: {format_people(data.get('actors_top'))}",
+        f"Съёмочная группа: {format_people(data.get('crew_top'), 5)}",
+    ]
+    return lines
+
+
+def print_search_options(results: list[dict[str, Any]], selected_id: int) -> None:
+    print("")
+    print("Найденные варианты")
+    print("-" * 60)
+    for index, item in enumerate(results[:8], start=1):
+        marker = "*" if item.get("id") == selected_id else " "
+        year = (item.get("first_air_date") or "-")[:4]
+        countries = ", ".join(item.get("origin_country") or []) or "-"
+        rating = item.get("vote_average") or "-"
+        print(f"{marker} {index}. {item.get('name') or '-'} ({year}), {countries}, rating={rating}, id={item.get('id')}")
+
+
+def main() -> None:
+    token = load_tmdb_token()
+    title = input("Название российского сериала на русском >> ").strip()
+    if title == "":
+        print("Название не задано.")
+        return
+
+    results = search_tv_by_name(title, token=token)
+    selected = choose_best_result(results)
+    if selected is None:
+        print("Ничего не найдено.")
+        return
+
+    details = get_tv_details(int(selected["id"]), token=token)
+    print_search_options(results, selected_id=int(selected["id"]))
+    print("")
+    for line in build_report(details):
+        print(line)
+
+
+if __name__ == "__main__":
+    main()

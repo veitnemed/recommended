@@ -46,7 +46,7 @@ def get_error_rows(data: dict, weights: dict, limit: int = 10) -> list:
     return sorted(rows, key=lambda row: row["abs_error"], reverse=True)[:limit]
 
 
-def build_train_report(data: dict, weights: dict, train_step: float, plateau_score: int) -> list:
+def build_train_report(data: dict, weights: dict) -> list:
     """Собирает строки текстового отчета об обучении."""
     movies_counter = len(data)
     mae = model.mean_absolute_error(data, weights)
@@ -63,11 +63,6 @@ def build_train_report(data: dict, weights: dict, train_step: float, plateau_sco
     lines.append(f"MAE модели: {mae:.4f} ({mae * 10:.2f}%)")
     lines.append(f"KP_MAE: {kp_mae:.4f} ({kp_mae * 10:.2f}%)")
     lines.append(f"Среднее отклонение модели: {mean_error:.4f}")
-    lines.append("")
-    lines.append("Параметры обучения")
-    lines.append("-" * 60)
-    lines.append(f"Шаг обучения: {train_step}")
-    lines.append(f"Плато: {plateau_score} попыток без улучшения")
     lines.append("")
     lines.extend(dataset_stats.build_dataset_info_lines(data))
     lines.append("")
@@ -105,7 +100,7 @@ def build_train_report(data: dict, weights: dict, train_step: float, plateau_sco
     return lines
 
 
-def export_train_report(train_step: float, plateau_score: int) -> str:
+def export_train_report() -> str:
     """Выгружает отчет об обучении в TXT-файл."""
     data = storage.load_dataset()
     weights = storage.load_weights()
@@ -116,7 +111,7 @@ def export_train_report(train_step: float, plateau_score: int) -> str:
     file_path = os.path.join(reports_dir, file_name)
 
     with open(file_path, "w", encoding="UTF-8") as file:
-        file.write("\n".join(build_train_report(data, weights, train_step, plateau_score)))
+        file.write("\n".join(build_train_report(data, weights)))
 
     print(f"Отчет сохранен: {file_path}")
     return file_path

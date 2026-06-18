@@ -67,11 +67,19 @@ def run_noise_experiment(
         weights: dict,
         delta: float,
         runs: int,
-        fit_func=model.fit_weights,
+        fit_func=None,
         seed: int = None,
         **fit_kwargs
 ) -> dict:
     """Проверяет, как обучение на шумных оценках влияет на попадание в исходный вкус."""
+    if fit_func is None:
+        from model_work import linear_regression_train
+
+        def fit_func(train_data, start_weights, **_ignored):
+            return linear_regression_train.train_ridge_for_benchmark(
+                data=train_data,
+                start_weights=start_weights,
+            )
     if runs <= 0:
         raise ValueError("Количество повторов должно быть больше нуля")
     if delta < 0:

@@ -38,5 +38,10 @@
         "label": "Фантастика",
         "translation": "фантастика",
         "source": "фантастика"
+    },
+    "has_romance": {
+        "label": "Romance",
+        "translation": "Romance",
+        "source": "romance"
     }
 }

@@ -2,10 +2,10 @@
 
 import contextlib
 import io
-import json
 import tempfile
 from pathlib import Path
 import sys
+from unittest.mock import patch
 from urllib.error import HTTPError
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -15,10 +15,13 @@ if str(ROOT_DIR) not in sys.path:
 from config import constant
 from core import format_score
 from model_work import model
+from model_work import linear_regression_train
 from data_work import storage
 from data_work import excel_work
-from data_work import tst_scores
 from data_work import candidate_pool
+from data_work import sql_search
+from data_work import title_resolve
+from interface import request as request_ui
 from integrations import api
 from core import valid
 
@@ -70,7 +73,6 @@ def setup_temp_project():
     old_paths = {
         "DATA_DIR": constant.DATA_DIR,
         "FILE_NAME": constant.FILE_NAME,
-        "TST_SCORES_JSON": constant.TST_SCORES_JSON,
         "WEIGHTS_JSON": constant.WEIGHTS_JSON,
         "CRITERIA_POOL_JSON": constant.CRITERIA_POOL_JSON,
         "CANDIDATE_POOL_JSON": constant.CANDIDATE_POOL_JSON,
@@ -81,7 +83,6 @@ def setup_temp_project():
 
     constant.DATA_DIR = str(root / "data")
     constant.FILE_NAME = str(root / "data" / "dataset.json")
-    constant.TST_SCORES_JSON = str(root / "data" / "dataset_from_tst.json")
     constant.WEIGHTS_JSON = str(root / "data" / "weights.json")
     constant.CRITERIA_POOL_JSON = str(root / "data" / "candidate_criteria.json")
     constant.CANDIDATE_POOL_JSON = str(root / "data" / "candidate_pool.json")
@@ -198,6 +199,28 @@ def test_excel_row_supports_genre() -> None:
         assert_check("Genre-поле попадает в Excel-строку", row[genre_index] == movie[constant.GENRE_SECTION][genre_feature])
 
 
+def test_excel_title_guard() -> None:
+    """Проверяет, что Excel не может добавлять, удалять или переименовывать записи."""
+    print("\n5.2) Проверяем защиту title при Excel-импорте")
+    dataset = {
+        "Excel A": make_movie("Excel A"),
+        "Excel B": make_movie("Excel B"),
+    }
+    same_titles = [make_movie("Excel A"), make_movie("Excel B")]
+    renamed_title = [make_movie("Excel A renamed"), make_movie("Excel B")]
+    missing_title = [make_movie("Excel A")]
+
+    assert_check("Excel с тем же набором title проходит", excel_work.validate_excel_titles(same_titles, dataset))
+    assert_check(
+        "Excel с переименованной записью останавливается",
+        excel_work.validate_excel_titles(renamed_title, dataset) is False,
+    )
+    assert_check(
+        "Excel с удалённой строкой останавливается",
+        excel_work.validate_excel_titles(missing_title, dataset) is False,
+    )
+
+
 def test_validation() -> None:
     """Проверяет валидаторы."""
     print("\n6) Проверяем валидацию")
@@ -234,6 +257,9 @@ def test_tag_compatibility() -> None:
 def test_training() -> None:
     """Проверяет обучение модели."""
     print("\n7) Проверяем обучение модели")
+    if linear_regression_train.is_method_available("mae_scipy") is False:
+        print("SKIP: scipy minimize (MAE) недоступен в текущем окружении.")
+        return
     storage.clean_dataset()
 
     movies = [
@@ -246,37 +272,20 @@ def test_training() -> None:
 
     data = storage.load_dataset()
     start_error = model.mean_absolute_error(data, constant.DEFAULT_WEIGHTS)
-    new_weights = model.fit_weights(data, constant.DEFAULT_WEIGHTS, passes=1)
+    new_weights = linear_regression_train.fit_linear_weights(
+        data=data,
+        method="mae_scipy",
+        start_weights=constant.DEFAULT_WEIGHTS,
+        alpha=0.1,
+        l1_ratio=0.5,
+        max_iter=500,
+    )
     new_error = model.mean_absolute_error(data, new_weights)
 
     show_check("MAE до обучения", round(start_error, 4))
     show_check("MAE после обучения", round(new_error, 4))
     assert_check("Новые веса содержат все признаки", set(new_weights) == set(constant.FEATURES))
     assert_check("MAE не увеличилась", new_error <= start_error)
-
-
-def test_tst_scores_import() -> None:
-    """Проверяет чтение оценок из TST JSON."""
-    print("\n8) Проверяем чтение оценок TST")
-    storage.clean_dataset()
-
-    movie = make_movie("TST Movie", user_score=5.0, raw_score=7.0)
-    assert_check("Тестовая запись добавляется", storage.add_movie(movie))
-
-    with open(constant.TST_SCORES_JSON, "w", encoding="UTF-8") as file:
-        json.dump({
-            "TST Movie": 8.5,
-            "Missing Movie": 7.0,
-            "Bad Score": 11
-        }, file, ensure_ascii=False, indent=4)
-
-    result = tst_scores.apply_tst_scores()
-    data = storage.load_dataset()
-
-    assert_check("Оценка совпавшего сериала обновлена", data["TST Movie"]["main_info"]["user_score"] == 8.5)
-    assert_check("Лишний сериал попал в not_found", result["not_found"] == ["Missing Movie"])
-    assert_check("Некорректная оценка попала в invalid", result["invalid"] == ["Bad Score"])
-    assert_check("Обновлена ровно одна оценка", result["updated"] == 1)
 
 
 def test_backup_restore() -> None:
@@ -346,9 +355,226 @@ def test_api_fallback_to_secondary_token() -> None:
     assert_check("Ответ успешно получен через резервный ключ", result["ok"] is True)
 
 
+def test_sql_title_search() -> None:
+    """Проверяет поиск тайтла в локальной SQLite-базе."""
+    print("\n11) Проверяем поиск тайтла в SQL")
+
+    result = sql_search.search_title_in_sql("Триггер", "Россия")
+
+    assert_check("SQL-поиск возвращает ok", result["ok"] is True)
+    assert_check("Вернулся словарь с данными", isinstance(result["data"], dict))
+    assert_check("Есть название", bool(result["data"].get("title")))
+    assert_check("Есть год", result["data"].get("year") is not None)
+    assert_check("Есть жанры", isinstance(result["data"].get("genres"), list))
+    assert_check("Есть рейтинг", result["data"].get("imdb_rating") is not None)
+    assert_check("Есть голоса", result["data"].get("imdb_votes") is not None)
+    assert_check("Есть режиссеры или актеры", bool(result["data"].get("credits", {}).get("directors") or result["data"].get("credits", {}).get("actors")))
+
+
+def test_sql_title_search_aliases() -> None:
+    """Проверяет сложные и опечатанные названия для SQL-поиска."""
+    print("\n11.1) Проверяем алиасы и опечатки SQL-поиска")
+
+    checks = [
+        ("Чернобыль зона отчуждения", "Chernobyl: Zone of Exclusion"),
+        ("Haappy End", "Happy End"),
+        ("Индентификация", "Identification"),
+        ("Фишшер", "Fisher"),
+        ("Я знаю кто тебя убил", "YA znayu, kto tebya ubil"),
+    ]
+
+    for query, expected_title in checks:
+        result = sql_search.search_title_in_sql(query, "Россия")
+        assert_check(f"SQL-поиск находит {query}", result["ok"] is True)
+        assert_check(
+            f"SQL-поиск приводит {query} к ожидаемому тайтлу",
+            result["data"].get("title") == expected_title
+        )
+
+    alias_result = sql_search.search_title_in_sql("Haappy End", "Россия")
+    assert_check(
+        "В match сохраняется информация о ручном alias",
+        bool(alias_result["data"].get("match", {}).get("alias_applied"))
+    )
+
+
+def test_build_api_defaults_from_raw_movie() -> None:
+    """Проверяет сбор defaults из сырого ответа API."""
+    print("\n11.2) Проверяем build_api_defaults на сыром API-объекте")
+
+    movie = {
+        "name": "Тестовый сериал",
+        "alternativeName": "Test Series",
+        "year": 2025,
+        "rating": {"kp": 7.4, "imdb": 6.9},
+        "votes": {"kp": 12345, "imdb": 678},
+        "genres": [{"name": "драма"}, {"name": "триллер"}],
+    }
+
+    defaults = title_resolve.build_api_defaults(movie)
+
+    assert_check("Название берётся из raw API name", defaults["main_info"]["title"] == "Тестовый сериал")
+    assert_check("Год берётся из raw API", defaults["main_info"]["year"] == 2025)
+    assert_check("KP рейтинг извлекается из rating.kp", defaults["raw_scores"]["kp_score"] == 7.4)
+    assert_check("IMDb рейтинг извлекается из rating.imdb", defaults["raw_scores"]["imdb_score"] == 6.9)
+    assert_check("Жанры размечаются в defaults", sum(defaults["genre"].values()) >= 2)
+
+
+def test_merge_defaults_prefers_api_and_keeps_sql() -> None:
+    """Проверяет объединение SQL и API defaults."""
+    print("\n11.3) Проверяем merge_defaults для SQL + API")
+
+    sql_defaults = {
+        "main_info": {"title": "Trigger", "user_score": None, "year": 2018},
+        "raw_scores": {"kp_score": None, "kp_votes": None, "imdb_score": 7.7, "imdb_votes": 4321},
+        "tags_vibe": {},
+        "genre": {"has_drama": 1, "has_thriller": 1},
+    }
+    api_defaults = {
+        "main_info": {"title": "Триггер", "user_score": None, "year": 2018},
+        "raw_scores": {"kp_score": 8.0, "kp_votes": 55555, "imdb_score": 7.6, "imdb_votes": 4000},
+        "tags_vibe": {},
+        "genre": {"has_drama": 1, "has_detective": 1},
+    }
+
+    merged = title_resolve.merge_defaults(sql_defaults, api_defaults)
+
+    assert_check("Название берётся из API как более пользовательское", merged["main_info"]["title"] == "Триггер")
+    assert_check("KP приходит из API", merged["raw_scores"]["kp_score"] == 8.0)
+    assert_check("IMDb остаётся заполненным", merged["raw_scores"]["imdb_score"] == 7.6)
+    assert_check("Жанр из SQL сохраняется", merged["genre"]["has_thriller"] == 1)
+    assert_check("Жанр из API добавляется", merged["genre"]["has_detective"] == 1)
+
+
+def test_build_genre_defaults_ignores_unknown() -> None:
+    """Проверяет, что неизвестные жанры не создают новые feature в обычном потоке."""
+    print("\n11.4) Проверяем, что новые жанры не автодобавляются в модель")
+
+    defaults = title_resolve.build_genre_defaults(["комедия", "future-micro-genre-x", "драма"])
+
+    assert_check("Известный жанр комедия размечается", defaults.get("has_comedy") == 1)
+    assert_check("Известный жанр драма размечается", defaults.get("has_drama") == 1)
+    assert_check("Неизвестный жанр не включается в defaults", "has_future_micro_genre_x" not in defaults)
+
+
+def test_manual_add_defaults_when_lookup_fails() -> None:
+    """Проверяет ручной fallback, если SQL/API ничего не нашли."""
+    print("\n11.5) Проверяем ручной fallback добавления")
+    resolved = {
+        "title": "Manual Missing Title",
+        "country": "Россия",
+        "sql_result": {"ok": False, "details": "not_found"},
+        "sql_data": None,
+        "api_data": None,
+        "api_error": {"ok": False, "error": "network_error", "details": "timeout"},
+        "defaults": None,
+        "found": False,
+    }
+
+    output = io.StringIO()
+    with patch("interface.request.title_resolve.resolve_title_data_for_add", return_value=resolved):
+        with patch("builtins.input", return_value="y"):
+            with contextlib.redirect_stdout(output):
+                defaults = request_ui.resolve_title_for_training("Manual Missing Title", confirm_genres=True)
+
+    assert_check("Fallback возвращает defaults", defaults is not None)
+    assert_check("Title берётся из ручного ввода", defaults["main_info"]["title"] == "Manual Missing Title")
+    assert_check("KP score остаётся пустым", defaults["raw_scores"]["kp_score"] is None)
+    assert_check("Vibe defaults заполнены по схеме", set(defaults["tags_vibe"]) == set(constant.TAGS_VIBE))
+    assert_check("Genre defaults заполнены по схеме", set(defaults["genre"]) == set(constant.GENRE))
+    assert_check("Печатается режим ручной разметки", "Режим: ручная разметка" in output.getvalue())
+
+
+def test_add_resolver_prioritizes_sql_and_kp() -> None:
+    """Проверяет приоритет SQL для IMDb и KP API для KP/жанров/описания."""
+    print("\n11.6) Проверяем приоритеты источников SQL + KP API")
+    sql_data = {
+        "title": "SQL Title",
+        "original_title": "SQL Original",
+        "year": 2022,
+        "genres": ["триллер"],
+        "imdb_rating": 7.7,
+        "imdb_votes": 12345,
+    }
+    kp_data = {
+        "name": "KP Title",
+        "year": 2024,
+        "rating": {"kp": 8.1, "imdb": 6.1},
+        "votes": {"kp": 5000, "imdb": 100},
+        "genres": [{"name": "драма"}],
+        "description": "KP description",
+    }
+
+    with patch("data_work.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}):
+        with patch("data_work.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
+            resolved = title_resolve.resolve_title_data_for_add("Input Title")
+
+    defaults = resolved["defaults"]
+    assert_check("Title берётся из KP API", defaults["main_info"]["title"] == "KP Title")
+    assert_check("Год берётся из KP API", defaults["main_info"]["year"] == 2024)
+    assert_check("IMDb rating берётся из SQL", defaults["raw_scores"]["imdb_score"] == 7.7)
+    assert_check("KP rating берётся из KP API", defaults["raw_scores"]["kp_score"] == 8.1)
+    assert_check("Источник IMDb зафиксирован как SQL", resolved["sources"]["imdb_score"] == "imdb_sql")
+    assert_check("Источник жанров зафиксирован как KP API", resolved["sources"]["genres"] == "kp_api")
+    assert_check("TMDb не вызывается при успешном KP", resolved["statuses"]["tmdb_api"] == "не найдено")
+
+
+def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
+    """Проверяет fallback на TMDb для жанров/описания, без подстановки KP/IMDb оценок."""
+    print("\n11.7) Проверяем fallback на TMDb при падении KP API")
+    sql_data = {
+        "title": "SQL Title",
+        "original_title": "SQL Original",
+        "year": 2021,
+        "genres": ["триллер"],
+        "imdb_rating": 7.5,
+        "imdb_votes": 2222,
+    }
+    tmdb_details = {
+        "id": 10,
+        "name": "TMDb Title",
+        "original_name": "TMDb Original",
+        "first_air_date": "2023-01-01",
+        "genres": [{"name": "драма"}],
+        "overview": "TMDb overview",
+        "external_ids": {},
+        "credits": {},
+    }
+
+    with patch("data_work.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}):
+        with patch("data_work.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
+            with patch("data_work.title_resolve.api_tmdb.search_tv_by_name", return_value=[{"id": 10, "name": "TMDb Title", "vote_count": 10}]):
+                with patch("data_work.title_resolve.api_tmdb.get_tv_details", return_value=tmdb_details):
+                    resolved = title_resolve.resolve_title_data_for_add("Input Title")
+
+    defaults = resolved["defaults"]
+    assert_check("KP API отмечен как ошибка", resolved["statuses"]["kp_api"] == "ошибка")
+    assert_check("TMDb найден", resolved["statuses"]["tmdb_api"] == "найдено")
+    assert_check("IMDb остаётся из SQL", defaults["raw_scores"]["imdb_score"] == 7.5)
+    assert_check("KP score не берётся из TMDb", defaults["raw_scores"]["kp_score"] is None)
+    assert_check("Жанры берутся из TMDb, если KP не сработал", resolved["sources"]["genres"] == "tmdb_api")
+    assert_check("Описание берётся из TMDb", resolved["sources"]["description"] == "tmdb_api")
+
+
+def test_add_resolver_offline_without_sql_is_manual() -> None:
+    """Проверяет, что полный offline/no-match сценарий остаётся ручным."""
+    print("\n11.8) Проверяем полный offline/manual сценарий resolver-а")
+
+    with patch("data_work.title_resolve.sql_search.search_title_in_sql", return_value={"ok": False, "details": "not_found"}):
+        with patch("data_work.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
+            with patch("data_work.title_resolve.api_tmdb.search_tv_by_name", side_effect=RuntimeError("offline")):
+                resolved = title_resolve.resolve_title_data_for_add("Manual Only")
+
+    assert_check("Ничего не найдено", resolved["found"] is False)
+    assert_check("Defaults не создаются до согласия пользователя", resolved["defaults"] is None)
+    assert_check("SQL не найден", resolved["statuses"]["sql"] == "не найдено")
+    assert_check("KP API ошибка", resolved["statuses"]["kp_api"] == "ошибка")
+    assert_check("TMDb API ошибка", resolved["statuses"]["tmdb_api"] == "ошибка")
+
+
 def test_remove_candidate_from_pool() -> None:
     """Проверяет удаление просмотренного кандидата из общего пула по совпадающему названию и году."""
-    print("\n11) Проверяем удаление просмотренного кандидата из пула")
+    print("\n12) Проверяем удаление просмотренного кандидата из пула")
 
     candidate_pool.save_candidate_pool({
         "one": {
@@ -398,6 +624,31 @@ def test_remove_candidate_from_pool() -> None:
     assert_check("В пуле остался только другой сериал", len(pool) == 1)
 
 
+def test_candidate_pool_genre_filters() -> None:
+    """Проверяет фильтрацию кандидатов по жанрам и жанрам-исключениям."""
+    print("\n13) Проверяем фильтрацию пула кандидатов по жанрам")
+
+    movie = {
+        "genres": [
+            {"name": "драма"},
+            {"name": "триллер"},
+        ]
+    }
+
+    assert_check(
+        "Кандидат проходит по обязательному жанру",
+        candidate_pool.movie_matches_genres(movie, ["драма"], [])
+    )
+    assert_check(
+        "Кандидат отсекается по исключенному жанру",
+        candidate_pool.movie_matches_genres(movie, ["драма"], ["триллер"]) is False
+    )
+    assert_check(
+        "При пустом обязательном списке жанров кандидат проходит",
+        candidate_pool.movie_matches_genres(movie, [], []) is True
+    )
+
+
 def run_tests() -> None:
     """Запускает все тесты проекта."""
     temp_dir, old_paths = setup_temp_project()
@@ -409,13 +660,23 @@ def run_tests() -> None:
         test_duplicate_rejected()
         test_feature_formatting()
         test_excel_row_supports_genre()
+        test_excel_title_guard()
         test_validation()
         test_tag_compatibility()
         test_training()
-        test_tst_scores_import()
         test_backup_restore()
         test_api_fallback_to_secondary_token()
+        test_sql_title_search()
+        test_sql_title_search_aliases()
+        test_build_api_defaults_from_raw_movie()
+        test_merge_defaults_prefers_api_and_keeps_sql()
+        test_build_genre_defaults_ignores_unknown()
+        test_manual_add_defaults_when_lookup_fails()
+        test_add_resolver_prioritizes_sql_and_kp()
+        test_add_resolver_uses_tmdb_when_kp_fails()
+        test_add_resolver_offline_without_sql_is_manual()
         test_remove_candidate_from_pool()
+        test_candidate_pool_genre_filters()
         print("\nВсе проверки пройдены: True")
     finally:
         restore_project_paths(temp_dir, old_paths)

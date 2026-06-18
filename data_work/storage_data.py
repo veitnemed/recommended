@@ -90,7 +90,7 @@ def clean_meta():
         json.dump({}, file, ensure_ascii=False, indent=4)
 
 
-def add_movies_to_meta(main_info: dict, raw: dict) -> bool:
+def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = None) -> bool:
     """Добавляет постоянные raw-данные фильма в meta."""
     title = str(main_info["title"]).strip()
     meta = load_meta()
@@ -114,6 +114,11 @@ def add_movies_to_meta(main_info: dict, raw: dict) -> bool:
     meta_obj = {}
     meta_obj["main_info"] = normalize_main_info(main_info)
     meta_obj["raw_scores"] = normalize_raw_scores(raw)
+    if isinstance(extra_meta, dict):
+        for key, value in extra_meta.items():
+            if key in {"main_info", "raw_scores"}:
+                continue
+            meta_obj[key] = value
     meta[title] = meta_obj
 
     save_meta(meta)
@@ -220,3 +225,50 @@ def save_weights(data: dict):
 def uppdate_weights(weights: dict):
     """Перезаписывает веса модели."""
     save_weights(weights)
+
+
+def init_model_metrics() -> None:
+    """Создает файл метрик модели, если его нет."""
+    if is_json_exists(constant.MODEL_METRICS_JSON) is False:
+        os.makedirs(os.path.dirname(constant.MODEL_METRICS_JSON), exist_ok=True)
+        save_model_metrics({"loo_mae": None})
+
+
+def load_model_metrics() -> dict:
+    """Загружает сохраненные метрики модели."""
+    init_model_metrics()
+    with open(constant.MODEL_METRICS_JSON, 'r', encoding='utf-8-sig') as file:
+        metrics = json.load(file)
+
+    if isinstance(metrics, dict) is False:
+        metrics = {}
+
+    if "loo_mae" not in metrics:
+        metrics["loo_mae"] = None
+        save_model_metrics(metrics)
+
+    return metrics
+
+
+def save_model_metrics(metrics: dict) -> None:
+    """Сохраняет метрики модели в JSON-файл."""
+    os.makedirs(os.path.dirname(constant.MODEL_METRICS_JSON), exist_ok=True)
+    with open(constant.MODEL_METRICS_JSON, 'w', encoding='UTF-8') as file:
+        normalized = dict(metrics) if isinstance(metrics, dict) else {}
+        normalized["loo_mae"] = None if normalized.get("loo_mae") is None else float(normalized["loo_mae"])
+        json.dump(normalized, file, ensure_ascii=False, indent=4)
+
+
+def get_saved_loo_mae() -> float | None:
+    """Возвращает сохраненное значение leave-one-out MAE."""
+    value = load_model_metrics().get("loo_mae")
+    if value is None:
+        return None
+    return float(value)
+
+
+def set_saved_loo_mae(value: float | None) -> None:
+    """Сохраняет текущее значение leave-one-out MAE."""
+    metrics = load_model_metrics()
+    metrics["loo_mae"] = None if value is None else float(value)
+    save_model_metrics(metrics)

@@ -80,11 +80,12 @@ def restore_backup(file_path: Path) -> int:
 def init_all_dates():
     """Инициализирует все рабочие файлы данных."""
     from data_work.candidate_pool import init_candidate_criteria, init_candidate_pool
-    from data_work.storage_data import init_dataset, init_meta, init_weights
+    from data_work.storage_data import init_dataset, init_meta, init_model_metrics, init_weights
 
     init_meta()
     init_dataset()
     init_weights()
+    init_model_metrics()
     init_candidate_criteria()
     init_candidate_pool()
     create_backup()

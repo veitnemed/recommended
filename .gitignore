@@ -11,8 +11,22 @@ Thumbs.db
 # Local environments
 .venv/
 venv/
+.env/
+.env.local
+tmdb.env
 
 # Local recovery and spreadsheet files
 recovered_edit_dataset.csv
 *.xlsx
 api_token.py
+.browser_profiles/
+data/cache/
+
+# Large local datasets and generated outputs
+datasets/
+*.sqlite
+*.sqlite3
+*.db
+
+data/candidate_pool/
+_safety_audit/

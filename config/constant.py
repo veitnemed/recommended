@@ -6,10 +6,10 @@ from data_work import tags_work
 
 DATA_DIR = 'C:/DATA/movies-learn/'
 FILE_NAME = 'C:/DATA/movies-learn/dataset.json'
-TST_SCORES_JSON = 'C:/DATA/movies-learn/dataset_from_tst.json'
 WEIGHTS_JSON = 'C:/DATA/movies-learn/weights.json'
 CRITERIA_POOL_JSON = 'C:/DATA/movies-learn/candidate_criteria.json'
 CANDIDATE_POOL_JSON = 'C:/DATA/movies-learn/candidate_pool.json'
+MODEL_METRICS_JSON = 'config/model_metrics.json'
 API_LOG_FILE = 'C:/DATA/movies-learn/api_requests.log'
 BACKUP_DIR = 'C:/BACKUP/movies-learn/BACKUP/'
 
@@ -18,9 +18,6 @@ META_JSON = 'C:/META/meta-movies-learn/meta_data.json'
 
 DIR_TXT = 'C:/TXT_FILES/movies-learn/'
 EDIT_EXCEL = 'C:/TXT_FILES/movies-learn/edit_dataset.xlsx'
-
-STEPS_TRAIN = [0.05, 0.02, 0.01, 0.005, 0.001]
-STEPS_TRAIN_MIX = [0.2, 0.1, 0.05, 0.03, 0.02, 0.01, 0.005]
 
 MAIN_INFO = []
 RAW_SCORES = []
@@ -140,4 +137,3 @@ COMMANDS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", 
 BAD_CHARACTERS = ",.'][@#$%^&*()?"
 THRESHOLD = 6.5
 NOW_YEAR = 2026
-STEP = 0.01

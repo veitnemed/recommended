@@ -1,4 +1,4 @@
-"""Главный файл приложения: запускает тер1минальное меню."""
+"""Главный файл приложения: запускает терминальное меню."""
 
 from functools import partial
 
@@ -18,7 +18,8 @@ def main_loop():
         ui.clean_terminal()
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         kp_error = model.kp_mean_absolute_error(data)
-        ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error)
+        loo_mae = storage.get_saved_loo_mae()
+        ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error, loo_mae)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":

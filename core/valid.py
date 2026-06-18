@@ -103,26 +103,6 @@ def is_correct_select_menu(max_value: int, n: int) -> bool:
     except:
         return True
     
-def is_correct_train_step(value: str) -> bool:
-    """Проверяет шаг обучения."""
-    if value.strip() == "":
-        return True
-    try:
-        step = parse_float(value)
-        return 0 < step <= 1
-    except ValueError:
-        return False
-
-def is_correct_plateau_score(value: str) -> bool:
-    """Проверяет число попыток до плато."""
-    if value.strip() == "":
-        return True
-    try:
-        score = int(value)
-        return score > 0
-    except ValueError:
-        return False
-
 def is_correct_noise_delta(value: str) -> bool:
     """Проверяет максимальное случайное смещение оценки для шумового эксперимента."""
     if value.strip() == "":

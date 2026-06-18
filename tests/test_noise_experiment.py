@@ -12,6 +12,7 @@ if str(ROOT_DIR) not in sys.path:
 from config import constant
 from core import format_score
 from model_work import model
+from model_work import linear_regression_train
 from model_work import noise_experiment
 
 
@@ -35,12 +36,17 @@ def make_movie(title: str, user_score: float, raw_score: float) -> dict:
     tags_vibe = {feature: 0 for feature in constant.TAGS_VIBE}
     if constant.TAGS_VIBE:
         tags_vibe[constant.TAGS_VIBE[0]] = 1
+    genre_tags = {feature: 0 for feature in constant.GENRE}
+    for feature in ("has_drama", "has_crime"):
+        if feature in genre_tags:
+            genre_tags[feature] = 1
 
     return {
         "main_info": main_info,
         "raw_scores": raw_scores,
         "computed_scores": format_score.raw_to_struct(raw_scores, main_info),
         constant.TAGS_VIBE_SECTION: tags_vibe,
+        constant.GENRE_SECTION: genre_tags,
     }
 
 
@@ -85,17 +91,26 @@ def test_zero_delta_keeps_scores() -> None:
 
 
 def test_noise_experiment_summary() -> None:
+    if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
+        print("SKIP: Ridge недоступен в текущем окружении.")
+        return
+
     data = make_dataset()
     weights = constant.DEFAULT_WEIGHTS.copy()
+
+    def fit_with_ridge(train_data, start_weights, **_ignored) -> dict:
+        return linear_regression_train.train_ridge_for_benchmark(
+            data=train_data,
+            start_weights=start_weights,
+        )
+
     result = noise_experiment.run_noise_experiment(
         data=data,
         weights=weights,
         delta=0.5,
         runs=5,
-        fit_func=model.fit_weights,
+        fit_func=fit_with_ridge,
         seed=123,
-        passes=1,
-        step=0.5,
     )
 
     expected_keys = {

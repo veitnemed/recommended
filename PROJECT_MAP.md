@@ -1,34 +1,97 @@
 # Карта проекта
 
-`Terminal Movies Learn` — консольная лаборатория для личной модели вкуса. Пользователь собирает свои оценки, программа подтягивает данные из API, хранит вайб-теги и жанровую разметку, обучает модель и отдельно поддерживает общий пул кандидатов.
+`Terminal Movies Learn` - консольная система для ведения личного dataset оценок и обучения простой рекомендательной модели.
+
+Ниже карта проекта в текущем состоянии: какие папки за что отвечают и через какие точки проходит основная логика.
 
 ## Быстрый вход
 
-- [main.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/main.py:1) — точка входа.
-- [README.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/README.md:1) — пользовательское описание.
-- [PROJECT_MAP.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/PROJECT_MAP.md:1) — эта карта.
-- [requirements.txt](/d:/VS%20PROJJJ/vscode%20projects/recommended/requirements.txt:1) — зависимости.
+- [main.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/main.py:1) - вход в приложение.
+- [README.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/README.md:1) - пользовательское описание.
+- [PROJECT_MAP.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/PROJECT_MAP.md:1) - карта проекта.
+- [ADD_RECORD_RULES.md](/d:/VS%20PROJJJ/vscode%20projects/recommended/ADD_RECORD_RULES.md:1) - контракт добавления и изменения записей.
 
-Запуск:
+## Основной runtime-поток
 
-```powershell
-py main.py
-```
+1. `main.py` вызывает инициализацию storage.
+2. `interface.menu_state` собирает текущий state: dataset, weights, счётчики, ошибки модели.
+3. `interface.ui` печатает меню.
+4. `interface.global_menu` маршрутизирует пользователя по разделам.
+5. `interface.interface_funcs` запускает конкретные сценарии UI.
+6. `data_work` выполняет бизнес-логику: dataset, pool, SQL, TMDb, Excel.
+7. `model_work` строит признаки, считает предикт, ошибки и обучение.
 
-## Основной поток
+## Папки и роли
 
-1. `main.py` вызывает `storage.init_all_dates()`.
-2. Инициализация создаёт рабочие JSON-файлы: датасет, meta, веса, критерии пула, общий пул кандидатов и API-лог.
-3. `interface.menu_state.get_menu_state()` загружает датасет, веса, размер датасета и текущий `MAE`.
-4. `interface.ui` печатает главное меню.
-5. `interface.request` собирает и валидирует пользовательский ввод.
-6. `interface.global_menu` переводит пользователя в нужный раздел.
-7. `data_work` отвечает за хранение, Excel, backup, жанры, TST, переименование записи и общий пул кандидатов.
-8. `model_work` считает признаки, прогнозы, ошибки и обучение.
+### `config/`
+
+Базовые константы, схемы и каталоги признаков.
+
+- [config/constant.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/constant.py:1) - пути, названия секций, наборы признаков.
+- [config/scheme.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/scheme.py:1) - схема `main_info`, `raw_scores`, `tags_vibe`, `genre`.
+- [config/tags.json](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/tags.json:1) - vibe-теги.
+- [config/genre_tags.json](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/genre_tags.json:1) - жанровые признаки.
+- [config/genre_tags.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/genre_tags.py:1) - нормализация и генерация `has_*` жанров.
+
+### `core/`
+
+Низкоуровневая логика без привязки к меню.
+
+- [core/valid.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/core/valid.py:1) - валидация ввода и payload.
+- [core/format_score.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/core/format_score.py:1) - преобразование `raw_scores` в вычисляемые признаки.
+
+### `interface/`
+
+Консольный UI и маршрутизация.
+
+- [interface/ui.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/ui.py:1) - печать экранов и меню.
+- [interface/global_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/global_menu.py:1) - циклы меню и переходы между разделами.
+- [interface/interface_funcs.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/interface_funcs.py:1) - UI-оркестрация сценариев.
+- [interface/request.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/request.py:1) - формы, prompts, сбор `movie_request`.
+- [interface/title_presenters.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/title_presenters.py:1) - карточки SQL/API/defaults.
+- [interface/candidate_pool_ui.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/candidate_pool_ui.py:1) - интерактивная работа с criteria.
+- [interface/tags_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/tags_menu.py:1) - управление vibe-тегами.
+- [interface/backup_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/backup_menu.py:1) - backup и restore.
+
+### `data_work/`
+
+Основная прикладная логика данных.
+
+- [data_work/storage.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage.py:1) - фасад для storage-сервисов.
+- [data_work/storage_files.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_files.py:1) - файлы, каталоги, backup.
+- [data_work/storage_data.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_data.py:1) - dataset/meta/weights, rename title.
+- [data_work/storage_movie.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_movie.py:1) - `add_movie()`, Excel row -> movie payload, пересчёт computed.
+- [data_work/dataset_records.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/dataset_records.py:1) - центральный add/update service.
+- [data_work/storage_normalize.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_normalize.py:1) - нормализация `main_info`, `raw_scores`, `tags_vibe`, `genre`.
+- [data_work/excel_work.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/excel_work.py:1) - Excel export/import.
+- [data_work/candidate_pool.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/candidate_pool.py:1) - общий candidate pool: сбор, фильтры, ranking, retry KP, import/remove.
+- [data_work/tmdb_candidate_pool.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/tmdb_candidate_pool.py:1) - TMDb candidate pool v1.
+- [data_work/sql_search.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/sql_search.py:1) - поиск в локальной IMDb SQLite базе.
+- [data_work/title_resolve.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/title_resolve.py:1) - сбор defaults из SQL/API/TMDb и payload для переноса кандидата.
+- [data_work/genre_import.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/genre_import.py:1) - массовая жанровая разметка.
+- [data_work/dataset_stats.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/dataset_stats.py:1) - сводка dataset.
+- [data_work/genre_stats.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/genre_stats.py:1) - просмотр жанров dataset.
+
+### `integrations/`
+
+Внешние источники данных.
+
+- [integrations/api.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/integrations/api.py:1) - KP/внешний API для рейтингов, описаний и candidate-поиска.
+- [integrations/api_tmdb.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/integrations/api_tmdb.py:1) - TMDb Discover, Details и нормализация ответов.
+
+### `model_work/`
+
+Модель и обучение.
+
+- [model_work/model.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/model.py:1) - предикт, MAE, feature logic.
+- [model_work/linear_regression_train.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/linear_regression_train.py:1) - линейное обучение.
+- [model_work/train_modes.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/train_modes.py:1) - дополнительные режимы обучения и диагностики.
+- [model_work/train_report.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/train_report.py:1) - отчёт по модели.
+- [model_work/noise_experiment.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/noise_experiment.py:1) - шумовая устойчивость.
 
 ## Текущее меню
 
-### Главное
+### Главное меню
 
 1. `Данные`
 2. `Обучение`
@@ -37,216 +100,127 @@ py main.py
 5. `Пулл кандидатов`
 6. `Выгрузить отчёт`
 
-### Данные
+### `Пулл кандидатов`
 
-- открыть Excel
-- загрузить Excel
-- добавить запись
-- показать мои оценки
-- данные о датасете
-- прочитать оценки TST
-- бэкап
-- переименовать запись
+Главный экран:
 
-### Обучение
+1. `Собрать новый пулл`
+2. `Посмотреть пуллы кандидатов`
+3. `Собрать топ из общего пула`
+4. `Отметить просмотренные из пулла`
+5. `Управление пуллами`
+6. `Диагностика и обслуживание`
+0. `Главное меню`
 
-- быстрое обучение
-- случайная оптимизация
-- многошаговый координатный поиск
-- гибридная оптимизация
-- линейная регрессия
-- параметры обучения
+Подменю `Собрать новый пулл`:
 
-### Модель
+- `TMDb -> IMDb SQL -> KP API`
+- `Legacy IMDb SQL -> KP API`
+- `TMDb test-run`
 
-- признаки:
-  - вайб-тэги
-  - жанровая разметка
-  - показать веса модели
-  - сбросить веса модели
-- тесты эффективности
-- сделать прогноз
+Подменю `Управление пуллами`:
 
-### Дополнительно
+- `Удалить пулл`
+- `Фильтрация / редактирование критериев`
+- `Импортировать TMDb result в общий пул`
 
-- просмотр API признаков
-- показать все жанры датасета
-- показать влияние голосов
-- пересчитать raw оценки
+Подменю `Диагностика и обслуживание`:
 
-### Пулл кандидатов
+- `Показать подозрительные дубли`
+- `Добрать KP для неполных кандидатов`
+- `Показать вклады для кандидатов`
 
-- собрать пулл кандидатов
-- посмотреть пуллы кандидатов
-- собрать топ из общего пула
-- удалить пулл
-- показать подозрительные дубли
+## Ключевые потоки
 
-Сверху подменю выводится текущее число кандидатов в общем пуле.
+### 1. Ручное добавление записи
 
-## Папки и роли
+1. `interface.interface_funcs.request_object()`
+2. `interface.request.request_api_defaults(confirm_genres=True)`
+3. `data_work.title_resolve.resolve_title_for_training()`
+4. `interface.request.request_all_scores(defaults)`
+5. `data_work.storage_movie.add_movie(print_message=False)`
+6. `data_work.dataset_records.add_dataset_record()`
 
-### `config/`
+UI печатает финальное сообщение сам. Storage возвращает `AddRecordResult`.
 
-Центр схем, динамических каталогов и констант.
+### 2. Перенос кандидата из пула в dataset
 
-- [config/constant.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/constant.py:1) — пути, списки признаков, `bias`, пути к JSON кандидатов и API-логу.
-- [config/scheme.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/scheme.py:1) — схема секций `main_info`, `raw_scores`, `tags_vibe`, `genre`.
-- [config/tags.json](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/tags.json:1) — каталог вайб-тегов.
-- [config/genre_tags.json](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/genre_tags.json:1) — каталог жанровых признаков.
-- [config/genre_tags.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/config/genre_tags.py:1) — генерация, нормализация и миграция жанровых ключей в стиль `has_*`.
+1. `interface.interface_funcs.mark_candidate_as_watched()`
+2. выбор `criteria_name` и кандидата;
+3. `data_work.title_resolve.build_candidate_transfer_payload(candidate)`;
+4. предупреждение для incomplete-кандидата, если нужно;
+5. `interface.request.request_all_scores(defaults)`;
+6. `storage.add_movie(meta_payload=..., pool_candidate=..., print_message=False)`;
+7. `add_dataset_record()` сохраняет запись;
+8. после успеха связанный кандидат удаляется из общего пула.
 
-### `core/`
+### 3. Top prediction из общего пула
 
-Базовая логика без привязки к меню.
+1. `interface.interface_funcs.show_global_candidate_top()`
+2. загрузка всех кандидатов;
+3. runtime-фильтр через `filter_saved_candidates_for_prediction()`;
+4. ready-filter через `is_candidate_ready_for_prediction()`;
+5. ranking через `rank_candidates_by_predict()`.
 
-- [core/valid.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/core/valid.py:1) — валидация ввода.
-- [core/format_score.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/core/format_score.py:1) — преобразование рейтингов, голосов и тегов в признаки модели.
+Поддерживаемые runtime-фильтры:
 
-### `data_work/`
+- `criteria_name`;
+- `source`;
+- `country`;
+- `year_min`, `year_max`;
+- `include_genres`, `exclude_genres`;
+- `min_kp_score`, `min_kp_votes`;
+- `min_imdb_score`, `min_imdb_votes`;
+- `min_tmdb_score`, `min_tmdb_votes`;
+- `only_complete`.
 
-Хранение и подготовка данных.
+Если есть incomplete-кандидаты, UI показывает:
 
-- [data_work/storage.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage.py:1) — фасад над `storage_*` и `candidate_pool`.
-- [data_work/storage_files.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_files.py:1) — файлы, каталоги, backup, стартовая инициализация.
-- [data_work/storage_data.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_data.py:1) — dataset, meta, weights, безопасное переименование записи.
-- [data_work/storage_movie.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_movie.py:1) — добавление записи, валидация и сбор из Excel.
-- [data_work/storage_normalize.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_normalize.py:1) — нормализация raw, vibe и genre.
-- [data_work/excel_work.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/excel_work.py:1) — Excel-экспорт и импорт.
-- [data_work/tags_work.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/tags_work.py:1) — операции с вайб-тегами.
-- [data_work/genre_import.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/genre_import.py:1) — жанровая разметка из API с подтверждением.
-- [data_work/genre_stats.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/genre_stats.py:1) — сводка жанров датасета через API.
-- [data_work/dataset_stats.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/dataset_stats.py:1) — статистика датасета.
-- [data_work/tst_scores.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/tst_scores.py:1) — импорт оценок из TST.
-- [data_work/candidate_pool.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/candidate_pool.py:1) — критерии подбора, общий пул кандидатов, дедупликация, фильтрация просмотренного, удаление пуллов, диагностика подозрительных дублей и сбор признаков для топа без вайб-тегов.
+- сколько их пропущено;
+- preview первых incomplete;
+- подсказку про `Добрать KP для неполных кандидатов`.
 
-### `interface/`
+### 4. Retry KP для incomplete-кандидатов
 
-Консольный UI.
+1. `interface.interface_funcs.retry_kp_for_incomplete_candidates()`
+2. выбор scope: все или конкретный `criteria_name`;
+3. preview кандидатов на добор;
+4. подтверждение перед API-запросами;
+5. запуск `candidate_pool.retry_kp_enrichment_for_pool(...)`.
 
-- [interface/ui.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/ui.py:1) — экраны и меню.
-- [interface/request.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/request.py:1) — универсальный ввод, API-defaults, подтверждение или ручная правка жанров при добавлении.
-- [interface/global_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/global_menu.py:1) — маршрутизация по меню, включая отдельный раздел кандидатов.
-- [interface/interface_funcs.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/interface_funcs.py:1) — действия меню.
-- [interface/tags_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/tags_menu.py:1) — управление вайб-тегами.
-- [interface/backup_menu.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/backup_menu.py:1) — backup и восстановление.
-- [interface/train_params.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/train_params.py:1) — параметры эвристических режимов обучения.
+### 5. TMDb candidate pool v1
 
-### `model_work/`
+1. `interface.interface_funcs.run_tmdb_candidate_pool_flow()`
+2. выбор страны, режима и обычного запуска или test-run;
+3. ввод ранних Discover-фильтров:
+   - `year_min`;
+   - `year_max`;
+   - `min_tmdb_score`;
+   - `min_tmdb_votes`;
+4. `data_work.tmdb_candidate_pool.build_candidate_pool(...)`;
+5. сохранение отдельного TMDb result;
+6. при необходимости импорт через `import_tmdb_result_to_common_pool_flow()`.
 
-Модель, обучение и диагностика.
+## Где менять поведение
 
-- [model_work/model.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/model.py:1) — ядро модели: `bias`, признаки, прогноз, ошибки, эвристические алгоритмы.
-- [model_work/train_modes.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/train_modes.py:1) — пользовательские режимы обучения поверх эвристик.
-- [model_work/linear_regression_train.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/linear_regression_train.py:1) — `Ridge`, `Lasso`, `ElasticNet`, `SGDRegressor (MAE)`, `scipy minimize (MAE)`.
-- [model_work/train_report.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/train_report.py:1) — текстовый отчёт по обучению.
-- [model_work/noise_experiment.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/model_work/noise_experiment.py:1) — устойчивость к шуму.
+- меню и маршрутизацию: `interface/ui.py`, `interface/global_menu.py`
+- prompts и UI-сценарии: `interface/interface_funcs.py`, `interface/request.py`
+- правила сохранения записи: `data_work/storage_movie.py`, `data_work/dataset_records.py`
+- defaults и перенос кандидата: `data_work/title_resolve.py`
+- общий candidate pool: `data_work/candidate_pool.py`
+- TMDb pipeline: `integrations/api_tmdb.py`, `data_work/tmdb_candidate_pool.py`
+- SQL-поиск: `data_work/sql_search.py`
+- обучение и предикт: `model_work/model.py`, `model_work/linear_regression_train.py`
 
-### `integrations/`
+## Данные и артефакты
 
-Внешние источники данных.
-
-- [integrations/api.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/integrations/api.py:1) — поиск сериала, чтение рейтингов, голосов, стран, жанров, описаний, подбор кандидатов по фильтрам и запись API-лога.
-
-## Признаки модели
-
-Текущий вектор признаков собирается так:
-
-1. `bias = 1.0`
-2. `computed_scores` из `raw_scores`
-3. `tags_vibe`
-4. `genre`
-
-`genre` динамический:
-
-- известные жанры мапятся в осмысленные `has_*`;
-- новые жанры тоже приводятся к стилю `has_english_name`;
-- старые ключи `genre_*` мигрируют при чтении.
-
-## Общий пул кандидатов
-
-Главная идея:
-
-- есть один общий `candidate_pool.json`;
-- он считается единственным источником правды;
-- новые наборы критериев добавляют записи именно туда;
-- отдельный просмотр по набору критериев — это просто выборка по `criteria_name`;
-- общий пул автоматически очищается от объектов, уже попавших в основной датасет.
-
-### Дедупликация
-
-Пул схлопывает дубли по нормализованному названию и году.
-
-Дополнительно используется мягкое сравнение похожих названий:
-
-- нижний регистр;
-- `ё -> е`;
-- удаление пунктуации;
-- схлопывание пробелов;
-- сравнение compact-строк без пробелов;
-- similarity ratio;
-- сравнение набора слов.
-
-Если найдено несколько дублей, остаётся лучший вариант по:
-
-- `kp_score`
-- `kp_votes`
-- `imdb_score`
-- `imdb_votes`
-
-## Топ из общего пула
-
-Раздел `Пулл кандидатов -> Собрать топ из общего пула`:
-
-- читает всех кандидатов из общего пула;
-- собирает признаки без вайб-тегов;
-- использует текущие веса модели;
-- ранжирует по предикту;
-- печатает `Название (год): предикт`.
-
-## Добавление новой записи
-
-Поток ручного добавления:
-
-1. поиск сериала через API;
-2. показ названия, года, страны и краткого описания;
-3. показ жанров из API;
-4. подтверждение жанров или ручная правка;
-5. ввод оценки, вайб-тегов и жанровой разметки;
-6. сохранение записи;
-7. автоматическая очистка общего пула кандидатов от этого сериала.
-
-## API-лог
-
-Все запросы к API пишутся в:
-
-`C:/DATA/movies-learn/api_requests.log`
-
-Записываются события:
-
-- `api_request_start`
-- `api_request_attempt`
-- `api_request_success`
-- `api_request_http_error`
-- `api_request_network_error`
-- `api_request_timeout`
-- `api_request_os_error`
-- `api_request_failed`
-- `api_json_ok`
-- `api_bad_request_parameters`
-
-## Где чаще всего менять поведение
-
-- поменять меню: `interface/ui.py`, `interface/global_menu.py`
-- поменять схему данных: `config/scheme.py`, затем проверить `storage_normalize.py`
-- поменять правила жанров: `config/genre_tags.py`
-- поменять формулу признаков: `core/format_score.py`, `model_work/model.py`
-- поменять логику общего пула: `data_work/candidate_pool.py`
-- поменять безопасное переименование записи: `data_work/storage_data.py`
-- поменять API-интеграцию и логирование: `integrations/api.py`
-- поменять эвристическое обучение: `model_work/model.py`, `model_work/train_modes.py`
-- поменять линейное обучение: `model_work/linear_regression_train.py`
-- поменять Excel: `data_work/excel_work.py`
+- `C:/DATA/movies-learn/dataset.json` - dataset.
+- `C:/META/meta-movies-learn/meta_data.json` - meta.
+- `C:/DATA/movies-learn/weights.json` - веса модели.
+- `C:/DATA/movies-learn/candidate_pool.json` - общий candidate pool.
+- `data/candidate_pool/*.json|*.csv` - TMDb candidate pool result.
+- `data/cache/tmdb/` - локальный кэш TMDb Discover/Details.
+- `datasets/dataset_sql_light/imdb_light.sqlite3` - локальная IMDb SQLite база.
 
 ## Проверки
 
@@ -257,16 +231,12 @@ py tests\test.py
 py -c "import tests.test_encoding as t; t.run_tests()"
 ```
 
-После заметных изменений особенно полезно проверить:
+Для меню `candidate_pool` полезно отдельно проверять:
 
-- ручное добавление записи;
-- переименование записи;
-- Excel-экспорт и импорт;
-- жанровую разметку;
-- сбор кандидатов при рабочем API;
-- удаление пулла;
-- просмотр по конкретному набору критериев;
-- топ из общего пула;
-- диагностику подозрительных дублей;
-- обучение и сохранение весов;
-- восстановление из backup.
+- возврат по `0` из каждого подменю;
+- старый legacy flow;
+- TMDb flow;
+- import TMDb result;
+- top prediction с runtime-фильтрами;
+- retry KP с preview и подтверждением;
+- перенос кандидата в dataset через форму.

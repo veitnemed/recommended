@@ -4,15 +4,12 @@ from config import constant
 from config import scheme
 from core import format_score as format
 from core import valid
-from data_work.storage_data import add_movies_to_meta, get_meta_obj, is_origin_title, load_dataset, save_dataset
+from data_work.dataset_records import add_dataset_record
+from data_work.storage_data import load_dataset, save_dataset
 from data_work.storage_normalize import (
-    is_valid_genre_tags,
-    is_valid_tags_vibe,
     normalize_csv_row,
-    normalize_genre_tags,
     normalize_main_info,
     normalize_raw_scores,
-    normalize_tags_vibe,
 )
 
 
@@ -54,93 +51,17 @@ def rework_formated_scores() -> int:
     return updated_count
 
 
-def add_movie(movie: dict) -> bool:
+def add_movie(movie: dict, *, meta_payload=None, pool_candidate=None, print_message: bool = True):
     """Добавляет фильм в датасет."""
-    main_info = movie["main_info"]
-    input_raw_scores = movie["raw_scores"]
-    tags_vibe = normalize_tags_vibe(movie[constant.TAGS_VIBE_SECTION])
-    genre_tags = normalize_genre_tags(movie.get(constant.GENRE_SECTION, {}))
-
-    title = str(main_info["title"]).strip()
-    user_score = main_info["user_score"]
-
-    if valid.is_correct_title(title) is False:
-        print('Ошибка добавления! Некорректное название')
-        return False
-
-    if is_origin_title(title) is False:
-        print('Ошибка добавления! Такой объект уже добавлен')
-        return False
-
-    if valid.is_correct_score(str(user_score)) is False:
-        print('Ошибка добавления! Некорректное значение user_score')
-        return False
-
-    if valid.is_correct_year(str(main_info["year"])) is False:
-        print('Error add movie! Incorrect year')
-        return False
-
-    if is_valid_tags_vibe(tags_vibe) is False:
-        print('Ошибка добавления! Некорректные tags_vibe')
-        return False
-
-    if is_valid_genre_tags(genre_tags) is False:
-        print('Ошибка добавления! Некорректная жанровая разметка')
-        return False
-
-    meta_obj = get_meta_obj(title)
-    if meta_obj is None:
-        if valid.is_valid_raw_meta(input_raw_scores) is False:
-            print('Ошибка добавления! Некорректные raw_scores')
-            return False
-
-        raw_scores = normalize_raw_scores(input_raw_scores)
-
-        if add_movies_to_meta(main_info, raw_scores) is False:
-            return False
-    else:
-        raw_scores = meta_obj.get("raw_scores", meta_obj.get("raw"))
-
-    raw_scores = normalize_raw_scores(raw_scores)
-    new_main_info = normalize_main_info(main_info)
-    computed_scores = format.raw_to_struct(raw_scores, new_main_info)
-    features = {
-        constant.BIAS_FEATURE: 1.0
-    }
-    for feature in computed_scores:
-        features[feature] = computed_scores[feature]
-    for feature, value in format.tags_to_features(tags_vibe).items():
-        features[feature] = value
-    for feature, value in format.tags_to_features(genre_tags, constant.GENRE_SECTION).items():
-        features[feature] = value
-
-    if valid.is_valid_features(features) is False:
-        print('Ошибка добавления! Не хватает параметров')
-        print('Ожидались:', constant.FEATURES)
-        print('Получены:', list(features.keys()))
-        return False
-
-    data = load_dataset()
-
-    new_movie = {}
-    new_movie["main_info"] = new_main_info
-    new_movie["raw_scores"] = raw_scores
-    new_movie["computed_scores"] = computed_scores
-    new_movie[constant.TAGS_VIBE_SECTION] = tags_vibe
-    new_movie[constant.GENRE_SECTION] = genre_tags
-
-    data[title] = new_movie
-    save_dataset(data)
-
-    try:
-        from data_work import candidate_pool
-        pool = candidate_pool.load_candidate_pool()
-        pool = candidate_pool.remove_watched_candidates(pool)
-        candidate_pool.save_candidate_pool(pool)
-    except Exception:
-        pass
-
-    return True
+    result = add_dataset_record(
+        movie,
+        meta_payload=meta_payload,
+        source_name="add_movie",
+        pool_candidate=pool_candidate,
+    )
+    if print_message:
+        print(result.message)
+    return result
 
 
 def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict, genre_tags: dict = None) -> bool:
@@ -157,7 +78,7 @@ def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict, g
     movie[constant.TAGS_VIBE_SECTION] = tags_vibe
     movie[constant.GENRE_SECTION] = {} if genre_tags is None else genre_tags
 
-    return add_movie(movie)
+    return add_movie(movie).ok
 
 
 def build_movie_from_row(row: dict, row_number: int) -> dict:

@@ -8,21 +8,11 @@ from difflib import SequenceMatcher
 
 from config import constant
 from config import genre_tags
-from core import valid
 from core import format_score
 from integrations import api
 
 DISCOVER_PAGE_LIMIT = 30
 DISCOVER_PAGE_PAUSE_SECONDS = 1.0
-
-
-def format_optional_default(value) -> str:
-    """Возвращает подпись значения по умолчанию для необязательного фильтра."""
-    if value in (None, ""):
-        return "не важно"
-    if isinstance(value, list):
-        return ", ".join(value) if len(value) > 0 else "не важно"
-    return str(value)
 
 
 def init_candidate_criteria() -> None:
@@ -77,47 +67,34 @@ def save_candidate_pool(data: dict) -> None:
         json.dump(data, file, ensure_ascii=False, indent=4)
 
 
-def prompt_optional_int(label: str, default=None, min_value: int = 0) -> int | None:
-    """Запрашивает необязательное целое число."""
-    while True:
-        suffix = f" [{format_optional_default(default)}]"
-        answer = input(f"{label}{suffix} >> ").strip()
-        if answer == "":
-            return default
-        if valid.is_correct_votes(answer) is False:
-            print("Введите целое число 0 или больше.")
-            continue
-        value = int(answer)
-        if value < min_value:
-            print(f"Введите число не меньше {min_value}.")
-            continue
-        return value
+def save_named_criteria(criteria_name: str, criteria: dict) -> tuple[str, dict]:
+    """Сохраняет именованный набор критериев и возвращает его."""
+    all_criteria = load_candidate_criteria()
+    all_criteria[criteria_name] = criteria
+    save_candidate_criteria(all_criteria)
+    return criteria_name, criteria
 
 
-def prompt_optional_year(label: str, default=None) -> int | None:
-    """Запрашивает необязательный год."""
-    while True:
-        suffix = f" [{format_optional_default(default)}]"
-        answer = input(f"{label}{suffix} >> ").strip()
-        if answer == "":
-            return default
-        if valid.is_correct_year(answer) is False:
-            print(f"Введите год в диапазоне 2000-{constant.NOW_YEAR}.")
-            continue
-        return int(answer)
+def patch_criteria_filters(
+    criteria_name: str,
+    current: dict,
+    *,
+    min_kp,
+    genres: list,
+    excluded_genres: list,
+) -> dict:
+    """Обновляет у набора критериев только блок фильтрации."""
+    all_criteria = load_candidate_criteria()
 
+    updated = dict(current)
+    updated["min_kp"] = min_kp
+    updated["genres"] = genres
+    updated["excluded_genres"] = excluded_genres
+    updated["updated_at"] = datetime.now().isoformat(timespec="seconds")
 
-def prompt_optional_score(label: str, default=None) -> float | None:
-    """Запрашивает необязательную оценку."""
-    while True:
-        suffix = f" [{format_optional_default(default)}]"
-        answer = input(f"{label}{suffix} >> ").strip()
-        if answer == "":
-            return default
-        if valid.is_correct_score(answer) is False:
-            print("Введите число от 0 до 10.")
-            continue
-        return valid.parse_float(answer)
+    all_criteria[criteria_name] = updated
+    save_candidate_criteria(all_criteria)
+    return updated
 
 
 def normalize_genre_list(raw_value: str) -> list:
@@ -141,53 +118,6 @@ def get_available_genres() -> list:
     return sorted(set(genres))
 
 
-def choose_genres_by_numbers(current_genres: list | None = None) -> list:
-    """Дает выбрать жанры по номерам из списка."""
-    if current_genres is None:
-        current_genres = []
-
-    genres = get_available_genres()
-    if len(genres) == 0:
-        print("Список жанров пока пуст.")
-        return current_genres
-
-    print("Выберите жанры по номерам через пробел.")
-    print("Можно оставить пусто, тогда фильтра по жанрам не будет.\n")
-    for idx, genre_name in enumerate(genres, start=1):
-        print(f"{idx}. {genre_name[:1].upper() + genre_name[1:]}")
-
-    current_label = ", ".join(current_genres) if len(current_genres) > 0 else "не важно"
-    while True:
-        answer = input(f"\nНомера жанров [{current_label}] >> ").strip()
-        if answer == "":
-            return current_genres
-
-        parts = answer.split()
-        selected_indexes = []
-        for part in parts:
-            try:
-                index = int(part)
-            except ValueError:
-                selected_indexes = []
-                break
-            if 1 <= index <= len(genres):
-                selected_indexes.append(index)
-            else:
-                selected_indexes = []
-                break
-
-        if len(selected_indexes) == 0:
-            print("Введите номера жанров через пробел, например: 1 2 3")
-            continue
-
-        selected_genres = []
-        for index in selected_indexes:
-            genre_name = genres[index - 1]
-            if genre_name not in selected_genres:
-                selected_genres.append(genre_name)
-        return selected_genres
-
-
 def build_criteria_label(criteria_name: str, criteria: dict) -> str:
     """Формирует короткую подпись сохраненного набора критериев."""
     parts = [criteria_name]
@@ -199,64 +129,11 @@ def build_criteria_label(criteria_name: str, criteria: dict) -> str:
         parts.append(f"year>={criteria['min_year']}")
     if criteria.get("country"):
         parts.append(criteria["country"])
+    if criteria.get("genres"):
+        parts.append(f"жанры={len(criteria['genres'])}")
+    if criteria.get("excluded_genres"):
+        parts.append(f"искл={len(criteria['excluded_genres'])}")
     return " | ".join(parts)
-
-
-def choose_or_create_criteria() -> tuple[str, dict] | None:
-    """Дает выбрать сохраненный набор критериев или создать новый."""
-    all_criteria = load_candidate_criteria()
-    criteria_names = sorted(all_criteria.keys())
-
-    print("Сохраненные критерии:\n")
-    print(" 0 >> Создать новый набор")
-    for idx, name in enumerate(criteria_names, start=1):
-        print(f" {idx} >> {build_criteria_label(name, all_criteria[name])}")
-
-    while True:
-        answer = input("\nВыбор >> ").strip()
-        try:
-            select = int(answer)
-        except ValueError:
-            print("Введите номер пункта.")
-            continue
-
-        if 0 <= select <= len(criteria_names):
-            break
-        print("Такого пункта нет.")
-
-    if select == 0:
-        return create_criteria_interactive()
-
-    name = criteria_names[select - 1]
-    return name, all_criteria[name]
-
-
-def choose_existing_criteria() -> tuple[str, dict] | None:
-    """Дает выбрать только существующий набор критериев."""
-    all_criteria = load_candidate_criteria()
-    criteria_names = sorted(all_criteria.keys())
-    if len(criteria_names) == 0:
-        print("Сохраненных критериев пока нет.")
-        return None
-
-    print("Сохраненные критерии:\n")
-    for idx, name in enumerate(criteria_names, start=1):
-        print(f" {idx} >> {build_criteria_label(name, all_criteria[name])}")
-
-    while True:
-        answer = input("\nВыбор >> ").strip()
-        try:
-            select = int(answer)
-        except ValueError:
-            print("Введите номер пункта.")
-            continue
-
-        if 1 <= select <= len(criteria_names):
-            break
-        print("Такого пункта нет.")
-
-    name = criteria_names[select - 1]
-    return name, all_criteria[name]
 
 
 def delete_criteria_and_candidates(criteria_name: str) -> dict:
@@ -285,49 +162,6 @@ def delete_criteria_and_candidates(criteria_name: str) -> dict:
         "deleted_criteria": True,
         "deleted_candidates": deleted_candidates,
     }
-
-
-def create_criteria_interactive() -> tuple[str, dict] | None:
-    """Запрашивает новый набор критериев и сохраняет его."""
-    all_criteria = load_candidate_criteria()
-
-    while True:
-        criteria_name = input("Название набора критериев >> ").strip()
-        if criteria_name == "":
-            print("Название не должно быть пустым.")
-            continue
-        break
-
-    current = all_criteria.get(criteria_name, {})
-    country_default = current.get("country")
-    country_answer = input(f"Страна [{format_optional_default(country_default)}] >> ").strip()
-    country = country_answer if country_answer != "" else country_default
-    count = prompt_optional_int("Сколько кандидатов собрать", current.get("count", 20), min_value=1)
-    min_kp = prompt_optional_score("Минимальный рейтинг KP", current.get("min_kp"))
-    min_imdb = prompt_optional_score("Минимальный рейтинг IMDb", current.get("min_imdb"))
-    min_kp_votes = prompt_optional_int("Минимум голосов KP", current.get("min_kp_votes"))
-    min_imdb_votes = prompt_optional_int("Минимум голосов IMDb", current.get("min_imdb_votes"))
-    min_year = prompt_optional_year("Минимальный год", current.get("min_year"))
-    max_year = prompt_optional_year("Максимальный год", current.get("max_year"))
-    genres_default = current.get("genres", [])
-    genres = choose_genres_by_numbers(genres_default)
-
-    criteria = {
-        "country": country,
-        "count": count,
-        "min_kp": min_kp,
-        "min_imdb": min_imdb,
-        "min_kp_votes": min_kp_votes,
-        "min_imdb_votes": min_imdb_votes,
-        "min_year": min_year,
-        "max_year": max_year,
-        "genres": genres,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-
-    all_criteria[criteria_name] = criteria
-    save_candidate_criteria(all_criteria)
-    return criteria_name, criteria
 
 
 def candidate_key(movie: dict) -> str:
@@ -493,15 +327,20 @@ def remove_watched_candidates(pool: dict) -> dict:
     return filtered
 
 
-def movie_matches_genres(movie: dict, expected_genres: list) -> bool:
-    """Проверяет совпадение хотя бы по одному жанру."""
-    if len(expected_genres) == 0:
-        return True
+def movie_matches_genres(movie: dict, expected_genres: list, excluded_genres: list | None = None) -> bool:
+    """Проверяет обязательные и исключенные жанры кандидата."""
+    if excluded_genres is None:
+        excluded_genres = []
     actual = {
         str(item.get("name", "")).strip().casefold()
         for item in movie.get("genres", []) or []
         if isinstance(item, dict) and item.get("name")
     }
+    blocked = {genre.casefold() for genre in excluded_genres}
+    if len(actual & blocked) > 0:
+        return False
+    if len(expected_genres) == 0:
+        return True
     wanted = {genre.casefold() for genre in expected_genres}
     return len(actual & wanted) > 0
 
@@ -569,7 +408,11 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
         for movie in docs:
             scanned += 1
 
-            if movie_matches_genres(movie, criteria.get("genres", [])) is False:
+            if movie_matches_genres(
+                movie,
+                criteria.get("genres", []),
+                criteria.get("excluded_genres", []),
+            ) is False:
                 continue
 
             candidate = normalize_candidate(movie, criteria_name)
@@ -638,6 +481,274 @@ def get_all_candidates() -> list:
         )
     )
     return candidates
+
+
+def _normalized_optional_text(value) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _candidate_list_values(candidate: dict, field_name: str) -> list[str]:
+    values = []
+    for item in candidate.get(field_name, []) or []:
+        text = str(item or "").strip()
+        if text != "":
+            values.append(text)
+    return values
+
+
+def _matches_optional_country(candidate: dict, country_filter: str | None) -> bool:
+    expected = _normalized_optional_text(country_filter)
+    if expected == "":
+        return True
+
+    countries = [_normalized_optional_text(item) for item in _candidate_list_values(candidate, "countries")]
+    if len(countries) == 0:
+        return False
+
+    for country in countries:
+        if country == expected:
+            return True
+        if expected in country or country in expected:
+            return True
+    return False
+
+
+def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude_genres: list[str]) -> bool:
+    candidate_genres = {_normalized_optional_text(item) for item in _candidate_list_values(candidate, "genres")}
+    candidate_genres.discard("")
+
+    include = {_normalized_optional_text(item) for item in include_genres or []}
+    include.discard("")
+    exclude = {_normalized_optional_text(item) for item in exclude_genres or []}
+    exclude.discard("")
+
+    if len(exclude & candidate_genres) > 0:
+        return False
+    if len(include) == 0:
+        return True
+    return len(include & candidate_genres) > 0
+
+
+def _matches_min_value(candidate: dict, field_name: str, min_value) -> bool:
+    if min_value is None:
+        return True
+    current = candidate.get(field_name)
+    if current is None or str(current).strip() == "":
+        return False
+    return current >= min_value
+
+
+def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> list:
+    """Фильтрует уже сохранённых кандидатов из общего пула перед prediction."""
+    criteria_name = filters.get("criteria_name")
+    source = filters.get("source")
+    country = filters.get("country")
+    year_min = filters.get("year_min")
+    year_max = filters.get("year_max")
+    include_genres = filters.get("include_genres") or []
+    exclude_genres = filters.get("exclude_genres") or []
+    min_kp_score = filters.get("min_kp_score")
+    min_kp_votes = filters.get("min_kp_votes")
+    min_imdb_score = filters.get("min_imdb_score")
+    min_imdb_votes = filters.get("min_imdb_votes")
+    min_tmdb_score = filters.get("min_tmdb_score")
+    min_tmdb_votes = filters.get("min_tmdb_votes")
+    only_complete = filters.get("only_complete", True)
+
+    filtered = []
+    for candidate in candidates:
+        if criteria_name and candidate.get("criteria_name") != criteria_name:
+            continue
+        if source and candidate.get("source") != source:
+            continue
+        if _matches_optional_country(candidate, country) is False:
+            continue
+
+        year = candidate.get("year")
+        if year_min is not None and (year is None or year < year_min):
+            continue
+        if year_max is not None and (year is None or year > year_max):
+            continue
+
+        if _matches_optional_genres(candidate, include_genres, exclude_genres) is False:
+            continue
+
+        if _matches_min_value(candidate, "kp_score", min_kp_score) is False:
+            continue
+        if _matches_min_value(candidate, "kp_votes", min_kp_votes) is False:
+            continue
+        if _matches_min_value(candidate, "imdb_score", min_imdb_score) is False:
+            continue
+        if _matches_min_value(candidate, "imdb_votes", min_imdb_votes) is False:
+            continue
+        if _matches_min_value(candidate, "tmdb_score", min_tmdb_score) is False:
+            continue
+        if _matches_min_value(candidate, "tmdb_votes", min_tmdb_votes) is False:
+            continue
+
+        if only_complete and "is_complete" in candidate and candidate.get("is_complete") is not True:
+            continue
+
+        filtered.append(candidate)
+
+    return filtered
+
+
+def _has_prediction_value(value) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def is_candidate_ready_for_prediction(candidate: dict) -> bool:
+    """Проверяет, можно ли безопасно считать обычный предикт для кандидата."""
+    has_all_prediction_fields = (
+        _has_prediction_value(candidate.get("kp_score"))
+        and _has_prediction_value(candidate.get("kp_votes"))
+        and _has_prediction_value(candidate.get("imdb_score"))
+        and _has_prediction_value(candidate.get("imdb_votes"))
+    )
+    if has_all_prediction_fields is False:
+        return False
+
+    if "is_complete" in candidate:
+        return candidate.get("is_complete") is True
+
+    return True
+
+
+def append_signal(candidate: dict, signal: str) -> None:
+    """Добавляет signal кандидату без дублей."""
+    signals = candidate.setdefault("signals", [])
+    if signal not in signals:
+        signals.append(signal)
+
+
+def is_candidate_incomplete(candidate: dict) -> bool:
+    """Проверяет, нужны ли кандидату повторные попытки добора KP."""
+    return (
+        candidate.get("is_complete") is False
+        or candidate.get("kp_score") is None
+        or candidate.get("kp_votes") is None
+        or candidate.get("kp_status") in {"not_found", "pending_limit", "error"}
+    )
+
+
+def get_incomplete_candidates(pool: dict, criteria_name: str | None = None) -> list:
+    """Возвращает неполных кандидатов из общего пула, опционально по критерию."""
+    return [
+        candidate
+        for candidate in pool.values()
+        if (criteria_name is None or candidate.get("criteria_name") == criteria_name)
+        and is_candidate_incomplete(candidate)
+    ]
+
+
+def _criteria_country(criteria_name: str | None) -> str:
+    if criteria_name is None:
+        return "Россия"
+
+    criteria = load_candidate_criteria().get(criteria_name, {})
+    return criteria.get("country") or "Россия"
+
+
+def _mark_kp_retry_attempt(candidate: dict) -> None:
+    candidate["kp_attempts"] = int(candidate.get("kp_attempts") or 0) + 1
+    candidate["last_kp_attempt_at"] = datetime.now().isoformat(timespec="seconds")
+
+
+def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = None) -> dict:
+    """Повторно добирает KP-данные для неполных кандидатов в общем candidate_pool."""
+    from data_work import tmdb_candidate_pool
+
+    pool = load_candidate_pool()
+    incomplete_candidates = get_incomplete_candidates(pool, criteria_name=criteria_name)
+    selected_candidates = incomplete_candidates[:max(0, int(limit))]
+    stats = {
+        "incomplete_found": len(incomplete_candidates),
+        "attempted": 0,
+        "kp_found": 0,
+        "kp_not_found": 0,
+        "api_errors": 0,
+        "became_complete": 0,
+        "remaining_incomplete": 0,
+    }
+
+    for candidate in selected_candidates:
+        stats["attempted"] += 1
+        _mark_kp_retry_attempt(candidate)
+
+        country = _criteria_country(candidate.get("criteria_name") or criteria_name)
+        queries = tmdb_candidate_pool.unique_non_empty([
+            candidate.get("title"),
+            candidate.get("original_title"),
+            candidate.get("alternative_title"),
+        ])
+        year = tmdb_candidate_pool.candidate_year(candidate)
+        if len(queries) == 0:
+            candidate["kp_status"] = "not_found"
+            candidate["is_complete"] = False
+            candidate["last_kp_error"] = "empty_query"
+            append_signal(candidate, "kp_api_not_found_retry")
+            stats["kp_not_found"] += 1
+            continue
+
+        found = False
+        last_error = None
+        for query in queries:
+            result = api.find_series_raw(str(query), country, year=year)
+            if result.get("ok") is False:
+                error_code = result.get("error") or "unknown"
+                if error_code in {"not_found", "country_not_found", "empty_title"}:
+                    last_error = error_code
+                    continue
+
+                candidate["kp_status"] = "error"
+                candidate["is_complete"] = False
+                candidate["last_kp_error"] = error_code
+                append_signal(candidate, "kp_api_error_retry")
+                stats["api_errors"] += 1
+                found = True
+                break
+
+            movie = result.get("data") or {}
+            is_safe, reason = tmdb_candidate_pool.kp_match_is_safe(candidate, movie)
+            if is_safe is False:
+                last_error = f"rejected_{reason}"
+                candidate["kp_status"] = "not_found"
+                candidate["is_complete"] = False
+                candidate["last_kp_error"] = last_error
+                append_signal(candidate, f"kp_api_retry_rejected_{reason}")
+                continue
+
+            tmdb_candidate_pool.fill_candidate_from_kp_api(candidate, movie)
+            candidate["kp_score"] = candidate.get("kp_rating")
+            candidate["kp_status"] = "done"
+            candidate["is_complete"] = (
+                candidate.get("kp_score") is not None
+                and candidate.get("kp_votes") is not None
+                and candidate.get("imdb_score") is not None
+                and candidate.get("imdb_votes") is not None
+            )
+            candidate.pop("last_kp_error", None)
+            append_signal(candidate, "kp_api_hit_retry")
+            stats["kp_found"] += 1
+            if candidate["is_complete"]:
+                stats["became_complete"] += 1
+            found = True
+            break
+
+        if found:
+            continue
+
+        candidate["kp_status"] = "not_found"
+        candidate["is_complete"] = False
+        candidate["last_kp_error"] = last_error or "not_found"
+        append_signal(candidate, "kp_api_not_found_retry")
+        stats["kp_not_found"] += 1
+
+    stats["remaining_incomplete"] = len(get_incomplete_candidates(pool, criteria_name=criteria_name))
+    if stats["attempted"] > 0:
+        save_candidate_pool(pool)
+    return stats
 
 
 def remove_candidate_from_pool(target_candidate: dict) -> int:
@@ -724,3 +835,74 @@ def find_suspicious_duplicates() -> list:
 
     suspicious_pairs.sort(key=lambda item: item["ratio"], reverse=True)
     return suspicious_pairs
+
+
+def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
+    """Ранжирует кандидатов по предикту модели без вайб-тегов."""
+    from model_work import model
+
+    no_vibe_features = [
+        feature for feature in constant.FEATURES
+        if feature not in constant.TAGS_VIBE
+    ]
+    prediction_weights = model.make_group_weights(weights, no_vibe_features)
+
+    scored_candidates = []
+    for candidate in candidates:
+        features = build_candidate_features(candidate)
+        predict = model.predict_score(features, prediction_weights)
+        scored_candidates.append({
+            "title": candidate.get("title") or "Без названия",
+            "year": candidate.get("year") or "?",
+            "predict": predict,
+        })
+
+    scored_candidates.sort(key=lambda item: item["predict"], reverse=True)
+    return scored_candidates
+
+
+def candidate_feature_contributions(candidate: dict, weights: dict) -> dict:
+    """Считает вклад каждого признака в предикт кандидата без вайб-тегов."""
+    from model_work import model
+
+    no_vibe_features = [
+        feature for feature in constant.FEATURES
+        if feature not in constant.TAGS_VIBE
+    ]
+    prediction_weights = model.make_group_weights(weights, no_vibe_features)
+    features = build_candidate_features(candidate)
+    predict = model.predict_score(features, prediction_weights)
+
+    contributions = []
+    for feature in no_vibe_features:
+        value = features.get(feature, 0)
+        weight = prediction_weights.get(feature, 0)
+        impact = value * weight
+        if impact == 0 and feature != constant.BIAS_FEATURE:
+            continue
+        contributions.append({
+            "feature": feature,
+            "label": constant.FIELD_LABELS.get(feature, feature),
+            "value": value,
+            "weight": weight,
+            "impact": impact,
+        })
+
+    positive = sorted(
+        [row for row in contributions if row["impact"] > 0],
+        key=lambda row: row["impact"],
+        reverse=True,
+    )
+    negative = sorted(
+        [row for row in contributions if row["impact"] < 0],
+        key=lambda row: row["impact"],
+    )
+
+    return {
+        "title": candidate.get("title") or "Без названия",
+        "year": candidate.get("year") or "?",
+        "criteria_name": candidate.get("criteria_name") or "",
+        "predict": predict,
+        "positive": positive,
+        "negative": negative,
+    }

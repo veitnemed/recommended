@@ -1,6 +1,7 @@
 """Печатает экраны, заголовки и пункты терминального меню."""
 
 import os
+import sys
 
 
 MENU_WIDTH = 38
@@ -8,7 +9,8 @@ MENU_WIDTH = 38
 
 def clean_terminal():
     """Очищает терминал."""
-    os.system('cls')
+    if sys.stdout.isatty():
+        os.system('cls')
 
 
 def press_enter():
@@ -31,10 +33,14 @@ def show_header(movies_counter: int, error: int):
     print(' ' * 12, f"MAE: {round(error * 10, 2)} %\n")
 
 
-def show_global_menu(movies_counter: int, error: int, kp_error: int):
+def show_global_menu(movies_counter: int, error: int, kp_error: int, loo_mae=None):
     """Печатает главное меню."""
     show_header(movies_counter, error)
     print(' ' * 9, f"KP_MAE: {round(kp_error * 10, 2)} %\n")
+    if loo_mae is None:
+        print(' ' * 8, "LOO MAE: не рассчитан\n")
+    else:
+        print(' ' * 8, f"LOO MAE: {float(loo_mae):.4f}\n")
     print(' 1 >> Данные')
     print(' 2 >> Обучение')
     print(' 3 >> Модель')
@@ -53,9 +59,8 @@ def show_data_menu(movies_counter: int, error: int):
     print(' 3 >> Добавить запись')
     print(' 4 >> Показать мои оценки')
     print(' 5 >> Данные о датасете')
-    print(' 6 >> Прочитать оценки TST')
-    print(' 7 >> Бэкап')
-    print(' 8 >> Переименовать запись')
+    print(' 6 >> Бэкап')
+    print(' 7 >> Переименовать запись')
     print(' 0 >> Главное меню\n')
 
 
@@ -64,26 +69,50 @@ def show_candidate_pool_menu(movies_counter: int, error: int, candidates_count: 
     show_header(movies_counter, error)
     show_menu_title('ПУЛЛ КАНДИДАТОВ')
     print(f'Всего кандидатов: {candidates_count}\n')
-    print(' 1 >> Собрать пулл кандидатов')
+    print(' 1 >> Собрать новый пулл')
     print(' 2 >> Посмотреть пуллы кандидатов')
     print(' 3 >> Собрать топ из общего пула')
-    print(' 4 >> Удалить пулл')
-    print(' 5 >> Отметить просмотренные из пулла')
-    print(' 6 >> Показать подозрительные дубли')
+    print(' 4 >> Отметить просмотренные из пулла')
+    print(' 5 >> Управление пуллами')
+    print(' 6 >> Диагностика и обслуживание')
     print(' 0 >> Главное меню\n')
 
 
-def show_train_menu(movies_counter: int, error: int, step: float, plateau_score: int):
+def show_candidate_pool_collect_menu():
+    """Печатает подменю сборки нового пула кандидатов."""
+    show_menu_title('СОБРАТЬ НОВЫЙ ПУЛЛ')
+    print(' 1 >> TMDb -> IMDb SQL -> KP API')
+    print(' 2 >> Legacy IMDb SQL -> KP API')
+    print(' 3 >> TMDb test-run')
+    print(' 0 >> Назад\n')
+
+
+def show_candidate_pool_management_menu():
+    """Печатает подменю управления сохранёнными пулами."""
+    show_menu_title('УПРАВЛЕНИЕ ПУЛЛАМИ')
+    print(' 1 >> Удалить пулл')
+    print(' 2 >> Фильтрация / редактирование критериев')
+    print(' 3 >> Импортировать TMDb result в общий пул')
+    print(' 0 >> Назад\n')
+
+
+def show_candidate_pool_diagnostics_menu():
+    """Печатает подменю диагностики и обслуживания пула."""
+    show_menu_title('ДИАГНОСТИКА И ОБСЛУЖИВАНИЕ')
+    print(' 1 >> Показать подозрительные дубли')
+    print(' 2 >> Добрать KP для неполных кандидатов')
+    print(' 3 >> Показать вклады для кандидатов')
+    print(' 0 >> Назад\n')
+
+
+def show_train_menu(movies_counter: int, error: int):
     """Печатает меню обучения."""
     show_header(movies_counter, error)
     show_menu_title('ОБУЧЕНИЕ')
-    print(f'Шаг: {step} | Плато: {plateau_score} попыток без улучшения\n')
-    print(' 1 >> Быстрое обучение')
-    print(' 2 >> Случайная оптимизация')
-    print(' 3 >> Многошаговый координатный поиск')
-    print(' 4 >> Гибридная оптимизация')
-    print(' 5 >> Линейная регрессия')
-    print(' 6 >> Параметры обучения\n')
+    print(' 1 >> Линейная регрессия')
+    print(' 2 >> Попарное сравнение оценок')
+    print(' 3 >> Проверка устойчивости к шуму')
+    print(' 4 >> LOO обучение')
     print(' 0 >> Главное меню\n')
 
 
@@ -128,7 +157,7 @@ def show_extra_menu(movies_counter: int, error: int):
     print(' 2 >> Показать все жанры датасета')
     print(' 3 >> Показать влияние голосов')
     print(' 4 >> Пересчитать raw оценки')
-    print(' 5 >> Тест Kino-Teatr скрапера')
+    print(' 5 >> Поиск в SQL по названию')
     print(' 0 >> Главное меню\n')
 
 

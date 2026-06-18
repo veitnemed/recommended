@@ -2,8 +2,7 @@
 
 from config import constant
 from core import format_score
-import random as rnd
-
+from data_work import storage
 
 def iter_movies(data):
     """Возвращает список фильмов из датасета любого поддерживаемого формата."""
@@ -70,16 +69,59 @@ def mean_absolute_error(data: list, weights=constant.DEFAULT_WEIGHTS) -> float:
 
 def kp_mean_absolute_error(data: list) -> float:
     """Считает ошибку рейтинга Кинопоиска относительно личных оценок."""
+    return raw_score_mean_absolute_error(data, "kp_score")
+
+
+def imdb_mean_absolute_error(data: list) -> float:
+    """Считает ошибку рейтинга IMDb относительно личных оценок."""
+    return raw_score_mean_absolute_error(data, "imdb_score")
+
+
+def raw_score_mean_absolute_error(data: list, score_field: str) -> float:
+    """Считает MAE raw-рейтинга, пропуская пустые и нечисловые значения."""
     movies = iter_movies(data)
-    length = len(movies)
+    scored = 0
     absolute_error = 0
-    if length == 0:
-        return 0
+
     for obj in movies:
-        user_score = get_user_score(obj)
-        kp_score = obj["raw_scores"]["kp_score"]
-        absolute_error += abs(user_score - kp_score) / length
-    return absolute_error
+        raw_scores = obj.get("raw_scores", {})
+        try:
+            raw_score = float(raw_scores[score_field])
+            user_score = float(get_user_score(obj))
+        except (KeyError, TypeError, ValueError):
+            continue
+
+        absolute_error += abs(user_score - raw_score)
+        scored += 1
+
+    if scored == 0:
+        return 0
+    return absolute_error / scored
+
+
+def save_weights_if_loo_improved(
+    new_weights: dict,
+    dataset,
+    new_loo_mae: float,
+    source_name: str = "Обучение модели",
+) -> bool:
+    """Сохраняет веса только если новый LOO MAE лучше сохраненного значения."""
+    current_loo_mae = storage.get_saved_loo_mae()
+
+    print(f"LOO MAE новых весов: {new_loo_mae:.4f}")
+    if current_loo_mae is None:
+        print("Текущий сохраненный LOO MAE: не рассчитан")
+    else:
+        print(f"Текущий сохраненный LOO MAE: {current_loo_mae:.4f}")
+
+    if current_loo_mae is not None and new_loo_mae >= current_loo_mae:
+        print(f"Веса отклонены: LOO MAE не улучшился ({source_name}).")
+        return False
+
+    storage.save_weights(new_weights)
+    storage.set_saved_loo_mae(new_loo_mae)
+    print(f"Веса сохранены: LOO MAE улучшился ({source_name}).")
+    return True
 
 
 def mean_error(data: list, weights=constant.DEFAULT_WEIGHTS) -> float:
@@ -149,18 +191,6 @@ def print_feature_group_mae(data: list, weights: dict) -> dict:
         "only_vibe_mae": only_vibe_mae,
     }
 
-def choice_rand_features(amount: int = 2) -> list:
-    """Выбирает случайные признаки модели."""
-    features = list(constant.DEFAULT_WEIGHTS.keys())
-    amount = min(amount, len(features))
-    return rnd.sample(features, amount)
-
-
-def choice_rand_fatures(amount: int = 2) -> list:
-    """Вызывает выбор случайных признаков через старое имя функции."""
-    return choice_rand_features(amount)
-
-
 def normalize_weights(weights: dict) -> dict:
     """Нормализует веса так, чтобы их сумма была равна единице."""
     total_weight = sum(weights.values())
@@ -173,108 +203,36 @@ def normalize_weights(weights: dict) -> dict:
     return normalized
 
 
-def fit_weights_2(
-        data: list,
-        start_weights=constant.DEFAULT_WEIGHTS,
-        score=5000,
-        step: float = constant.STEP
-) -> dict:
-    """Подбирает веса случайными переносами веса между признаками."""
-    data = iter_movies(data)
-    
-    if len(data) == 0:
-        return start_weights.copy()
-
-    weights = start_weights.copy()
-    error = mean_absolute_error(data, weights)
-    
-    not_mutations = 0
-    while True:
-        
-        f1, f2 = choice_rand_features()
-        new_weights = weights.copy()
-
-        if new_weights[f2] < step:
-            continue
-
-        new_weights[f1] += step
-        new_weights[f2] -= step
-
-        new_error = mean_absolute_error(data, new_weights)
-
-        if new_error < error:
-            
-            weights = new_weights
-            error = new_error
-            not_mutations = 0
-        not_mutations +=1
-        
-        if not_mutations == score:
-            break
-    return normalize_weights(weights)
-
-
-def fit_weights_until_plateau(
-        data: list,
-        start_weights=constant.DEFAULT_WEIGHTS,
-        score=5000,
-        step: float = constant.STEP
-) -> dict:
-    """Подбирает веса до остановки улучшений."""
-    return fit_weights_2(data, start_weights, score, step)
-        
-       
-def fit_weights(
-        data: list,
-        start_weights=constant.DEFAULT_WEIGHTS,
-        passes: int = 3,
-        step: float = constant.STEP
-) -> dict:
-    """Подбирает веса перебором значений с заданным шагом."""
-    data = iter_movies(data)
-    
-    if len(data) == 0:
-        return start_weights.copy()
-
-    weights = start_weights.copy()
-
-    for _ in range(passes):
-        for feature in weights.keys():
-            best_error = mean_absolute_error(data, weights)
-            best_weight = weights[feature]
-
-            for i in range(int(1 / step) + 1):
-                test_weight = i * step
-                weights[feature] = test_weight
-
-                error = mean_absolute_error(data, weights)
-
-                if error < best_error:
-                    best_error = error
-                    best_weight = test_weight
-
-            weights[feature] = best_weight
-
-    return weights
-
-
 def one_to_one_error(data: list, top_n):
     """Проверяет модель методом leave-one-out."""
+    from model_work import linear_regression_train
+
     data = iter_movies(data)
 
     if len(data) < 2:
         print('Недостаточно данных для leave-one-out проверки')
         return 0
 
+    if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
+        print(
+            "Проверка leave-one-out недоступна: "
+            f"не установлен метод {linear_regression_train.BENCHMARK_METHOD_LABEL}."
+        )
+        return 0
+
     length_data = len(data)
     mean_error = 0
     result = []
+    print(f"LOO benchmark training method: {linear_regression_train.BENCHMARK_METHOD_LABEL}")
     for idx in range(length_data):
         train_data = data.copy()
         test_movie = train_data.pop(idx)
 
         user_score = get_user_score(test_movie)
-        new_weights = fit_weights(train_data)
+        new_weights = linear_regression_train.train_ridge_for_benchmark(
+            data=train_data,
+            start_weights=constant.DEFAULT_WEIGHTS,
+        )
         features = get_features(test_movie)
         predict = predict_score(features, new_weights)
         signed_error = predict - user_score
@@ -333,11 +291,11 @@ def split_error_rows(rows: list, top_n: int) -> tuple:
     overestimated = sorted(
         [row for row in rows if row["signed_error"] > 0],
         key=lambda row: row["signed_error"],
-        reverse=True
+        reverse=True,
     )[:top_n]
     underestimated = sorted(
         [row for row in rows if row["signed_error"] < 0],
-        key=lambda row: row["signed_error"]
+        key=lambda row: row["signed_error"],
     )[:top_n]
     return overestimated, underestimated
 
@@ -404,34 +362,23 @@ def selection_weights_without_feature(
         default_weights: dict = constant.DEFAULT_WEIGHTS
 ):
     """Подбирает веса модели без указанного признака."""
+
     data = iter_movies(data)
 
     if len(data) == 0:
         return default_weights.copy()
 
-    weights_select = default_weights.copy()
+    features = [feature for feature in constant.FEATURES if feature != excluded_feature]
+    if len(features) == 0:
+        return {}
 
-    if excluded_feature in weights_select:
-        weights_select.pop(excluded_feature)
+    from model_work import linear_regression_train
 
-    features = list(weights_select.keys())
-
-    for feature in features:
-        min_error = mean_absolute_error(data, weights_select)
-        min_weight = weights_select[feature]
-
-        for i in range(int(1 / constant.STEP) + 1):
-            weight = i * constant.STEP
-            weights_select[feature] = weight
-
-            error = mean_absolute_error(data, weights_select)
-
-            if error < min_error:
-                min_error = error
-                min_weight = weight
-
-        weights_select[feature] = min_weight
-
-    return weights_select
-
-
+    trained_weights = linear_regression_train.train_ridge_for_benchmark(
+        data=data,
+        start_weights=default_weights,
+    )
+    return {
+        feature: trained_weights.get(feature, 0.0)
+        for feature in features
+    }
