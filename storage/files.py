@@ -29,7 +29,7 @@ def is_file_writable(file_name: str) -> bool:
 
 def create_backup():
     """Создает резервную копию датасета."""
-    from data_work.storage_data import load_dataset
+    from storage.data import load_dataset
 
     dataset = load_dataset()
     date_name = datetime.now().strftime('%d-%m-%Y %H-%M-%S-%f')
@@ -64,7 +64,7 @@ def get_backup_label(file_path: Path) -> str:
 
 def restore_backup(file_path: Path) -> int:
     """Загружает выбранный backup в основной датасет и возвращает число записей."""
-    from data_work.storage_data import save_dataset
+    from storage.data import save_dataset
 
     with open(file_path, 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
@@ -80,7 +80,7 @@ def restore_backup(file_path: Path) -> int:
 def init_all_dates():
     """Инициализирует все рабочие файлы данных."""
     from candidates.candidate_pool import init_candidate_criteria, init_candidate_pool
-    from data_work.storage_data import init_dataset, init_meta, init_model_metrics, init_weights
+    from storage.data import init_dataset, init_meta, init_model_metrics, init_weights
 
     init_meta()
     init_dataset()

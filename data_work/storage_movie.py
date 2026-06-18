@@ -5,8 +5,8 @@ from config import scheme
 from common import format_score as format
 from common import valid
 from data_work.dataset_records import add_dataset_record
-from data_work.storage_data import load_dataset, save_dataset
-from data_work.storage_normalize import (
+from storage.data import load_dataset, save_dataset
+from storage.normalize import (
     normalize_csv_row,
     normalize_main_info,
     normalize_raw_scores,

@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from config import constant
 from common import format_score
 from common import valid
-from data_work.storage_data import add_movies_to_meta, get_meta_obj, load_dataset, load_meta, save_dataset, save_meta
-from data_work.storage_normalize import (
+from storage.data import add_movies_to_meta, get_meta_obj, load_dataset, load_meta, save_dataset, save_meta
+from storage.normalize import (
     is_valid_genre_tags,
     is_valid_tags_vibe,
     normalize_genre_tags,
