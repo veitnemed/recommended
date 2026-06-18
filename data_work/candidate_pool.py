@@ -657,7 +657,7 @@ def _mark_kp_retry_attempt(candidate: dict) -> None:
 
 def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = None) -> dict:
     """Повторно добирает KP-данные для неполных кандидатов в общем candidate_pool."""
-    from data_work import tmdb_candidate_pool
+    from candidates import tmdb_candidate_pool
 
     pool = load_candidate_pool()
     incomplete_candidates = get_incomplete_candidates(pool, criteria_name=criteria_name)

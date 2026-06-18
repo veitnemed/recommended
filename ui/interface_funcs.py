@@ -439,7 +439,7 @@ def run_tmdb_candidate_pool_flow() -> None:
     from pathlib import Path
 
     from data_work import sql_search
-    from data_work.tmdb_candidate_pool import (
+    from candidates.tmdb_candidate_pool import (
         build_candidate_pool,
         save_candidate_pool_result,
         save_candidate_pool_test_result,
@@ -593,7 +593,7 @@ def import_tmdb_result_to_common_pool_flow() -> None:
     """Импортирует отдельный TMDb v1 result JSON в общий candidate_pool после подтверждения."""
     import json
 
-    from data_work.tmdb_candidate_pool import (
+    from candidates.tmdb_candidate_pool import (
         import_tmdb_result_to_common_pool,
         list_tmdb_result_files,
         tmdb_import_default_criteria_name,

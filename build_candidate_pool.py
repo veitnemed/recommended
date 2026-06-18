@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 from data_work import sql_search
-from data_work.tmdb_candidate_pool import (
+from candidates.tmdb_candidate_pool import (
     build_candidate_pool,
     print_summary,
     save_candidate_pool_result,
