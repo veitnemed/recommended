@@ -3,11 +3,11 @@
 from config import constant
 from config import genre_tags
 from config import scheme
-from apis import sql_search
-from apis import api
+from apis import imdb_sql as sql_search
+from apis import kp_api as api
 
 try:
-    from apis import api_tmdb
+    from apis import tmdb_api as api_tmdb
 except ImportError:  # pragma: no cover - TMDb fallback is optional for old environments.
     api_tmdb = None
 

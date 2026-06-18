@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from config import constant
 from config import genre_tags
 from common import format_score
-from apis import api
+from apis import kp_api as api
 
 DISCOVER_PAGE_LIMIT = 30
 DISCOVER_PAGE_PAUSE_SECONDS = 1.0

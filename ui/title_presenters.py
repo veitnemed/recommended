@@ -26,7 +26,7 @@ def print_sql_training_preview(sql_data: dict) -> None:
 
 def print_api_training_preview(api_data: dict) -> None:
     """Показывает краткую API-сводку для будущего сохранения."""
-    from apis import api
+    from apis import kp_api as api
 
     countries = (
         ", ".join(api.names_from_list(api_data.get("countries")).split(", "))

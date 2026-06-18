@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any
 
 from candidates import candidate_pool as legacy_candidate_pool
-from apis import sql_search
-from apis import api as kp_api
-from apis import api_tmdb
+from apis import imdb_sql as sql_search
+from apis import kp_api
+from apis import tmdb_api as api_tmdb
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]

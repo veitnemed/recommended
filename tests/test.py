@@ -19,10 +19,10 @@ from model import linear_regression_train
 from data_work import storage
 from data_work import excel_work
 from candidates import candidate_pool
-from apis import sql_search
+from apis import imdb_sql as sql_search
 from data_work import title_resolve
 from ui import request as request_ui
-from apis import api
+from apis import kp_api as api
 from common import valid
 
 
