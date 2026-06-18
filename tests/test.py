@@ -165,7 +165,8 @@ def test_duplicate_rejected() -> None:
     with contextlib.redirect_stdout(io.StringIO()):
         second_result = storage.add_movie(movie)
 
-    assert_check("Повторная запись не добавляется", second_result is False)
+    assert_check("Повторная запись не добавляется", second_result.ok is False)
+    assert_check("Причина отказа - дубль title", second_result.reason == "duplicate_title")
     assert_check("В dataset осталась 1 запись", len(storage.load_dataset()) == 1)
 
 
