@@ -12,6 +12,24 @@ except ImportError:  # pragma: no cover - TMDb fallback is optional for old envi
     api_tmdb = None
 
 
+def fetch_series_raw(title: str, country: str = "Россия") -> dict:
+    """Возвращает сырой результат поиска сериала через KP API."""
+    return api.find_series_raw(title, country)
+
+
+def format_series_lines(api_data: dict) -> list:
+    """Возвращает строки для печати найденного объекта KP API."""
+    return api.format_api_movie_lines(api_data)
+
+
+def extract_api_countries(api_data: dict) -> str:
+    """Возвращает страны объекта API одной строкой (как для превью)."""
+    raw_countries = api_data.get("countries")
+    if isinstance(raw_countries, list) is False:
+        return "нет данных"
+    return ", ".join(api.names_from_list(raw_countries).split(", "))
+
+
 def unique_preserve_order(values: list) -> list:
     """Убирает дубли, сохраняя исходный порядок элементов."""
     result = []

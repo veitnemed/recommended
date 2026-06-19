@@ -16,8 +16,6 @@ from storage import data as storage_data
 from dataset import storage_movie
 from ui import ui
 from common import valid
-from apis import kp_api as api
-
 
 def show_all_movies():
     """Показывает все фильмы из датасета."""
@@ -251,14 +249,14 @@ def show_api_features():
         text='Название сериала >> ',
         funcs_list=[valid.is_correct_title]
     )
-    result = api.find_series_raw(title, "Россия")
+    result = title_resolve.fetch_series_raw(title, "Россия")
 
     if result["ok"] is False:
         print(f'Сериал не найден в списке API: {result["details"]}')
         return
 
     print('\nСериал найден в списке API.\n')
-    for line in api.format_api_movie_lines(result["data"]):
+    for line in title_resolve.format_series_lines(result["data"]):
         print(line)
 
 

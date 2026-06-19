@@ -26,13 +26,7 @@ def print_sql_training_preview(sql_data: dict) -> None:
 
 def print_api_training_preview(api_data: dict) -> None:
     """Показывает краткую API-сводку для будущего сохранения."""
-    from apis import kp_api as api
-
-    countries = (
-        ", ".join(api.names_from_list(api_data.get("countries")).split(", "))
-        if isinstance(api_data.get("countries"), list)
-        else "нет данных"
-    )
+    countries = title_resolve.extract_api_countries(api_data)
     genres_line = ", ".join(title_resolve.extract_api_genres(api_data)) or "нет данных"
     raw_scores = title_resolve.extract_api_raw_scores(api_data)
 
