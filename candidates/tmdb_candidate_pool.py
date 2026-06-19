@@ -90,8 +90,19 @@ def append_signal(candidate: dict[str, Any], signal: str) -> None:
         signals.append(signal)
 
 
-def print_progress_step(source: str, status: str) -> None:
-    print(f"{source}: {status}")
+_progress_reporter = None
+
+
+def set_progress_reporter(reporter) -> None:
+    """Регистрирует обработчик прогресса. Печать выполняет UI/CLI, не candidates."""
+    global _progress_reporter
+    _progress_reporter = reporter
+
+
+def report_progress(source: str, status: str) -> None:
+    """Сообщает шаг прогресса наверх; сам candidates ничего не печатает."""
+    if _progress_reporter is not None:
+        _progress_reporter(source, status)
 
 
 def set_kp_status(candidate: dict[str, Any], status: str, is_complete: bool) -> None:
@@ -504,7 +515,7 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
     if candidate.get("kp_rating") not in (None, "") and candidate.get("kp_votes") not in (None, ""):
         set_kp_status(candidate, "cache_hit", True)
         stats["kp_api_skipped_cache"] += 1
-        print_progress_step("KP API", "Cache hit")
+        report_progress("KP API", "Cache hit")
         return candidate
 
     kp_country = tmdb_country_to_kp_country(country)
@@ -514,13 +525,13 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
         stats["kp_api_not_found"] += 1
         set_kp_status(candidate, "not_requested", False)
         append_signal(candidate, "kp_api_no_query")
-        print_progress_step("KP API", "Нет кандидатов")
+        report_progress("KP API", "Нет кандидатов")
         return candidate
 
     last_error = None
     for query in queries:
         stats["kp_api_requested"] += 1
-        print_progress_step("KP API", "Ожидание ответа")
+        report_progress("KP API", "Ожидание ответа")
         result = kp_api.find_series_raw(str(query), kp_country, year=year)
         if result.get("ok") is False:
             error_code = result.get("error")
@@ -531,7 +542,7 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
             set_kp_status(candidate, "error", False)
             append_signal(candidate, "kp_api_error")
             append_signal(candidate, f"kp_api_error_{error_code or 'unknown'}")
-            print_progress_step("KP API", "Ошибка сети")
+            report_progress("KP API", "Ошибка сети")
             return candidate
 
         movie = result.get("data") or {}
@@ -540,20 +551,20 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
             stats["kp_api_rejected_by_match"] += 1
             set_kp_status(candidate, "not_found", False)
             append_signal(candidate, f"kp_api_rejected_{reason}")
-            print_progress_step("KP API", "Отклонено match-check")
+            report_progress("KP API", "Отклонено match-check")
             return candidate
 
         fill_candidate_from_kp_api(candidate, movie)
         stats["kp_api_found"] += 1
         set_kp_status(candidate, "done", True)
         append_signal(candidate, "kp_api_hit")
-        print_progress_step("KP API", "Успешно")
+        report_progress("KP API", "Успешно")
         return candidate
 
     stats["kp_api_not_found"] += 1
     set_kp_status(candidate, "not_found", False)
     append_signal(candidate, "kp_api_not_found")
-    print_progress_step("KP API", "Нет кандидатов")
+    report_progress("KP API", "Нет кандидатов")
     return candidate
 
 
@@ -650,7 +661,7 @@ def build_candidate_pool(
         min_tmdb_score=min_tmdb_score,
         min_tmdb_votes=min_tmdb_votes,
     )
-    print_progress_step("TMDb Discover", "Ожидание ответа")
+    report_progress("TMDb Discover", "Ожидание ответа")
     try:
         discover_results = api_tmdb.discover_tv_candidates(
             max_pages=pages,
@@ -659,9 +670,9 @@ def build_candidate_pool(
             **query,
         )
     except Exception:
-        print_progress_step("TMDb Discover", "Ошибка сети")
+        report_progress("TMDb Discover", "Ошибка сети")
         raise
-    print_progress_step("TMDb Discover", f"Успешно, кандидатов: {len(discover_results)}")
+    report_progress("TMDb Discover", f"Успешно, кандидатов: {len(discover_results)}")
     unique_results, duplicates_removed = deduplicate_discover_results(discover_results)
     not_watched_results, watched_skipped = remove_watched_discover(unique_results)
     sorted_results = sort_discover_for_details(not_watched_results)
@@ -703,7 +714,7 @@ def build_candidate_pool(
     try:
         for item in details_candidates:
             detail_index = len(candidates) + stats["country_rejected"] + stats["imdb_filter_rejected"] + 1
-            print_progress_step("TMDb Details", f"Ожидание ответа [{detail_index}/{len(details_candidates)}]")
+            report_progress("TMDb Details", f"Ожидание ответа [{detail_index}/{len(details_candidates)}]")
             try:
                 details = api_tmdb.get_tv_details(
                     int(item["id"]),
@@ -712,19 +723,19 @@ def build_candidate_pool(
                     token=token,
                 )
             except Exception:
-                print_progress_step("TMDb Details", "Ошибка сети")
+                report_progress("TMDb Details", "Ошибка сети")
                 raise
-            print_progress_step("TMDb Details", f"Успешно [{detail_index}/{len(details_candidates)}]")
+            report_progress("TMDb Details", f"Успешно [{detail_index}/{len(details_candidates)}]")
             candidate = prepare_candidate(details, country, source_query=query)
             if candidate.get("imdb_id"):
                 stats["has_imdb_id"] += 1
-            print_progress_step("IMDb dataset", f"Поиск [{detail_index}/{len(details_candidates)}]")
+            report_progress("IMDb dataset", f"Поиск [{detail_index}/{len(details_candidates)}]")
             candidate = enrich_from_imdb_sql(candidate, conn)
             if candidate.get("imdb_found_in_sql"):
                 stats["found_in_imdb_sql"] += 1
-                print_progress_step("IMDb dataset", f"Успешно [{detail_index}/{len(details_candidates)}]")
+                report_progress("IMDb dataset", f"Успешно [{detail_index}/{len(details_candidates)}]")
             else:
-                print_progress_step("IMDb dataset", f"Нет кандидатов [{detail_index}/{len(details_candidates)}]")
+                report_progress("IMDb dataset", f"Нет кандидатов [{detail_index}/{len(details_candidates)}]")
             candidate = enrich_from_kp_cache_only(candidate)
             if "kp_cache_hit" in candidate.get("signals", []):
                 stats["kp_cache_hit"] += 1
@@ -732,7 +743,7 @@ def build_candidate_pool(
                 candidate = enrich_from_kp_api_if_needed(candidate, country, stats)
             elif kp_api_limit is not None and stats["kp_api_requested"] >= int(kp_api_limit):
                 candidate = mark_kp_pending_limit(candidate)
-                print_progress_step("KP API", "Лимит, добрать позже")
+                report_progress("KP API", "Лимит, добрать позже")
             else:
                 candidate = enrich_from_kp_api_if_needed(candidate, country, stats)
 
@@ -1002,38 +1013,42 @@ def candidate_to_csv_row(candidate: dict[str, Any]) -> dict[str, Any]:
     return row
 
 
-def print_summary(result: dict[str, Any]) -> None:
+def build_summary_lines(result: dict[str, Any]) -> list[str]:
+    """Возвращает строки итогового отчёта (печать выполняет UI/CLI)."""
     stats = result["stats"]
-    print(f"Найдено через TMDb Discover: {stats['discover_total']}")
-    print(f"Удалено дублей: {stats['duplicates_removed']}")
-    print(f"Пропущено уже просмотренных: {stats['watched_skipped']}")
-    print(f"Запрошено TMDb Details: {stats['details_requested']}")
-    print(f"С IMDb ID: {stats['has_imdb_id']}")
-    print(f"Найдено в IMDb dataset: {stats['found_in_imdb_sql']}")
-    print(f"KP найдено в кэше: {stats['kp_cache_hit']}")
-    print(f"KP API запросов: {stats['kp_api_requested']}")
-    print(f"KP API найдено: {stats['kp_api_found']}")
-    print(f"KP API не найдено: {stats['kp_api_not_found']}")
-    print(f"KP API отклонено match-check: {stats['kp_api_rejected_by_match']}")
-    print(f"KP API ошибок: {stats['kp_api_errors']}")
-    print(f"KP API пропущено из-за кэша: {stats['kp_api_skipped_cache']}")
-    print(f"KP ожидает добора из-за лимита: {stats['kp_pending_limit']}")
-    print(f"Неполных кандидатов по KP: {stats['kp_incomplete_candidates']}")
-    print(f"Полностью обогащённых кандидатов: {stats['complete_candidates']}")
-    print(f"Прошли country_score: {stats['country_passed']}")
-    print(f"Пограничный country_score: {stats['country_borderline']}")
-    print(f"Отклонено по country_score: {stats['country_rejected']}")
-    print(f"Отклонено adult/titleType: {stats['adult_title_type_rejected']}")
-    print(f"Отклонено IMDb-фильтрами всего: {stats['imdb_filter_rejected']}")
-    print(f"Итоговых кандидатов: {stats['final_candidates']}")
-    print("")
-    print("Топ-20 по final_score")
-    print("-" * 80)
+    lines = [
+        f"Найдено через TMDb Discover: {stats['discover_total']}",
+        f"Удалено дублей: {stats['duplicates_removed']}",
+        f"Пропущено уже просмотренных: {stats['watched_skipped']}",
+        f"Запрошено TMDb Details: {stats['details_requested']}",
+        f"С IMDb ID: {stats['has_imdb_id']}",
+        f"Найдено в IMDb dataset: {stats['found_in_imdb_sql']}",
+        f"KP найдено в кэше: {stats['kp_cache_hit']}",
+        f"KP API запросов: {stats['kp_api_requested']}",
+        f"KP API найдено: {stats['kp_api_found']}",
+        f"KP API не найдено: {stats['kp_api_not_found']}",
+        f"KP API отклонено match-check: {stats['kp_api_rejected_by_match']}",
+        f"KP API ошибок: {stats['kp_api_errors']}",
+        f"KP API пропущено из-за кэша: {stats['kp_api_skipped_cache']}",
+        f"KP ожидает добора из-за лимита: {stats['kp_pending_limit']}",
+        f"Неполных кандидатов по KP: {stats['kp_incomplete_candidates']}",
+        f"Полностью обогащённых кандидатов: {stats['complete_candidates']}",
+        f"Прошли country_score: {stats['country_passed']}",
+        f"Пограничный country_score: {stats['country_borderline']}",
+        f"Отклонено по country_score: {stats['country_rejected']}",
+        f"Отклонено adult/titleType: {stats['adult_title_type_rejected']}",
+        f"Отклонено IMDb-фильтрами всего: {stats['imdb_filter_rejected']}",
+        f"Итоговых кандидатов: {stats['final_candidates']}",
+        "",
+        "Топ-20 по final_score",
+        "-" * 80,
+    ]
     for index, candidate in enumerate(result["candidates"][:20], start=1):
-        print(
+        lines.append(
             f"{index:>2}. {candidate.get('final_score'):.3f} | "
             f"{candidate.get('title') or '-'} ({candidate.get('year') or '-'}) | "
             f"TMDb {candidate.get('tmdb_rating') or '-'} / {candidate.get('tmdb_votes') or 0} | "
             f"IMDb {candidate.get('imdb_rating') or '-'} / {candidate.get('imdb_votes') or 0}"
         )
+    return lines
 

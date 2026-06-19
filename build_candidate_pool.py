@@ -8,8 +8,9 @@ from pathlib import Path
 from apis import imdb_sql as sql_search
 from candidates.tmdb_candidate_pool import (
     build_candidate_pool,
-    print_summary,
+    build_summary_lines,
     save_candidate_pool_result,
+    set_progress_reporter,
 )
 
 
@@ -38,6 +39,8 @@ def main() -> None:
     pages = max(1, min(args.pages, 20))
     details_limit = max(1, min(args.details_limit, 300))
 
+    set_progress_reporter(lambda source, status: print(f"{source}: {status}"))
+
     result = build_candidate_pool(
         country=args.country,
         pages=pages,
@@ -47,7 +50,8 @@ def main() -> None:
         db_path=Path(args.imdb_db),
     )
     json_path, csv_path = save_candidate_pool_result(result)
-    print_summary(result)
+    for line in build_summary_lines(result):
+        print(line)
     print("")
     print(f"Saved JSON: {json_path}")
     print(f"Saved CSV: {csv_path}")

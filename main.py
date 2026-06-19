@@ -10,10 +10,12 @@ from ui import menu_state
 from ui import request
 from ui import ui
 from model import model
+from candidates.tmdb_candidate_pool import set_progress_reporter
 
 def main_loop():
     """Запускает главный цикл программы."""
     storage_files.init_all_dates()
+    set_progress_reporter(lambda source, status: print(f"{source}: {status}"))
 
     while True:
         ui.clean_terminal()
