@@ -121,7 +121,7 @@ def show_weights_model(weights):
 
 def reset_weights_model():
     """Сбрасывает веса модели."""
-    storage_data.save_weights(constant.DEFAULT_WEIGHTS.copy())
+    model.reset_weights()
     print('Веса сброшены на значения по умолчанию.')
 
 

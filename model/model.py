@@ -11,6 +11,11 @@ def iter_movies(data):
     return data
 
 
+def reset_weights() -> None:
+    """Сбрасывает веса модели на значения по умолчанию."""
+    storage_data.save_weights(constant.DEFAULT_WEIGHTS.copy())
+
+
 def get_movie_title(movie: dict) -> str:
     """Возвращает название фильма из записи датасета."""
     return movie["main_info"]["title"]

@@ -49,12 +49,7 @@ def request_new_tag() -> None:
         print('Ошибка! Все поля должны быть заполнены.')
         return
 
-    storage_files.create_backup()
-    tags_work.backup_tag_files()
-    tags_work.add_tag_to_data(feature)
-    tags[feature] = settings
-    tags_work.save_tags(tags)
-    tags_work.move_edit_files_to_backup()
+    tags_work.add_tag(feature, settings)
     print(f'Тег добавлен: {feature}')
     print('Схема изменилась. Запусти программу снова.')
     raise SystemExit
@@ -99,12 +94,7 @@ def request_delete_tag() -> None:
         print('Удаление отменено.')
         return
 
-    storage_files.create_backup()
-    tags_work.backup_tag_files()
-    tags_work.delete_tag_from_data(feature)
-    tags.pop(feature)
-    tags_work.save_tags(tags)
-    tags_work.move_edit_files_to_backup()
+    tags_work.delete_tag(feature)
     print(f'Тег удален: {feature}')
     print('Схема изменилась. Запусти программу снова.')
     raise SystemExit
