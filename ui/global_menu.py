@@ -4,7 +4,6 @@ from functools import partial
 
 from config import constant
 from dataset import excel_work
-from dataset import rating_comparison
 from storage import files as storage_files
 from dataset import storage_movie
 from candidates import candidate_pool
@@ -12,6 +11,7 @@ from ui import backup_menu
 from ui import interface_funcs
 from ui import menu_state
 from ui import request
+from ui import rating_comparison
 from ui import tags_menu
 from ui import ui
 from model import linear_regression_train
