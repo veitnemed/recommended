@@ -194,27 +194,28 @@ def search_tv(title: str, token: str) -> list[dict[str, Any]]:
 
 def discover_tv_candidates(
     country: str,
-    genres_any: list[int],
-    without_genres: list[int],
     vote_average_gte: float,
     vote_count_gte: int,
+    genres_any: list[int] | None = None,
+    without_genres: list[int] | str | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
     language: str = DEFAULT_LANGUAGE,
     max_pages: int = 5,
     sort_by: str = "vote_count.desc",
+    with_genres: str | None = None,
     with_original_language: str | None = None,
     force_refresh: bool = False,
     token: str | None = None,
 ) -> list[dict[str, Any]]:
     all_results: list[dict[str, Any]] = []
     max_pages = max(1, int(max_pages))
+    raw_with_genres = str(with_genres or "").strip()
+    raw_without_genres = without_genres.strip() if isinstance(without_genres, str) else ""
 
     for page in range(1, max_pages + 1):
         params: dict[str, Any] = {
             "with_origin_country": country,
-            "with_genres": "|".join(str(item) for item in genres_any),
-            "without_genres": ",".join(str(item) for item in without_genres),
             "vote_average.gte": vote_average_gte,
             "vote_count.gte": vote_count_gte,
             "include_adult": "false",
@@ -222,6 +223,16 @@ def discover_tv_candidates(
             "language": language,
             "page": page,
         }
+        if raw_with_genres:
+            params["with_genres"] = raw_with_genres
+        elif genres_any:
+            params["with_genres"] = "|".join(str(item) for item in genres_any)
+
+        if raw_without_genres:
+            params["without_genres"] = raw_without_genres
+        elif without_genres and isinstance(without_genres, str) is False:
+            params["without_genres"] = ",".join(str(item) for item in without_genres)
+
         if with_original_language:
             params["with_original_language"] = with_original_language
         if year_min is not None:

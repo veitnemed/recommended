@@ -8,6 +8,7 @@ GENRE_ALIASES: dict[str, list[str]] = {
     "mystery": ["mystery", "детектив", "мистика"],
     "crime": ["crime", "криминал", "преступление", "преступления"],
     "comedy": ["comedy", "комедия"],
+    "thriller": ["thriller", "триллер"],
     "action_adventure": [
         "action & adventure",
         "action and adventure",

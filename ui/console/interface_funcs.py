@@ -10,6 +10,7 @@ from config import constant
 from common import format_score as format
 from candidates import candidate_pool
 from candidates import service as candidate_service
+from candidates import tmdb_genre_options
 from dataset import dataset_stats
 from dataset import genre_import
 from dataset import genre_stats
@@ -802,6 +803,8 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print(f"Максимальный год: {discover_filters.get('year_max') if discover_filters.get('year_max') is not None else 'не важно'}")
     print(f"Минимальный TMDb рейтинг: {discover_filters.get('min_tmdb_score') if discover_filters.get('min_tmdb_score') is not None else 'не важно'}")
     print(f"Минимум голосов TMDb: {discover_filters.get('min_tmdb_votes') if discover_filters.get('min_tmdb_votes') is not None else 'не важно'}")
+    print(f"Include жанры (TMDb): {tmdb_genre_options.describe_filter_value(discover_filters.get('with_genres'))}")
+    print(f"Exclude жанры (TMDb): {tmdb_genre_options.describe_filter_value(discover_filters.get('without_genres'))}")
     print(f"Найдено через TMDb Discover: {stats.get('discover_total', 0)}")
     print(f"Удалено дублей: {stats.get('duplicates_removed', 0)}")
     print(f"Пропущено уже просмотренных: {stats.get('watched_skipped', 0)}")
@@ -829,6 +832,98 @@ def _tmdb_mode_label(mode: str) -> str:
         "hidden_gems": "скрытые находки",
     }
     return labels.get(mode, mode)
+
+
+def _parse_tmdb_genre_indexes(value: str, options: list[dict] | None = None) -> list[int] | None:
+    text = str(value or "").strip()
+    if text in {"", "0"}:
+        return []
+    options = options or tmdb_genre_options.TV_GENRE_OPTIONS
+    indexes = []
+    for part in text.replace(",", " ").split():
+        try:
+            index = int(part)
+        except ValueError:
+            return None
+        if index < 1 or index > len(options):
+            return None
+        if index not in indexes:
+            indexes.append(index)
+    return indexes
+
+
+def _print_tmdb_genre_options(options: list[dict], output_func=print) -> None:
+    for index, option in enumerate(options, start=1):
+        output_func(f" {index} >> {option['label']}")
+
+
+def _input_tmdb_genre_ids(
+    label: str,
+    options: list[dict],
+    *,
+    input_func=input,
+    output_func=print,
+) -> list[int]:
+    while True:
+        answer = input_func(f"{label} [0] >> ").strip()
+        indexes = _parse_tmdb_genre_indexes(answer, options)
+        if indexes is None:
+            output_func("Введите номера жанров через запятую, например: 1,2,3")
+            continue
+        return tmdb_genre_options.genre_ids_from_indexes(indexes, options)
+
+
+def _input_tmdb_include_mode(input_func=input, output_func=print) -> str:
+    output_func("\nКак применять выбранные жанры (TMDb)?")
+    output_func(" 1 >> Любой из выбранных жанров — шире поиск")
+    output_func(" 2 >> Все выбранные жанры одновременно — строже поиск")
+    while True:
+        answer = input_func("Выбор [1] >> ").strip()
+        if answer in {"", "1"}:
+            return tmdb_genre_options.MODE_OR
+        if answer == "2":
+            return tmdb_genre_options.MODE_AND
+        output_func("Выберите 1 или 2.")
+
+
+def request_tmdb_discover_genre_filters(input_func=input, output_func=print) -> tuple[str | None, str | None]:
+    output_func(f"\n{tmdb_genre_options.TMDB_DISCOVER_GENRE_TITLE}")
+    output_func("Выбери жанры, которые должны попасть в поиск:")
+    output_func(" 0 >> без include-фильтра")
+    _print_tmdb_genre_options(tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS, output_func)
+    output_func("\nВвод через запятую, например 1,2,3.")
+    include_ids = _input_tmdb_genre_ids(
+        "Include жанры",
+        tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS,
+        input_func=input_func,
+        output_func=output_func,
+    )
+
+    include_mode = tmdb_genre_options.MODE_OR
+    if len(include_ids) > 1:
+        include_mode = _input_tmdb_include_mode(input_func=input_func, output_func=output_func)
+    with_genres = tmdb_genre_options.build_filter_value(include_ids, mode=include_mode)
+    include_labels = ", ".join(tmdb_genre_options.labels_from_ids(include_ids)) if include_ids else "без фильтра"
+    mode_label = "любой из выбранных" if include_mode == tmdb_genre_options.MODE_OR else "все выбранные одновременно"
+    output_func(f"Include жанры (TMDb): {include_labels}")
+    if len(include_ids) > 1:
+        output_func(f"Режим: {mode_label}")
+
+    output_func(f"\n{tmdb_genre_options.TMDB_EXCLUDE_LABEL}")
+    output_func("Выбери жанры, которые нужно исключить:")
+    output_func(" 0 >> без exclude-фильтра")
+    _print_tmdb_genre_options(tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS, output_func)
+    output_func("\nВвод через запятую, например 1,2,3,4.")
+    exclude_ids = _input_tmdb_genre_ids(
+        "Exclude жанры",
+        tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS,
+        input_func=input_func,
+        output_func=output_func,
+    )
+    without_genres = tmdb_genre_options.build_filter_value(exclude_ids, mode=tmdb_genre_options.MODE_OR)
+    exclude_labels = ", ".join(tmdb_genre_options.labels_from_ids(exclude_ids)) if exclude_ids else "без фильтра"
+    output_func(f"Exclude жанры (TMDb): {exclude_labels}")
+    return with_genres, without_genres
 
 
 def ask_auto_import_choice(input_func=input, output_func=print) -> bool:
@@ -960,6 +1055,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     year_max = _parse_optional_bounded_int(input("Максимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
     min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
     min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
+    with_genres, without_genres = request_tmdb_discover_genre_filters(input_func=input, output_func=print)
     criteria_name = criteria_answer or candidate_service.build_tmdb_criteria_name(
         country,
         mode,
@@ -979,6 +1075,8 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     print(f"Максимальный год: {year_max if year_max is not None else 'не важно'}")
     print(f"Минимальный TMDb рейтинг: {min_tmdb_score if min_tmdb_score is not None else 'не важно'}")
     print(f"Минимум голосов TMDb: {min_tmdb_votes if min_tmdb_votes is not None else 'не важно'}")
+    print(f"Include жанры (TMDb): {tmdb_genre_options.describe_filter_value(with_genres)}")
+    print(f"Exclude жанры (TMDb): {tmdb_genre_options.describe_filter_value(without_genres)}")
     print("KP API: включён после локального KP cache, при ошибке сбор продолжается без KP.")
     if is_test_run:
         print("\nПлан тестового режима:")
@@ -1006,6 +1104,8 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
             year_max=year_max,
             min_tmdb_score=min_tmdb_score,
             min_tmdb_votes=min_tmdb_votes,
+            with_genres=with_genres,
+            without_genres=without_genres,
         )
         if is_test_run:
             print("Сохранение test candidate_pool: Ожидание")
@@ -1210,18 +1310,19 @@ def edit_candidate_pool_filters() -> None:
 
     criteria_name, criteria = selected
     print(f"\nФильтрация для пула: {criteria_name}")
+    print("Жанры для top prediction (по сохранённым данным pool). Это не запускает новый TMDb Discover.")
     print(f"Текущий KP: {criteria.get('min_kp', 'не важно')}")
-    print(f"Текущие жанры: {', '.join(criteria.get('genres', [])) or 'не важно'}")
-    print(f"Исключить жанры: {', '.join(criteria.get('excluded_genres', [])) or 'не важно'}\n")
+    print(f"Текущие жанры (saved pool): {', '.join(criteria.get('genres', [])) or 'не важно'}")
+    print(f"Исключить жанры (saved pool): {', '.join(criteria.get('excluded_genres', [])) or 'не важно'}\n")
 
     updated = candidate_pool_ui.update_criteria_filters(criteria_name, criteria)
     print("\nФильтрация обновлена в candidate_criteria.json.")
-    print("Filters сохраняются как defaults для top prediction (Enter = default).")
+    print("Filters сохраняются как defaults для top prediction по уже сохранённым кандидатам (Enter = default).")
     print("Ручной ввод в top prediction действует только на текущий запуск.")
-    print("Filters не пересобирают pool и не удаляют кандидатов из candidate_pool.json.")
+    print("Filters не пересобирают pool, не делают новый TMDb-запрос и не удаляют кандидатов из candidate_pool.json.")
     print(f"KP: {updated.get('min_kp', 'не важно')}")
-    print(f"Жанры: {', '.join(updated.get('genres', [])) or 'не важно'}")
-    print(f"Жанры исключить: {', '.join(updated.get('excluded_genres', [])) or 'не важно'}")
+    print(f"Жанры (saved pool): {', '.join(updated.get('genres', [])) or 'не важно'}")
+    print(f"Жанры исключить (saved pool): {', '.join(updated.get('excluded_genres', [])) or 'не важно'}")
 
 
 def show_candidate_pool() -> None:
@@ -1315,10 +1416,12 @@ def show_global_candidate_top() -> None:
 
     weights = storage_data.load_weights()
     scored_candidates = candidate_pool.rank_candidates_by_predict(ready_candidates, weights)
+    scored_candidates = candidate_pool.dedupe_ranked_predictions_by_title_identity(scored_candidates)
+    top_n = min(top_n, len(scored_candidates))
 
     print(f"\nТоп {top_n} из общего пула:\n")
-    for row in scored_candidates[:top_n]:
-        print(f"{row['title']} ({row['year']}): {row['predict']:.2f}")
+    for index, row in enumerate(scored_candidates[:top_n], start=1):
+        _print_prediction_candidate_card(index, row)
 
 
 def _print_candidate_contribution_group(title: str, rows: list, limit: int) -> None:
@@ -1349,6 +1452,46 @@ def _print_incomplete_candidates_preview(candidates: list, limit: int = 5) -> No
     remaining = len(candidates) - len(preview)
     if remaining > 0:
         print(f"\n...и ещё {remaining}")
+
+
+def _format_card_list(value) -> str:
+    if isinstance(value, str):
+        return value.strip() or "нет данных"
+    if isinstance(value, (list, tuple, set)):
+        items = [str(item).strip() for item in value if str(item or "").strip()]
+        return ", ".join(items) if items else "нет данных"
+    if value in (None, ""):
+        return "нет данных"
+    return str(value)
+
+
+def _format_card_score(value) -> str:
+    if value in (None, ""):
+        return "-"
+    try:
+        return f"{float(value):.1f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _print_prediction_candidate_card(index: int, candidate: dict) -> None:
+    title = candidate.get("title") or candidate.get("name") or candidate.get("title_ru") or "Без названия"
+    year = candidate.get("year") or "?"
+    countries = candidate.get("countries") or candidate.get("country")
+    genres = candidate.get("genres") or []
+    description = candidate_pool.format_candidate_description(candidate, limit=200)
+    predict = candidate.get("predict_score", candidate.get("predict"))
+    try:
+        predict_label = f"{float(predict):.2f}"
+    except (TypeError, ValueError):
+        predict_label = "-"
+
+    print(f"{index}. {title} ({year})")
+    print(f"   Рейтинг: KP: {_format_card_score(candidate.get('kp_score'))} / IMDb: {_format_card_score(candidate.get('imdb_score'))}")
+    print(f"   Страна: {_format_card_list(countries)}")
+    print(f"   Жанр: {_format_card_list(genres)}")
+    print(f"   Описание: {description}")
+    print(f"   Прогноз: {predict_label}\n")
 
 
 def _parse_optional_csv_list(value: str) -> list[str]:
@@ -1434,8 +1577,10 @@ def _choose_prediction_source(candidates: list) -> str | None:
 
 def _request_prediction_candidate_filters(candidates: list) -> dict:
     print("\nФильтр кандидатов перед предиктом:")
-    print("Filters отбирают уже сохранённых кандидатов и не пересобирают pool.")
-    print("Enter оставляет значение по умолчанию.\n")
+    print("Жанры для top prediction (по сохранённым данным pool).")
+    print("Жанры (saved pool / KP-IMDb-TMDb data).")
+    print("Это не пересобирает pool и не делает новый TMDb-запрос.")
+    print("Enter = оставить saved default.\n")
 
     criteria_name = _choose_prediction_criteria_name()
     defaults_view = candidate_service.get_prediction_filter_defaults_view(criteria_name)
@@ -1444,6 +1589,13 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
         print(f"\nDefaults из criteria '{criteria_name}':")
         for line in defaults_view["lines"]:
             print(f"  {line}")
+
+    genre_options_view = candidate_service.get_prediction_genre_options_view(criteria_name)
+    if genre_options_view["count"] > 0:
+        print("\nДоступные жанры для top prediction (по сохранённым данным pool):")
+        print(", ".join(genre_options_view["genres"]))
+    else:
+        print("\nДоступные жанры для top prediction (по сохранённым данным pool): нет данных")
 
     source = _choose_prediction_source(candidates)
     country_answer = input(f"\nСтрана [{_format_prediction_default(defaults.get('country'))}] >> ").strip()
@@ -1461,11 +1613,11 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
         constant.NOW_YEAR,
     )
     include_genres = _input_optional_prediction_csv_list(
-        "Включить жанры через запятую",
+        "Включить жанры (saved pool) через запятую",
         defaults.get("include_genres") or [],
     )
     exclude_genres = _input_optional_prediction_csv_list(
-        "Исключить жанры через запятую",
+        "Исключить жанры (saved pool) через запятую",
         defaults.get("exclude_genres") or [],
     )
     min_kp_score = _input_optional_prediction_float(
@@ -1492,18 +1644,6 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
         0,
         10_000_000,
     )
-    min_tmdb_score = _input_optional_prediction_float(
-        "Минимальный TMDb",
-        defaults.get("min_tmdb_score"),
-        0.0,
-        10.0,
-    )
-    min_tmdb_votes = _input_optional_prediction_int(
-        "Минимум голосов TMDb",
-        defaults.get("min_tmdb_votes"),
-        0,
-        10_000_000,
-    )
     only_complete_default = defaults.get("only_complete", True)
     only_complete_label = "Y/n" if only_complete_default is True else "y/N"
     only_complete_answer = input(f"Только complete-кандидаты? [{only_complete_label}] >> ").strip().casefold()
@@ -1526,8 +1666,6 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
         "min_kp_votes": min_kp_votes,
         "min_imdb_score": min_imdb_score,
         "min_imdb_votes": min_imdb_votes,
-        "min_tmdb_score": min_tmdb_score,
-        "min_tmdb_votes": min_tmdb_votes,
         "only_complete": only_complete,
     }
 
@@ -1706,4 +1844,3 @@ def show_suspicious_candidate_duplicates() -> None:
             f"| критерий: {right.get('criteria_name')}"
         )
         print("")
-

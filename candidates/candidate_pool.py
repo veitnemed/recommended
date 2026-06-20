@@ -609,8 +609,6 @@ def build_prediction_filter_defaults(criteria_name: str | None = None) -> dict:
         "min_kp_votes": None,
         "min_imdb_score": None,
         "min_imdb_votes": None,
-        "min_tmdb_score": None,
-        "min_tmdb_votes": None,
         "only_complete": True,
     }
     if criteria_name is None:
@@ -643,13 +641,30 @@ def format_prediction_filter_default_lines(defaults: dict) -> list[str]:
             f"year: {_format_optional_filter_value(defaults.get('year_min'))}"
             f"..{_format_optional_filter_value(defaults.get('year_max'))}"
         ),
-        f"include genres: {_format_optional_filter_value(defaults.get('include_genres'))}",
-        f"exclude genres: {_format_optional_filter_value(defaults.get('exclude_genres'))}",
+        f"include genres (saved pool / KP-IMDb-TMDb data): {_format_optional_filter_value(defaults.get('include_genres'))}",
+        f"exclude genres (saved pool / KP-IMDb-TMDb data): {_format_optional_filter_value(defaults.get('exclude_genres'))}",
         f"min KP: {_format_optional_filter_value(defaults.get('min_kp_score'))}",
         f"min KP votes: {_format_optional_filter_value(defaults.get('min_kp_votes'))}",
         f"min IMDb: {_format_optional_filter_value(defaults.get('min_imdb_score'))}",
         f"min IMDb votes: {_format_optional_filter_value(defaults.get('min_imdb_votes'))}",
     ]
+
+
+def collect_prediction_genre_options(candidates: list) -> list[str]:
+    """Returns unique saved-pool genres available for runtime top prediction filters."""
+    seen = set()
+    options = []
+    for candidate in candidates:
+        for genre_name in _candidate_list_values(candidate, "genres"):
+            text = str(genre_name or "").strip()
+            if text == "":
+                continue
+            key = candidate_genres.normalize_genre_name(text)
+            if key in seen:
+                continue
+            seen.add(key)
+            options.append(text)
+    return sorted(options, key=lambda value: str(value).casefold())
 
 
 def _normalized_optional_text(value) -> str:
@@ -713,8 +728,6 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
     min_kp_votes = filters.get("min_kp_votes")
     min_imdb_score = filters.get("min_imdb_score")
     min_imdb_votes = filters.get("min_imdb_votes")
-    min_tmdb_score = filters.get("min_tmdb_score")
-    min_tmdb_votes = filters.get("min_tmdb_votes")
     only_complete = filters.get("only_complete", True)
 
     filtered = []
@@ -743,10 +756,6 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
         if _matches_min_value(candidate, "imdb_score", min_imdb_score) is False:
             continue
         if _matches_min_value(candidate, "imdb_votes", min_imdb_votes) is False:
-            continue
-        if _matches_min_value(candidate, "tmdb_score", min_tmdb_score) is False:
-            continue
-        if _matches_min_value(candidate, "tmdb_votes", min_tmdb_votes) is False:
             continue
 
         if only_complete and schema_is_ready_for_predict(candidate) is False:
@@ -977,16 +986,55 @@ def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
 
     scored_candidates = []
     for candidate in candidates:
+        normalized_candidate = normalize_candidate_record(candidate)
         features = build_candidate_features(candidate)
         predict = model.predict_score(features, prediction_weights)
-        scored_candidates.append({
-            "title": candidate.get("title") or "Без названия",
-            "year": candidate.get("year") or "?",
+        row = dict(normalized_candidate)
+        row.update({
+            "title": normalized_candidate.get("title") or "Без названия",
+            "year": normalized_candidate.get("year") or "?",
             "predict": predict,
+            "predict_score": predict,
         })
+        scored_candidates.append(row)
 
     scored_candidates.sort(key=lambda item: item["predict"], reverse=True)
     return scored_candidates
+
+
+def dedupe_ranked_predictions_by_title_identity(ranked_candidates: list) -> list:
+    """Keeps one best scored candidate per normalized title/year for display."""
+    best_by_identity = {}
+    order = []
+    for candidate in ranked_candidates:
+        identity = title_identity_key(candidate)
+        if identity == "|":
+            identity = f"__row_{len(order)}"
+        current = best_by_identity.get(identity)
+        if current is None:
+            best_by_identity[identity] = candidate
+            order.append(identity)
+            continue
+        if float(candidate.get("predict") or candidate.get("predict_score") or 0) > float(
+            current.get("predict") or current.get("predict_score") or 0
+        ):
+            best_by_identity[identity] = candidate
+
+    deduped = [best_by_identity[identity] for identity in order]
+    deduped.sort(key=lambda item: float(item.get("predict") or item.get("predict_score") or 0), reverse=True)
+    return deduped
+
+
+def format_candidate_description(candidate: dict, limit: int = 200) -> str:
+    """Returns a short saved description without network requests."""
+    for field_name in ("description", "overview", "tmdb_overview", "plot", "short_description"):
+        text = str(candidate.get(field_name) or "").strip()
+        if text:
+            text = " ".join(text.split())
+            if len(text) <= limit:
+                return text
+            return text[: max(0, limit - 3)].rstrip() + "..."
+    return "нет данных"
 
 
 def select_ready_candidates_for_contributions(candidates: list) -> list:

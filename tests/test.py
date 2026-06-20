@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import inspect
 import json
 import tempfile
 from pathlib import Path
@@ -29,11 +30,13 @@ from candidates import genres as pool_genres
 from candidates import import_tmdb as tmdb_import
 from candidates import schema as candidate_schema
 from candidates import tmdb_candidate_pool
+from candidates import tmdb_genre_options
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
 from ui.console import interface_funcs
 from ui.console import request as request_ui
 from apis import kp_api as api
+from apis import tmdb_api
 from common import valid
 
 
@@ -1808,6 +1811,117 @@ def test_candidate_service_top_prediction_view() -> None:
     )
 
 
+def test_top_prediction_ui_read_only_helpers() -> None:
+    """Проверяет read-only helpers для top prediction UI."""
+    print("\n23.1) Проверяем top prediction UI read-only helpers")
+
+    long_description = "Описание " + ("очень длинное " * 30)
+    candidate_pool.save_candidate_pool({
+        "dup_a": {
+            "title": "Эпидемия",
+            "year": 2019,
+            "criteria_name": "first",
+            "kp_score": 7.8,
+            "kp_votes": 1000,
+            "imdb_score": 7.2,
+            "imdb_votes": 2000,
+            "countries": ["Россия"],
+            "genres": ["Драма", "Триллер"],
+            "description": long_description,
+            "kp_status": "done",
+            "is_complete": True,
+        },
+        "dup_b": {
+            "title": "Эпидемия",
+            "year": 2019,
+            "criteria_name": "second",
+            "kp_score": 8.0,
+            "kp_votes": 2000,
+            "imdb_score": 7.4,
+            "imdb_votes": 3000,
+            "countries": ["Россия"],
+            "genres": ["Драма"],
+            "description": "short",
+            "kp_status": "done",
+            "is_complete": True,
+        },
+        "other": {
+            "title": "Other",
+            "year": 2020,
+            "criteria_name": "first",
+            "kp_score": 7.0,
+            "kp_votes": 1000,
+            "imdb_score": 7.0,
+            "imdb_votes": 1000,
+            "countries": ["США"],
+            "genres": ["Комедия"],
+            "kp_status": "done",
+            "is_complete": True,
+        },
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    genre_view = candidate_service.get_prediction_genre_options_view()
+    filtered = candidate_pool.filter_saved_candidates_for_prediction(
+        candidate_pool.get_all_candidates(),
+        {
+            "criteria_name": None,
+            "source": None,
+            "country": None,
+            "year_min": None,
+            "year_max": None,
+            "include_genres": [],
+            "exclude_genres": [],
+            "min_kp_score": None,
+            "min_kp_votes": None,
+            "min_imdb_score": None,
+            "min_imdb_votes": None,
+            "min_tmdb_score": 99,
+            "min_tmdb_votes": 99_999_999,
+            "only_complete": False,
+        },
+    )
+    deduped = candidate_pool.dedupe_ranked_predictions_by_title_identity([
+        {"title": "Эпидемия", "year": 2019, "predict": 7.10},
+        {"title": "Эпидемия", "year": 2019, "predict": 8.20},
+        {"title": "Other", "year": 2020, "predict": 7.50},
+    ])
+    short_description = candidate_pool.format_candidate_description({"description": long_description}, limit=200)
+    missing_description = candidate_pool.format_candidate_description({})
+    card_output = io.StringIO()
+    with contextlib.redirect_stdout(card_output):
+        interface_funcs._print_prediction_candidate_card(
+            1,
+            {
+                "title": "Эпидемия",
+                "year": 2019,
+                "kp_score": 7.8,
+                "imdb_score": 7.2,
+                "countries": ["Россия"],
+                "genres": ["Драма", "Триллер"],
+                "description": long_description,
+                "predict_score": 7.75,
+            },
+        )
+
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    filter_source = inspect.getsource(interface_funcs._request_prediction_candidate_filters)
+
+    assert_check("Genre options view видит Триллер из saved pool", "Триллер" in genre_view["genres"])
+    assert_check("Genre options view подписан как saved pool", "saved" in genre_view["label"] or "сохранённым" in genre_view["label"])
+    assert_check("Top prediction не применяет min_tmdb_score/min_tmdb_votes", len(filtered) == 3)
+    assert_check("Top prediction UI больше не спрашивает TMDb filters", "Минимальный TMDb" not in filter_source and "Минимум голосов TMDb" not in filter_source)
+    assert_check("Dedupe оставляет один title/year с лучшим predict", len(deduped) == 2 and deduped[0]["predict"] == 8.20)
+    assert_check("Описание режется до 200 символов", len(short_description) <= 200 and short_description.endswith("..."))
+    assert_check("Пустое описание даёт нет данных", missing_description == "нет данных")
+    card_text = card_output.getvalue()
+    assert_check("Карточка выводит title/year", "Эпидемия (2019)" in card_text)
+    assert_check("Карточка выводит KP / IMDb", "KP: 7.8 / IMDb: 7.2" in card_text)
+    assert_check("Карточка выводит страну и жанры", "Россия" in card_text and "Драма, Триллер" in card_text)
+    assert_check("Карточка выводит прогноз", "Прогноз: 7.75" in card_text)
+    assert_check("Top prediction helpers не переписывают candidate_pool.json", before_mtime == after_mtime)
+
+
 def test_candidate_service_prediction_filter_defaults_view() -> None:
     """Проверяет read-only defaults view для top prediction через candidates.service."""
     print("\n24) Проверяем candidates.service prediction filter defaults view")
@@ -2709,6 +2823,247 @@ def test_tmdb_candidate_pool_criteria_name() -> None:
     )
 
 
+def test_tmdb_candidate_pool_discover_genre_filters() -> None:
+    """Checks optional TMDb Discover genre filters without real network calls."""
+    print("\n14.1) Проверяем TMDb Discover genre filters")
+
+    captured_params = []
+
+    def fake_cached_tmdb_get(_endpoint, params, _cache_path, **_kwargs):
+        captured_params.append(dict(params))
+        return {"results": [], "total_pages": 1}
+
+    with patch("apis.tmdb_api.cached_tmdb_get", side_effect=fake_cached_tmdb_get):
+        tmdb_api.discover_tv_candidates(
+            country="RU",
+            vote_average_gte=6.3,
+            vote_count_gte=10,
+            max_pages=1,
+            with_genres="18|9648|80",
+            without_genres="10766|10764",
+            token="token",
+        )
+
+    assert_check(
+        "TMDb API params сохраняют with_genres как строку",
+        captured_params[0]["with_genres"] == "18|9648|80",
+    )
+    assert_check(
+        "TMDb API params сохраняют without_genres как строку",
+        captured_params[0]["without_genres"] == "10766|10764",
+    )
+    assert_check(
+        "TMDb genre helper label содержит TMDb",
+        "TMDb" in tmdb_genre_options.TMDB_DISCOVER_GENRE_TITLE
+        and "TMDb OR" in tmdb_genre_options.TMDB_INCLUDE_OR_LABEL
+        and "TMDb AND" in tmdb_genre_options.TMDB_INCLUDE_AND_LABEL,
+    )
+
+    def run_tmdb_genre_helper(answers: list[str]):
+        helper_output = []
+        helper_prompts = []
+        helper_answers = iter(answers)
+
+        def input_func(prompt):
+            helper_prompts.append(prompt)
+            return next(helper_answers)
+
+        with_genres, without_genres = interface_funcs.request_tmdb_discover_genre_filters(
+            input_func=input_func,
+            output_func=helper_output.append,
+        )
+        return with_genres, without_genres, "\n".join(helper_output), "\n".join(helper_prompts)
+
+    enter_with_genres, enter_without_genres, enter_output, _enter_prompts = run_tmdb_genre_helper(["", ""])
+    zero_with_genres, zero_without_genres, zero_output, _zero_prompts = run_tmdb_genre_helper(["0", "0"])
+    single_with_genres, single_without_genres, single_output, _single_prompts = run_tmdb_genre_helper(["1", "0"])
+    or_with_genres, or_without_genres, helper_output_text, _or_prompts = run_tmdb_genre_helper(["1,2,3", "1", "0"])
+    and_with_genres, _and_without_genres, and_output, _and_prompts = run_tmdb_genre_helper(["1,2,3", "2", "0"])
+    _exclude_with_genres, exclude_without_genres, exclude_output, _exclude_prompts = run_tmdb_genre_helper(["0", "1,2,3,4"])
+
+    assert_check(
+        "TMDb genre helper Enter include/exclude возвращает no filter",
+        enter_with_genres is None and enter_without_genres is None,
+    )
+    assert_check(
+        "TMDb genre helper 0 include/exclude возвращает no filter",
+        zero_with_genres is None and zero_without_genres is None,
+    )
+    assert_check(
+        "TMDb genre helper не спрашивает OR/AND при пустом include",
+        "Как применять выбранные жанры (TMDb)?" not in enter_output
+        and "Как применять выбранные жанры (TMDb)?" not in zero_output,
+    )
+    assert_check(
+        "TMDb genre helper один include-жанр не спрашивает OR/AND",
+        single_with_genres == "18"
+        and single_without_genres is None
+        and "Как применять выбранные жанры (TMDb)?" not in single_output,
+    )
+    assert_check(
+        "TMDb genre helper собирает OR строку без сетевых запросов",
+        or_with_genres == "18|9648|80" and or_without_genres is None,
+    )
+    assert_check(
+        "TMDb genre helper собирает AND строку без сетевых запросов",
+        and_with_genres == "18,9648,80" and "Режим: все выбранные одновременно" in and_output,
+    )
+    assert_check(
+        "TMDb genre helper собирает exclude строку без сетевых запросов",
+        exclude_without_genres == "10766|10764|10767|10763"
+        and "Как применять выбранные жанры (TMDb)?" not in exclude_output,
+    )
+    assert_check(
+        "TMDb genre helper показывает русские labels без ID",
+        "Драма" in helper_output_text
+        and "Детектив / мистика" in helper_output_text
+        and "18" not in helper_output_text
+        and "9648" not in helper_output_text
+        and "10766" not in exclude_output,
+    )
+    assert_check(
+        "TMDb genre helper labels содержат (TMDb)",
+        "Жанры для поиска (TMDb)" in helper_output_text
+        and "Include жанры (TMDb)" in helper_output_text
+        and "Exclude жанры (TMDb)" in exclude_output,
+    )
+    tmdb_labels = [option["label"] for option in tmdb_genre_options.TV_GENRE_OPTIONS]
+    assert_check(
+        "TMDb genre picker содержит только TMDb TV genres и не содержит Триллер",
+        "Анимация" in tmdb_labels and "Триллер" not in tmdb_labels,
+    )
+    assert_check(
+        "Runtime prediction genres могут нормализовать Триллер",
+        pool_genres.normalize_genre_list(["Триллер", "thriller"]) == ["thriller"],
+    )
+
+    discover_calls = []
+
+    def fake_discover(**kwargs):
+        discover_calls.append(dict(kwargs))
+        return []
+
+    with patch("candidates.tmdb_candidate_pool.api_tmdb.load_tmdb_token", return_value="token"):
+        with patch("candidates.tmdb_candidate_pool.api_tmdb.discover_tv_candidates", side_effect=fake_discover):
+            tmdb_candidate_pool.build_candidate_pool(
+                country="RU",
+                pages=1,
+                details_limit=0,
+                mode="quality",
+                with_genres="18|9648|80",
+            )
+            tmdb_candidate_pool.build_candidate_pool(
+                country="RU",
+                pages=1,
+                details_limit=0,
+                mode="quality",
+                without_genres="10766|10764",
+            )
+            empty_result = tmdb_candidate_pool.build_candidate_pool(
+                country="RU",
+                pages=1,
+                details_limit=0,
+                mode="quality",
+                with_genres="",
+                without_genres="   ",
+            )
+            none_result = tmdb_candidate_pool.build_candidate_pool(
+                country="RU",
+                pages=1,
+                details_limit=0,
+                mode="quality",
+                with_genres=None,
+                without_genres=None,
+            )
+
+    assert_check(
+        "build_candidate_pool прокидывает with_genres в Discover",
+        discover_calls[0].get("with_genres") == "18|9648|80",
+    )
+    assert_check(
+        "build_candidate_pool прокидывает without_genres в Discover",
+        discover_calls[1].get("without_genres") == "10766|10764",
+    )
+    assert_check(
+        "Пустой with_genres не передаётся в Discover",
+        "with_genres" not in discover_calls[2],
+    )
+    assert_check(
+        "Пустой without_genres не передаётся в Discover",
+        "without_genres" not in discover_calls[2],
+    )
+    assert_check(
+        "None with_genres не передаётся в Discover",
+        "with_genres" not in discover_calls[3],
+    )
+    assert_check(
+        "None without_genres не передаётся в Discover",
+        "without_genres" not in discover_calls[3],
+    )
+    assert_check(
+        "Result settings сохраняют with_genres=None для пустого ввода",
+        empty_result["settings"]["with_genres"] is None,
+    )
+    assert_check(
+        "Result settings сохраняют without_genres=None для None ввода",
+        none_result["settings"]["without_genres"] is None,
+    )
+
+    with patch("candidates.tmdb_candidate_pool.build_candidate_pool", return_value={"ok": True}) as build_mock:
+        candidate_service.build_tmdb_candidate_pool(
+            country="RU",
+            pages=1,
+            details_limit=5,
+            mode="quality",
+            with_genres="18,80",
+            without_genres="10766|10764",
+        )
+    assert_check(
+        "Service facade прокидывает with_genres",
+        build_mock.call_args.kwargs["with_genres"] == "18,80",
+    )
+    assert_check(
+        "Service facade прокидывает without_genres",
+        build_mock.call_args.kwargs["without_genres"] == "10766|10764",
+    )
+
+    import inspect
+
+    build_flow_source = inspect.getsource(interface_funcs.run_tmdb_candidate_pool_flow)
+    assert_check(
+        "UI flow спрашивает жанры для TMDb Discover",
+        "request_tmdb_discover_genre_filters" in build_flow_source
+        and "Include жанры (TMDb)" in build_flow_source,
+    )
+    assert_check(
+        "UI flow подписывает TMDb exclude genres",
+        "Exclude жанры (TMDb)" in build_flow_source,
+    )
+    assert_check(
+        "UI flow передаёт genre filters через candidate_service",
+        "candidate_service.build_tmdb_candidate_pool" in build_flow_source
+        and "with_genres=with_genres" in build_flow_source
+        and "without_genres=without_genres" in build_flow_source,
+    )
+    prediction_filter_source = inspect.getsource(interface_funcs._request_prediction_candidate_filters)
+    default_lines = candidate_pool.format_prediction_filter_default_lines({
+        "country": None,
+        "year_min": None,
+        "year_max": None,
+        "include_genres": ["драма"],
+        "exclude_genres": ["комедия"],
+    })
+    assert_check(
+        "Prediction filter UI label указывает saved pool",
+        "saved pool" in prediction_filter_source
+        and "по сохранённым данным pool" in prediction_filter_source,
+    )
+    assert_check(
+        "Prediction defaults label указывает saved pool",
+        any("saved pool" in line for line in default_lines),
+    )
+
+
 def test_tmdb_import_keeps_cross_criteria_entries() -> None:
     """Проверяет, что TMDb import не теряет одинаковый title/year из разных criteria."""
     print("\n16) Проверяем cross-criteria TMDb import")
@@ -3118,7 +3473,7 @@ def test_run_tmdb_candidate_pool_flow_calls_auto_import_after_save() -> None:
     db_path = Path(constant.DATA_DIR) / "fake_imdb.sqlite"
     db_path.write_text("ok", encoding="utf-8")
     build_result = {"stats": {"discover_total": 1}, "candidates": []}
-    answers = iter(["", "", "", "", "", "", "", "", "", "y"])
+    answers = iter(["", "", "", "", "", "", "", "", "", "", "", "y"])
     output = io.StringIO()
 
     with patch("builtins.input", side_effect=lambda _prompt: next(answers)):
@@ -3149,7 +3504,7 @@ def test_run_tmdb_candidate_pool_flow_test_run_skips_auto_import() -> None:
     db_path = Path(constant.DATA_DIR) / "fake_imdb_test.sqlite"
     db_path.write_text("ok", encoding="utf-8")
     build_result = {"stats": {"discover_total": 1}, "candidates": []}
-    answers = iter(["", "", "", "", "", "", "", "", "y"])
+    answers = iter(["", "", "", "", "", "", "", "", "", "", "y"])
     output = io.StringIO()
 
     with patch("builtins.input", side_effect=lambda _prompt: next(answers)):
@@ -3295,6 +3650,7 @@ def run_tests() -> None:
         test_contributions_readiness_gate()
         test_candidate_service_read_only_facade()
         test_candidate_service_top_prediction_view()
+        test_top_prediction_ui_read_only_helpers()
         test_candidate_service_prediction_filter_defaults_view()
         test_candidate_service_mark_watched_in_pool()
         test_candidate_service_retry_kp_enrichment()
@@ -3310,6 +3666,7 @@ def run_tests() -> None:
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()
         test_tmdb_candidate_pool_criteria_name()
+        test_tmdb_candidate_pool_discover_genre_filters()
         test_tmdb_import_keeps_cross_criteria_entries()
         test_import_tmdb_module_normalizes_schema_and_keeps_unknown_fields()
         test_import_tmdb_module_skips_watched_by_title_identity()

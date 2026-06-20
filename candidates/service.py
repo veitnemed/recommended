@@ -97,6 +97,18 @@ def get_prediction_filter_defaults_view(criteria_name: str | None = None) -> dic
     }
 
 
+def get_prediction_genre_options_view(criteria_name: str | None = None) -> dict:
+    """Returns saved-pool genres available for top prediction filters without writing JSON."""
+    candidates = get_pool_view(criteria_name)
+    genres = candidate_pool.collect_prediction_genre_options(candidates)
+    return {
+        "criteria_name": criteria_name,
+        "genres": genres,
+        "count": len(genres),
+        "label": "Доступные жанры для top prediction (по сохранённым данным pool)",
+    }
+
+
 def mark_candidate_watched_in_pool(candidate: dict) -> dict:
     """Removes watched candidate from pool via existing title+year write-path."""
     removed_count = candidate_pool.remove_candidate_from_pool(candidate)
@@ -237,6 +249,8 @@ def build_tmdb_candidate_pool(
     year_max: int | None = None,
     min_tmdb_score: float | None = None,
     min_tmdb_votes: int | None = None,
+    with_genres: str | None = None,
+    without_genres: str | None = None,
     force_refresh: bool = False,
     db_path=None,
     kp_api_limit: int | None = None,
@@ -252,6 +266,8 @@ def build_tmdb_candidate_pool(
         "year_max": year_max,
         "min_tmdb_score": min_tmdb_score,
         "min_tmdb_votes": min_tmdb_votes,
+        "with_genres": with_genres,
+        "without_genres": without_genres,
         "force_refresh": force_refresh,
         "kp_api_limit": kp_api_limit,
     }

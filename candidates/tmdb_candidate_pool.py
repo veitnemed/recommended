@@ -208,8 +208,6 @@ def discover_defaults(country: str) -> dict[str, Any]:
     country = normalize_country_code(country)
     params: dict[str, Any] = {
         "country": country,
-        "genres_any": SERIOUS_GENRES_TMDB,
-        "without_genres": WITHOUT_GENRES_TMDB,
         "vote_average_gte": DEFAULT_VOTE_AVERAGE_GTE,
         "vote_count_gte": DEFAULT_VOTE_COUNT_GTE,
         "language": "ru-RU",
@@ -220,6 +218,11 @@ def discover_defaults(country: str) -> dict[str, Any]:
     return params
 
 
+def normalize_optional_tmdb_genre_filter(value: str | None) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
 def apply_discover_filters(
     query: dict[str, Any],
     *,
@@ -227,6 +230,8 @@ def apply_discover_filters(
     year_max: int | None = None,
     min_tmdb_score: float | None = None,
     min_tmdb_votes: int | None = None,
+    with_genres: str | None = None,
+    without_genres: str | None = None,
 ) -> dict[str, Any]:
     updated = dict(query)
     if year_min is not None:
@@ -237,6 +242,12 @@ def apply_discover_filters(
         updated["vote_average_gte"] = float(min_tmdb_score)
     if min_tmdb_votes is not None:
         updated["vote_count_gte"] = int(min_tmdb_votes)
+    normalized_with_genres = normalize_optional_tmdb_genre_filter(with_genres)
+    normalized_without_genres = normalize_optional_tmdb_genre_filter(without_genres)
+    if normalized_with_genres is not None:
+        updated["with_genres"] = normalized_with_genres
+    if normalized_without_genres is not None:
+        updated["without_genres"] = normalized_without_genres
     return updated
 
 
@@ -688,6 +699,8 @@ def build_candidate_pool(
     year_max: int | None = None,
     min_tmdb_score: float | None = None,
     min_tmdb_votes: int | None = None,
+    with_genres: str | None = None,
+    without_genres: str | None = None,
     force_refresh: bool = False,
     db_path: str | Path = sql_search.DEFAULT_DB_PATH,
     kp_api_limit: int | None = None,
@@ -711,6 +724,8 @@ def build_candidate_pool(
         year_max=year_max,
         min_tmdb_score=min_tmdb_score,
         min_tmdb_votes=min_tmdb_votes,
+        with_genres=with_genres,
+        without_genres=without_genres,
     )
     report_progress("TMDb Discover", "Ожидание ответа")
     try:
@@ -738,6 +753,8 @@ def build_candidate_pool(
             "year_max": year_max,
             "min_tmdb_score": min_tmdb_score,
             "min_tmdb_votes": min_tmdb_votes,
+            "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
+            "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
         },
         "duplicates_removed": duplicates_removed,
         "watched_skipped": watched_skipped,
@@ -852,6 +869,8 @@ def build_candidate_pool(
             "year_max": year_max,
             "min_tmdb_score": min_tmdb_score,
             "min_tmdb_votes": min_tmdb_votes,
+            "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
+            "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
         },
         "stats": stats,
         "candidates": candidates,
