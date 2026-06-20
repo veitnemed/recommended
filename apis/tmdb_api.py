@@ -20,6 +20,7 @@ DEFAULT_REGION = "RU"
 TMDB_CACHE_DIR = ROOT_DIR / "data" / "cache" / "tmdb"
 DISCOVER_CACHE_DIR = TMDB_CACHE_DIR / "discover"
 DETAILS_CACHE_DIR = TMDB_CACHE_DIR / "details"
+GENRE_CACHE_DIR = TMDB_CACHE_DIR / "genre"
 
 
 def find_dotenv(path: str | Path = ".env") -> Path | None:
@@ -70,6 +71,7 @@ def get_token() -> str:
 def ensure_cache_dirs() -> None:
     DISCOVER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     DETAILS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    GENRE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def read_json(path: Path) -> dict[str, Any] | None:
@@ -161,6 +163,29 @@ def search_tv_by_name(
         token=token,
     )
     return payload.get("results") or []
+
+
+def get_tv_genre_list(
+    language: str = "en",
+    *,
+    force_refresh: bool = False,
+    token: str | None = None,
+) -> list[dict[str, Any]]:
+    """Возвращает список жанров TV с кэшированием по языку."""
+    safe_language = str(language).replace("-", "_")
+    params = {"language": str(language).strip() or "en"}
+    cache_path = GENRE_CACHE_DIR / f"tv_{safe_language}.json"
+    payload = cached_tmdb_get(
+        "/genre/tv/list",
+        params,
+        cache_path,
+        force_refresh=force_refresh,
+        token=token,
+    )
+    genres = payload.get("genres")
+    if isinstance(genres, list) is False:
+        return []
+    return genres
 
 
 def search_tv(title: str, token: str) -> list[dict[str, Any]]:

@@ -104,6 +104,56 @@ def _base_import_stats(read: int, criteria_name: str, pool_size_before: int) -> 
     }
 
 
+def build_tmdb_import_criteria_defaults(criteria_name: str) -> dict[str, Any]:
+    """Возвращает безопасный базовый criteria-entry для нового TMDb import."""
+    return {
+        "criteria_name": criteria_name,
+        "count": 0,
+        "min_kp": None,
+        "max_kp": None,
+        "min_imdb": None,
+        "max_imdb": None,
+        "min_kp_votes": None,
+        "min_imdb_votes": None,
+        "min_year": None,
+        "max_year": None,
+        "genres": [],
+        "excluded_genres": [],
+    }
+
+
+def build_tmdb_import_criteria_metadata(
+    *,
+    criteria_name: str,
+    result_metadata: dict[str, Any],
+    result_path: str | Path | None,
+    candidate_count: int,
+    imported_count: int,
+) -> dict[str, Any]:
+    """Возвращает metadata-поля, которые TMDb import может безопасно обновлять."""
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    return {
+        "criteria_name": criteria_name,
+        "country": result_metadata.get("country"),
+        "mode": result_metadata.get("mode"),
+        "source": "tmdb_imdb_kp_v1",
+        "settings": result_metadata.get("settings") or {},
+        "result_file": str(result_path) if result_path is not None else "",
+        "updated_at": timestamp,
+        "last_imported_at": timestamp,
+        "candidate_count": candidate_count,
+        "imported_count": imported_count,
+    }
+
+
+def merge_criteria_metadata(existing: dict[str, Any], incoming_metadata: dict[str, Any]) -> dict[str, Any]:
+    """Накладывает только metadata-поля поверх существующего criteria, не трогая filters."""
+    merged = dict(existing)
+    for key, value in incoming_metadata.items():
+        merged[key] = value
+    return merged
+
+
 def import_tmdb_candidates_to_common_pool(
     candidates: list[dict[str, Any]],
     criteria_name: str | None = None,
@@ -146,22 +196,22 @@ def import_tmdb_candidates_to_common_pool(
             stats["duplicates"] += 1
             stats["skipped_duplicates"] += 1
 
-    legacy_candidate_pool.save_named_criteria(resolved_criteria_name, {
-        "country": result_metadata.get("country"),
-        "count": len(candidates),
-        "min_kp": None,
-        "min_imdb": None,
-        "min_kp_votes": None,
-        "min_imdb_votes": None,
-        "min_year": None,
-        "max_year": None,
-        "genres": [],
-        "excluded_genres": [],
-        "source": "tmdb_imdb_kp_v1",
-        "settings": result_metadata.get("settings") or {},
-        "result_file": str(result_path) if result_path is not None else "",
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-    })
+    existing_criteria = legacy_candidate_pool.load_candidate_criteria().get(resolved_criteria_name) or {}
+    criteria_entry = build_tmdb_import_criteria_defaults(resolved_criteria_name)
+    criteria_entry.update(existing_criteria if isinstance(existing_criteria, dict) else {})
+    criteria_metadata = build_tmdb_import_criteria_metadata(
+        criteria_name=resolved_criteria_name,
+        result_metadata=result_metadata,
+        result_path=result_path,
+        candidate_count=len(candidates),
+        imported_count=stats["added"] + stats["updated"],
+    )
+    if criteria_entry.get("count") in (None, 0, ""):
+        criteria_entry["count"] = len(candidates)
+    legacy_candidate_pool.save_named_criteria(
+        resolved_criteria_name,
+        merge_criteria_metadata(criteria_entry, criteria_metadata),
+    )
     legacy_candidate_pool.save_candidate_pool(pool)
     pool_size_after = len(legacy_candidate_pool.load_candidate_pool())
     stats["pool_size_after"] = pool_size_after

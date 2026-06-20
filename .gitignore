@@ -30,4 +30,7 @@ datasets/
 
 data/candidate_pool/
 data/diagnostics/
+/reports/
 _safety_audit/
+
+/tmdb_net

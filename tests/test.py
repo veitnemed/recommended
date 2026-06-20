@@ -1706,6 +1706,174 @@ def test_import_tmdb_module_skips_watched_by_title_identity() -> None:
     )
 
 
+def test_import_tmdb_preserves_existing_criteria_filters() -> None:
+    """Проверяет, что TMDb import не затирает существующие filters criteria."""
+    print("\n19) Проверяем сохранение existing criteria filters при TMDb import")
+
+    candidate_pool.save_candidate_pool({})
+    candidate_pool.save_candidate_criteria({})
+    storage_data.clean_dataset()
+
+    candidate_pool.save_named_criteria("tmdb_RU_quality", {
+        "criteria_name": "tmdb_RU_quality",
+        "genres": ["драма"],
+        "excluded_genres": ["мелодрама"],
+        "min_kp": 7.0,
+        "custom_note": "ручная настройка",
+    })
+
+    result_path = Path(constant.DATA_DIR) / "tmdb_preserve_filters.json"
+    result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "settings": {"criteria_name": "tmdb_RU_quality", "pages": 1},
+        "candidates": [
+            {
+                "title": "Preserve Filters",
+                "year": 2024,
+                "tmdb_id": 501,
+                "tmdb_rating": 7.8,
+                "tmdb_votes": 80,
+            }
+        ],
+    }
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+    stats = tmdb_import.import_tmdb_result_to_common_pool(result_path)
+    criteria = candidate_pool.load_candidate_criteria()["tmdb_RU_quality"]
+
+    assert_check("TMDb import успешен", stats["ok"] is True)
+    assert_check("genres сохраняются после import", criteria["genres"] == ["драма"])
+    assert_check("excluded_genres сохраняются после import", criteria["excluded_genres"] == ["мелодрама"])
+    assert_check("min_kp сохраняется после import", criteria["min_kp"] == 7.0)
+    assert_check("Unknown custom field сохраняется", criteria["custom_note"] == "ручная настройка")
+    assert_check("Metadata source обновляется", criteria["source"] == "tmdb_imdb_kp_v1")
+    assert_check("Metadata result_file обновляется", criteria["result_file"].endswith("tmdb_preserve_filters.json"))
+
+
+def test_import_tmdb_creates_new_criteria_with_safe_defaults() -> None:
+    """Проверяет, что новый criteria создаётся с безопасными default filters и metadata."""
+    print("\n20) Проверяем создание нового criteria при TMDb import")
+
+    candidate_pool.save_candidate_pool({})
+    candidate_pool.save_candidate_criteria({})
+    storage_data.clean_dataset()
+
+    result_path = Path(constant.DATA_DIR) / "tmdb_new_criteria.json"
+    result = {
+        "criteria_name": "tmdb_US_quality",
+        "country": "US",
+        "mode": "quality",
+        "settings": {"criteria_name": "tmdb_US_quality", "pages": 1},
+        "candidates": [
+            {
+                "title": "New Criteria Candidate",
+                "year": 2023,
+                "tmdb_id": 502,
+                "tmdb_rating": 7.0,
+                "tmdb_votes": 55,
+            }
+        ],
+    }
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+    stats = tmdb_import.import_tmdb_result_to_common_pool(result_path)
+    criteria = candidate_pool.load_candidate_criteria()["tmdb_US_quality"]
+
+    assert_check("Новый criteria import успешен", stats["ok"] is True)
+    assert_check("Новый criteria получает default genres", criteria["genres"] == [])
+    assert_check("Новый criteria получает default excluded_genres", criteria["excluded_genres"] == [])
+    assert_check("Новый criteria получает default min_kp=None", criteria["min_kp"] is None)
+    assert_check("Новый criteria получает metadata country", criteria["country"] == "US")
+    assert_check("Новый criteria получает metadata mode", criteria["mode"] == "quality")
+    assert_check("Новый criteria получает candidate_count", criteria["candidate_count"] == 1)
+
+
+def test_import_tmdb_repeated_import_keeps_custom_unknown_fields() -> None:
+    """Проверяет, что repeated import не стирает custom unknown fields в criteria."""
+    print("\n21) Проверяем repeated import без потери custom fields")
+
+    candidate_pool.save_candidate_pool({})
+    candidate_pool.save_candidate_criteria({})
+    storage_data.clean_dataset()
+
+    candidate_pool.save_named_criteria("tmdb_RU_quality", {
+        "criteria_name": "tmdb_RU_quality",
+        "genres": ["триллер"],
+        "custom_note": "keep_me",
+        "custom_blob": {"owner": "user"},
+    })
+
+    first_result_path = Path(constant.DATA_DIR) / "tmdb_repeat_first.json"
+    second_result_path = Path(constant.DATA_DIR) / "tmdb_repeat_second.json"
+    base_result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "settings": {"criteria_name": "tmdb_RU_quality"},
+        "candidates": [
+            {
+                "title": "Repeat Candidate",
+                "year": 2022,
+                "tmdb_id": 503,
+                "tmdb_rating": 7.4,
+                "tmdb_votes": 44,
+            }
+        ],
+    }
+    first_result_path.write_text(json.dumps(base_result, ensure_ascii=False), encoding="utf-8")
+    second_result_path.write_text(json.dumps(base_result, ensure_ascii=False), encoding="utf-8")
+
+    first_stats = tmdb_import.import_tmdb_result_to_common_pool(first_result_path)
+    second_stats = tmdb_import.import_tmdb_result_to_common_pool(second_result_path)
+    criteria = candidate_pool.load_candidate_criteria()["tmdb_RU_quality"]
+
+    assert_check("Первый repeated import успешен", first_stats["ok"] is True)
+    assert_check("Второй repeated import успешен", second_stats["ok"] is True)
+    assert_check("custom_note переживает repeated import", criteria["custom_note"] == "keep_me")
+    assert_check("custom_blob переживает repeated import", criteria["custom_blob"] == {"owner": "user"})
+    assert_check("genres тоже переживают repeated import", criteria["genres"] == ["триллер"])
+
+
+def test_import_tmdb_stats_stay_stable_with_criteria_merge() -> None:
+    """Проверяет, что merge criteria metadata не ломает import stats."""
+    print("\n22) Проверяем стабильность import stats при merge criteria")
+
+    candidate_pool.save_candidate_pool({})
+    candidate_pool.save_candidate_criteria({})
+    storage_data.clean_dataset()
+
+    result_path = Path(constant.DATA_DIR) / "tmdb_stats_merge.json"
+    result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "settings": {"criteria_name": "tmdb_RU_quality"},
+        "candidates": [
+            {
+                "title": "Stats Merge Candidate",
+                "year": 2021,
+                "tmdb_id": 504,
+                "tmdb_rating": 7.6,
+                "tmdb_votes": 61,
+            }
+        ],
+    }
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+    first_stats = tmdb_import.import_tmdb_result_to_common_pool(result_path)
+    second_stats = tmdb_import.import_tmdb_result_to_common_pool(result_path)
+
+    assert_check("Первый import читает 1 кандидата", first_stats["read"] == 1)
+    assert_check("Первый import добавляет 1 кандидата", first_stats["added"] == 1)
+    assert_check("Первый import без ошибок", first_stats["errors"] == 0)
+    assert_check("Второй import читает 1 кандидата", second_stats["read"] == 1)
+    assert_check("Второй import считает duplicate", second_stats["duplicates"] == 1)
+    assert_check("Второй import заполняет skipped_duplicates alias", second_stats["skipped_duplicates"] == 1)
+    assert_check("criteria_name в stats не ломается", second_stats["criteria_name"] == "tmdb_RU_quality")
+
+
 def test_tmdb_candidate_pool_import_wrapper_delegates_to_new_module() -> None:
     """Проверяет, что legacy wrapper вызывает новый import_tmdb модуль."""
     print("\n19) Проверяем wrapper import в tmdb_candidate_pool")
@@ -2000,6 +2168,10 @@ def run_tests() -> None:
         test_tmdb_import_keeps_cross_criteria_entries()
         test_import_tmdb_module_normalizes_schema_and_keeps_unknown_fields()
         test_import_tmdb_module_skips_watched_by_title_identity()
+        test_import_tmdb_preserves_existing_criteria_filters()
+        test_import_tmdb_creates_new_criteria_with_safe_defaults()
+        test_import_tmdb_repeated_import_keeps_custom_unknown_fields()
+        test_import_tmdb_stats_stay_stable_with_criteria_merge()
         test_tmdb_candidate_pool_import_wrapper_delegates_to_new_module()
         test_tmdb_auto_import_helper_accepts_enter_as_yes()
         test_tmdb_auto_import_helper_n_cancels_import()
