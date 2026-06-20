@@ -6,7 +6,7 @@ from config import constant
 from dataset import excel_work
 from storage import files as storage_files
 from dataset import storage_movie
-from candidates import candidate_pool
+from candidates import service as candidate_service
 from ui.console import backup_menu
 from ui.console import interface_funcs
 from ui.console import menu_state
@@ -190,8 +190,9 @@ def open_candidate_pool_menu():
     while True:
         ui.clean_terminal()
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        candidates_count = len(candidate_pool.load_candidate_pool())
-        ui.show_candidate_pool_menu(movies_counter, round(abs_error, 2), candidates_count)
+        pool_stats_view = candidate_service.get_pool_stats_view()
+        pool_stats_line = pool_stats_view["summary"]
+        ui.show_candidate_pool_menu(movies_counter, round(abs_error, 2), pool_stats_line)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":

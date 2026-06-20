@@ -65,11 +65,11 @@ def show_data_menu(movies_counter: int, error: int):
     print(' 0 >> Главное меню\n')
 
 
-def show_candidate_pool_menu(movies_counter: int, error: int, candidates_count: int):
+def show_candidate_pool_menu(movies_counter: int, error: int, pool_stats_line: str):
     """Печатает меню работы с общим пулом кандидатов."""
     show_header(movies_counter, error)
     show_menu_title('ПУЛЛ КАНДИДАТОВ')
-    print(f'Всего кандидатов: {candidates_count}\n')
+    print(f'{pool_stats_line}\n')
     print(' 1 >> Собрать новый пулл')
     print(' 2 >> Посмотреть пуллы кандидатов')
     print(' 3 >> Собрать топ из общего пула')

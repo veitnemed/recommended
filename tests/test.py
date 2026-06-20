@@ -24,6 +24,8 @@ from storage import normalize as storage_normalize
 from dataset import storage_movie
 from dataset import excel_work
 from candidates import candidate_pool
+from candidates import service as candidate_service
+from candidates import genres as pool_genres
 from candidates import import_tmdb as tmdb_import
 from candidates import schema as candidate_schema
 from candidates import tmdb_candidate_pool
@@ -1288,6 +1290,1134 @@ def test_load_candidate_pool_is_read_only() -> None:
     assert_check("load_candidate_pool возвращает данные", len(pool) == 1)
     assert_check("load_candidate_pool не меняет mtime файла", before_mtime == after_mtime)
 
+
+def test_read_path_keeps_watched_in_json() -> None:
+    """Проверяет, что read-path не удаляет watched из JSON и не переписывает файл."""
+    print("\n15) Проверяем read-path: watched остаётся в JSON")
+
+    storage_movie.add_movie(make_movie(title="Watched In Pool", user_score=8.0))
+    candidate_pool.init_candidate_pool()
+    pool_data = {
+        "watched-entry": {
+            "title": "Watched In Pool",
+            "alternative_title": "",
+            "year": 2024,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.5,
+            "kp_votes": 1000,
+            "imdb_score": 7.3,
+            "imdb_votes": 3000,
+            "genres": ["драма"],
+        },
+    }
+    with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
+        json.dump(pool_data, file, ensure_ascii=False, indent=4)
+
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    with patch("candidates.candidate_pool.save_candidate_pool", side_effect=RuntimeError("read must not save")):
+        candidates = candidate_pool.get_all_candidates()
+        by_criteria = candidate_pool.get_candidates_by_criteria("tmdb_RU_quality")
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    pool = candidate_pool.load_candidate_pool()
+
+    assert_check("get_all_candidates не переписывает JSON", before_mtime == after_mtime)
+    assert_check("Watched candidate остаётся в JSON", any(
+        item.get("title") == "Watched In Pool" for item in pool.values()
+    ))
+    assert_check("get_all_candidates возвращает watched из storage", any(
+        item.get("title") == "Watched In Pool" for item in candidates
+    ))
+    assert_check("get_candidates_by_criteria возвращает watched из storage", any(
+        item.get("title") == "Watched In Pool" for item in by_criteria
+    ))
+
+
+def test_write_path_purges_watched_from_json() -> None:
+    """Проверяет, что save_candidate_pool удаляет watched из сохранённого JSON."""
+    print("\n16) Проверяем write-path: watched purge при save")
+
+    storage_movie.add_movie(make_movie(title="Watched On Save", user_score=8.0))
+    candidate_pool.init_candidate_pool()
+    pool_data = {
+        "watched-entry": {
+            "title": "Watched On Save",
+            "alternative_title": "",
+            "year": 2024,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.5,
+            "kp_votes": 1000,
+            "imdb_score": 7.3,
+            "imdb_votes": 3000,
+            "genres": ["драма"],
+        },
+        "other-entry": {
+            "title": "Still In Pool",
+            "alternative_title": "",
+            "year": 2023,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 8.0,
+            "kp_votes": 2000,
+            "imdb_score": 7.8,
+            "imdb_votes": 5000,
+            "genres": ["драма"],
+        },
+    }
+    with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
+        json.dump(pool_data, file, ensure_ascii=False, indent=4)
+
+    candidate_pool.save_candidate_pool(candidate_pool.load_candidate_pool())
+    pool = candidate_pool.load_candidate_pool()
+
+    assert_check("Watched candidate удалён из JSON", all(
+        item.get("title") != "Watched On Save" for item in pool.values()
+    ))
+    assert_check("Непросмотренный кандидат остаётся в JSON", any(
+        item.get("title") == "Still In Pool" for item in pool.values()
+    ))
+
+
+def test_get_pool_stats_reports_raw_storage_watched_ready() -> None:
+    """Проверяет согласованные счётчики pool stats для UI."""
+    print("\n17) Проверяем get_pool_stats: raw/storage/watched/ready/incomplete")
+
+    storage_movie.add_movie(make_movie(title="Watched Stats", user_score=8.0))
+    candidate_pool.init_candidate_pool()
+    pool_data = {
+        "legacy-watched": {
+            "title": "Watched Stats",
+            "alternative_title": "",
+            "year": 2024,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": None,
+            "kp_votes": None,
+            "imdb_score": 7.3,
+            "imdb_votes": 3000,
+            "genres": ["драма"],
+        },
+        "legacy-ready": {
+            "title": "Ready Stats",
+            "alternative_title": "",
+            "year": 2023,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 8.0,
+            "kp_votes": 2000,
+            "imdb_score": 7.8,
+            "imdb_votes": 5000,
+            "genres": ["драма"],
+        },
+        "legacy-incomplete": {
+            "title": "Incomplete Stats",
+            "alternative_title": "",
+            "year": 2022,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": None,
+            "kp_votes": None,
+            "imdb_score": 7.1,
+            "imdb_votes": 4000,
+            "genres": ["драма"],
+        },
+    }
+    with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
+        json.dump(pool_data, file, ensure_ascii=False, indent=4)
+
+    stats = candidate_pool.get_pool_stats()
+    scoped_stats = candidate_pool.get_pool_stats(criteria_name="tmdb_RU_quality")
+
+    assert_check("raw_total считает записи JSON", stats["raw_total"] == 3)
+    assert_check("storage_total считает normalized pool", stats["storage_total"] == 3)
+    assert_check("watched_total видит просмотренного в pool", stats["watched_total"] == 1)
+    assert_check("active_total = storage - watched", stats["active_total"] == 2)
+    assert_check("ready_total считает complete", stats["ready_total"] == 1)
+    assert_check("incomplete_total считает неполных", stats["incomplete_total"] == 2)
+    assert_check("Scoped stats совпадают с общими для одного criteria", scoped_stats["storage_total"] == 3)
+
+
+def test_build_prediction_filter_defaults_from_saved_criteria() -> None:
+    """Проверяет, что top prediction может взять defaults из candidate_criteria.json."""
+    print("\n18) Проверяем prediction filter defaults из criteria")
+
+    candidate_pool.save_named_criteria("tmdb_RU_quality", {
+        "country": "Россия",
+        "count": 20,
+        "min_kp": 7.0,
+        "min_kp_votes": 100,
+        "min_imdb": 6.5,
+        "min_imdb_votes": 500,
+        "min_year": 2020,
+        "max_year": 2024,
+        "genres": ["драма"],
+        "excluded_genres": ["комедия"],
+    })
+
+    defaults = candidate_pool.build_prediction_filter_defaults("tmdb_RU_quality")
+
+    assert_check("criteria_name сохраняется в defaults", defaults["criteria_name"] == "tmdb_RU_quality")
+    assert_check("country подтягивается из criteria", defaults["country"] == "Россия")
+    assert_check("min_kp_score подтягивается из criteria", defaults["min_kp_score"] == 7.0)
+    assert_check("include_genres подтягиваются из criteria", defaults["include_genres"] == ["драма"])
+    assert_check("exclude_genres подтягиваются из criteria", defaults["exclude_genres"] == ["комедия"])
+    assert_check("year_min подтягивается из criteria", defaults["year_min"] == 2020)
+    assert_check("year_max подтягивается из criteria", defaults["year_max"] == 2024)
+
+
+def test_prediction_filters_apply_saved_criteria_defaults() -> None:
+    """Проверяет, что runtime filters из criteria реально отбирают pool без его изменения."""
+    print("\n19) Проверяем применение criteria defaults к runtime filters")
+
+    candidate_pool.save_named_criteria("tmdb_RU_quality", {
+        "min_kp": 7.5,
+        "genres": ["драма"],
+        "excluded_genres": ["комедия"],
+    })
+    candidate_pool.save_candidate_pool({
+        "one": {
+            "title": "Drama Match",
+            "year": 2022,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 8.0,
+            "kp_votes": 1000,
+            "imdb_score": 7.5,
+            "imdb_votes": 5000,
+            "genres": ["драма"],
+        },
+        "two": {
+            "title": "Comedy Skip",
+            "year": 2022,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 8.5,
+            "kp_votes": 1200,
+            "imdb_score": 7.8,
+            "imdb_votes": 6000,
+            "genres": ["комедия"],
+        },
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    candidates = candidate_pool.get_all_candidates()
+    filters = candidate_pool.build_prediction_filter_defaults("tmdb_RU_quality")
+    filtered = candidate_pool.filter_saved_candidates_for_prediction(candidates, filters)
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check("Runtime filters не переписывают pool JSON", before_mtime == after_mtime)
+    assert_check("Criteria defaults отбирают только подходящий жанр", len(filtered) == 1)
+    assert_check("Остаётся drama-кандидат", filtered[0]["title"] == "Drama Match")
+
+
+def _runtime_genre_filter(include_genres=None, exclude_genres=None, candidates=None):
+    if candidates is None:
+        candidates = []
+    return candidate_pool.filter_saved_candidates_for_prediction(
+        candidates,
+        {
+            "criteria_name": None,
+            "source": None,
+            "country": None,
+            "year_min": None,
+            "year_max": None,
+            "include_genres": include_genres or [],
+            "exclude_genres": exclude_genres or [],
+            "min_kp_score": None,
+            "min_kp_votes": None,
+            "min_imdb_score": None,
+            "min_imdb_votes": None,
+            "min_tmdb_score": None,
+            "min_tmdb_votes": None,
+            "only_complete": False,
+        },
+    )
+
+
+def _genre_ready_candidate(title: str, genres: list) -> dict:
+    return {
+        "title": title,
+        "year": 2022,
+        "criteria_name": "tmdb_RU_quality",
+        "kp_score": 8.0,
+        "kp_votes": 1000,
+        "imdb_score": 7.5,
+        "imdb_votes": 5000,
+        "genres": genres,
+    }
+
+
+def test_genre_normalization_runtime_filters() -> None:
+    """Проверяет RU/EN genre aliases только в runtime-фильтрации pool."""
+    print("\n20) Проверяем runtime genre normalization")
+
+    drama_candidate = _genre_ready_candidate("Drama EN", ["Drama"])
+    mystery_candidate = _genre_ready_candidate("Mystery EN", ["Mystery"])
+    crime_candidate = _genre_ready_candidate("Crime EN", ["Crime"])
+    reality_candidate = _genre_ready_candidate("Reality EN", ["Reality"])
+    drama_only_candidate = _genre_ready_candidate("Only Drama", ["Drama"])
+
+    assert_check(
+        "RU drama матчится с EN Drama",
+        len(_runtime_genre_filter(["драма"], candidates=[drama_candidate])) == 1,
+    )
+    assert_check(
+        "RU детектив матчится с EN Mystery",
+        len(_runtime_genre_filter(["детектив"], candidates=[mystery_candidate])) == 1,
+    )
+    assert_check(
+        "RU криминал матчится с EN Crime",
+        len(_runtime_genre_filter(["криминал"], candidates=[crime_candidate])) == 1,
+    )
+    assert_check(
+        "Exclude реалити отсекает EN Reality",
+        len(_runtime_genre_filter(exclude_genres=["реалити"], candidates=[reality_candidate])) == 0,
+    )
+    assert_check(
+        "Unknown genre не ломает фильтр и не матчится",
+        len(_runtime_genre_filter(["странный жанр"], candidates=[drama_only_candidate])) == 0,
+    )
+    assert_check(
+        "normalize_genre_list убирает дубли и регистр",
+        pool_genres.normalize_genre_list([" Drama ", "драма", "DRAMA"]) == ["drama"],
+    )
+
+    candidate_pool.save_candidate_pool({
+        "one": drama_candidate,
+        "two": reality_candidate,
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    candidates = candidate_pool.get_all_candidates()
+    filtered = _runtime_genre_filter(["драма"], candidates=candidates)
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check("Top/runtime filter не переписывает candidate_pool.json", before_mtime == after_mtime)
+    assert_check("Runtime filter по RU drama находит EN Drama из pool", len(filtered) == 1)
+    assert_check("Runtime filter оставляет EN Drama title", filtered[0]["title"] == "Drama EN")
+
+
+def test_contributions_readiness_gate() -> None:
+    """Проверяет readiness gate для feature contributions без изменения pool/model."""
+    print("\n21) Проверяем readiness gate для contributions")
+
+    ready_candidate = _genre_ready_candidate("Ready Title", ["Drama"])
+    incomplete_candidate = {
+        "title": "Incomplete Title",
+        "year": 2021,
+        "imdb_score": 7.0,
+        "imdb_votes": 1000,
+        "kp_score": None,
+        "kp_votes": None,
+    }
+
+    ready_only = candidate_pool.select_ready_candidates_for_contributions(
+        [ready_candidate, incomplete_candidate]
+    )
+    assert_check("Ready candidate проходит contributions gate", len(ready_only) == 1)
+    assert_check(
+        "Incomplete candidate отфильтровывается",
+        candidate_pool.select_ready_candidates_for_contributions([incomplete_candidate]) == [],
+    )
+
+    not_ready_message = candidate_pool.candidate_not_ready_for_contributions_message(incomplete_candidate)
+    assert_check(
+        "Incomplete candidate получает понятное сообщение",
+        not_ready_message is not None and "kp_score" in not_ready_message,
+    )
+    assert_check(
+        "Ready candidate не получает not-ready сообщение",
+        candidate_pool.candidate_not_ready_for_contributions_message(ready_candidate) is None,
+    )
+
+    weights = storage_data.load_weights()
+    contribution_calls = {"count": 0}
+
+    def _count_contributions(candidate, loaded_weights):
+        contribution_calls["count"] += 1
+        return {
+            "title": candidate.get("title"),
+            "year": candidate.get("year"),
+            "predict": 0.0,
+            "positive": [],
+            "negative": [],
+            "criteria_name": "",
+        }
+
+    with patch("candidates.candidate_pool.candidate_feature_contributions", side_effect=_count_contributions):
+        incomplete_reports = candidate_pool.build_contribution_reports_for_ready_candidates(
+            [incomplete_candidate],
+            weights,
+        )
+
+    assert_check("Incomplete candidate не вызывает contributions", contribution_calls["count"] == 0)
+    assert_check("Reports для incomplete-only пустой", incomplete_reports == [])
+
+    contribution_calls["count"] = 0
+    with patch("candidates.candidate_pool.candidate_feature_contributions", side_effect=_count_contributions):
+        mixed_reports = candidate_pool.build_contribution_reports_for_ready_candidates(
+            [ready_candidate, incomplete_candidate],
+            weights,
+        )
+
+    assert_check("Contributions считаются только для ready", contribution_calls["count"] == 1)
+    assert_check(
+        "Report строится только для ready candidate",
+        len(mixed_reports) == 1 and mixed_reports[0]["title"] == "Ready Title",
+    )
+
+    candidate_pool.save_candidate_pool({
+        "one": ready_candidate,
+        "two": incomplete_candidate,
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    candidate_pool.build_contribution_reports_for_ready_candidates(
+        candidate_pool.get_all_candidates(),
+        weights,
+    )
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    assert_check("Contributions gate не переписывает candidate_pool.json", before_mtime == after_mtime)
+
+
+def test_candidate_service_read_only_facade() -> None:
+    """Проверяет read-only facade candidates.service без записи в JSON."""
+    print("\n22) Проверяем candidates.service read-only facade")
+
+    ready_candidate = _genre_ready_candidate("Service Ready", ["Drama"])
+    incomplete_candidate = {
+        "title": "Service Incomplete",
+        "year": 2021,
+        "criteria_name": "tmdb_RU_quality",
+        "imdb_score": 7.0,
+        "imdb_votes": 1000,
+        "kp_score": None,
+        "kp_votes": None,
+    }
+
+    candidate_pool.save_candidate_pool({
+        "one": ready_candidate,
+        "two": incomplete_candidate,
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    all_view = candidate_service.get_pool_view()
+    scoped_view = candidate_service.get_pool_view(criteria_name="tmdb_RU_quality")
+    stats_view = candidate_service.get_pool_stats_view()
+    contribution_view = candidate_service.get_contribution_ready_view(all_view)
+
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check(
+        "get_pool_view(None) совпадает с get_all_candidates()",
+        all_view == candidate_pool.get_all_candidates(),
+    )
+    assert_check(
+        "get_pool_view(criteria) совпадает с get_candidates_by_criteria()",
+        scoped_view == candidate_pool.get_candidates_by_criteria("tmdb_RU_quality"),
+    )
+    assert_check(
+        "get_pool_stats_view stats совместимы с get_pool_stats()",
+        stats_view["stats"] == candidate_pool.get_pool_stats(),
+    )
+    assert_check(
+        "get_pool_stats_view lines не пустые при непустом pool",
+        len(stats_view["lines"]) > 0,
+    )
+    assert_check(
+        "get_contribution_ready_view пропускает ready candidate",
+        len(contribution_view["ready_candidates"]) == 1,
+    )
+    assert_check(
+        "get_contribution_ready_view относит incomplete к skipped",
+        len(contribution_view["skipped_incomplete"]) == 1,
+    )
+    assert_check(
+        "get_contribution_ready_view даёт not-ready message",
+        contribution_view["not_ready_messages"][0]["message"] is not None,
+    )
+    assert_check(
+        "service read-only функции не переписывают candidate_pool.json",
+        before_mtime == after_mtime,
+    )
+
+
+def test_candidate_service_top_prediction_view() -> None:
+    """Проверяет read-only подготовку top prediction через candidates.service."""
+    print("\n23) Проверяем candidates.service top prediction view")
+
+    ready_candidate = _genre_ready_candidate("Top Ready", ["Drama"])
+    incomplete_candidate = {
+        "title": "Top Incomplete",
+        "year": 2021,
+        "criteria_name": "tmdb_RU_quality",
+        "imdb_score": 7.0,
+        "imdb_votes": 1000,
+        "kp_score": None,
+        "kp_votes": None,
+        "genres": ["Drama"],
+    }
+
+    candidate_pool.save_candidate_pool({
+        "one": ready_candidate,
+        "two": incomplete_candidate,
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    top_view = candidate_service.get_global_top_prediction_view()
+    filters = {
+        "criteria_name": "tmdb_RU_quality",
+        "source": None,
+        "country": None,
+        "year_min": None,
+        "year_max": None,
+        "include_genres": [],
+        "exclude_genres": [],
+        "min_kp_score": None,
+        "min_kp_votes": None,
+        "min_imdb_score": None,
+        "min_imdb_votes": None,
+        "min_tmdb_score": None,
+        "min_tmdb_votes": None,
+        "only_complete": False,
+    }
+    filter_view = candidate_service.get_prediction_filter_view(top_view["candidates"], filters)
+
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check(
+        "get_global_top_prediction_view candidates совпадают с get_pool_view()",
+        top_view["candidates"] == candidate_service.get_pool_view(),
+    )
+    assert_check(
+        "get_global_top_prediction_view stats совпадают с get_pool_stats_view()",
+        top_view["stats"] == candidate_service.get_pool_stats_view()["stats"],
+    )
+    assert_check(
+        "get_global_top_prediction_view is_empty=False для непустого pool",
+        top_view["is_empty"] is False,
+    )
+    assert_check(
+        "get_prediction_filter_view оставляет ready candidate",
+        filter_view["ready_count"] == 1,
+    )
+    assert_check(
+        "get_prediction_filter_view относит incomplete к skipped",
+        filter_view["skipped_incomplete_count"] == 1,
+    )
+    assert_check(
+        "get_prediction_filter_view совпадает с filter_saved_candidates_for_prediction",
+        filter_view["filtered_count"]
+        == len(candidate_pool.filter_saved_candidates_for_prediction(top_view["candidates"], filters)),
+    )
+    assert_check(
+        "top prediction service view не переписывает candidate_pool.json",
+        before_mtime == after_mtime,
+    )
+
+
+def test_candidate_service_prediction_filter_defaults_view() -> None:
+    """Проверяет read-only defaults view для top prediction через candidates.service."""
+    print("\n24) Проверяем candidates.service prediction filter defaults view")
+
+    candidate_pool.save_named_criteria("tmdb_RU_quality", {
+        "country": "Россия",
+        "min_kp": 7.0,
+        "genres": ["драма"],
+        "excluded_genres": ["комедия"],
+        "min_year": 2020,
+        "max_year": 2024,
+    })
+
+    pool_mtime_before = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    criteria_mtime_before = Path(constant.CRITERIA_POOL_JSON).stat().st_mtime_ns
+
+    defaults_view = candidate_service.get_prediction_filter_defaults_view("tmdb_RU_quality")
+    missing_view = candidate_service.get_prediction_filter_defaults_view(None)
+    unknown_view = candidate_service.get_prediction_filter_defaults_view("missing_criteria")
+
+    pool_mtime_after = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    criteria_mtime_after = Path(constant.CRITERIA_POOL_JSON).stat().st_mtime_ns
+
+    expected_defaults = candidate_pool.build_prediction_filter_defaults("tmdb_RU_quality")
+    expected_lines = candidate_pool.format_prediction_filter_default_lines(expected_defaults)
+
+    assert_check(
+        "get_prediction_filter_defaults_view возвращает те же defaults",
+        defaults_view["defaults"] == expected_defaults,
+    )
+    assert_check(
+        "get_prediction_filter_defaults_view возвращает те же lines",
+        defaults_view["lines"] == expected_lines,
+    )
+    assert_check(
+        "has_defaults=True для выбранного criteria_name",
+        defaults_view["has_defaults"] is True,
+    )
+    assert_check(
+        "criteria_name=None даёт базовые defaults без ошибки",
+        missing_view["defaults"] == candidate_pool.build_prediction_filter_defaults(None),
+    )
+    assert_check(
+        "has_defaults=False без criteria_name",
+        missing_view["has_defaults"] is False,
+    )
+    assert_check(
+        "unknown criteria_name не ломает defaults view",
+        unknown_view["defaults"] == candidate_pool.build_prediction_filter_defaults("missing_criteria"),
+    )
+    assert_check(
+        "defaults view не переписывает candidate_pool.json",
+        pool_mtime_before == pool_mtime_after,
+    )
+    assert_check(
+        "defaults view не переписывает candidate_criteria.json",
+        criteria_mtime_before == criteria_mtime_after,
+    )
+
+
+def test_candidate_service_mark_watched_in_pool() -> None:
+    """Проверяет write-flow удаления просмотренного кандидата через candidates.service."""
+    print("\n25) Проверяем candidates.service mark watched in pool")
+
+    candidate_pool.save_candidate_pool({
+        "one": {
+            "title": "Ева, рожай!",
+            "alternative_title": "",
+            "year": 2022,
+            "criteria_name": "A",
+            "kp_score": 7.0,
+            "kp_votes": 1000,
+            "imdb_score": 0,
+            "imdb_votes": 0,
+            "genres": ["комедия"],
+        },
+        "two": {
+            "title": "Ева рожай",
+            "alternative_title": "",
+            "year": 2022,
+            "criteria_name": "B",
+            "kp_score": 8.0,
+            "kp_votes": 2000,
+            "imdb_score": 0,
+            "imdb_votes": 0,
+            "genres": ["комедия"],
+        },
+        "three": {
+            "title": "Другой сериал",
+            "alternative_title": "",
+            "year": 2022,
+            "criteria_name": "A",
+            "kp_score": 8.0,
+            "kp_votes": 500,
+            "imdb_score": 0,
+            "imdb_votes": 0,
+            "genres": ["драма"],
+        },
+    })
+
+    target_candidate = {
+        "title": "Ева рожай",
+        "alternative_title": "",
+        "year": 2022,
+        "criteria_name": "X",
+    }
+
+    with patch("candidates.candidate_pool.remove_candidate_from_pool", wraps=candidate_pool.remove_candidate_from_pool) as remove_mock:
+        result = candidate_service.mark_candidate_watched_in_pool(target_candidate)
+
+    pool = candidate_pool.load_candidate_pool()
+
+    assert_check("Service делегирует в remove_candidate_from_pool", remove_mock.call_count == 1)
+    assert_check("Service removed=True при cross-criteria match", result["removed"] is True)
+    assert_check("Service удаляет обе fuzzy-записи", result["removed_count"] == 2)
+    assert_check("После service mark watched в pool остался 1 кандидат", len(pool) == 1)
+    assert_check(
+        "В pool остался только другой сериал",
+        next(iter(pool.values())).get("title") == "Другой сериал",
+    )
+
+    with patch("candidates.service.mark_candidate_watched_in_pool", wraps=candidate_service.mark_candidate_watched_in_pool) as service_mock:
+        from dataset import dataset_records
+
+        dataset_records._cleanup_candidate_pool(target_candidate)
+
+    assert_check(
+        "Mark watched cleanup path использует candidates.service",
+        service_mock.call_count == 1,
+    )
+
+
+def test_candidate_service_retry_kp_enrichment() -> None:
+    """Проверяет retry KP view/write-flow через candidates.service."""
+    print("\n26) Проверяем candidates.service retry KP enrichment")
+
+    candidate_pool.save_named_criteria("legacy", {"country": "Россия"})
+    candidate_pool.save_candidate_pool({
+        "one": {
+            "title": "Retry Service Candidate",
+            "alternative_title": "",
+            "year": 2020,
+            "criteria_name": "legacy",
+            "kp_score": None,
+            "kp_votes": None,
+            "imdb_score": 7.3,
+            "imdb_votes": 4200,
+            "kp_status": "missing",
+        },
+    })
+
+    retry_view = candidate_service.get_retry_kp_view()
+    assert_check("get_retry_kp_view видит incomplete candidate", retry_view["incomplete_count"] == 1)
+    assert_check(
+        "get_retry_kp_view совпадает с get_incomplete_candidates",
+        retry_view["incomplete_candidates"]
+        == candidate_pool.get_incomplete_candidates(candidate_pool.load_candidate_pool()),
+    )
+
+    kp_movie = {
+        "id": 777,
+        "name": "Retry Service Candidate",
+        "year": 2020,
+        "rating": {"kp": 8.1},
+        "votes": {"kp": 12000},
+        "description": "Filled from KP",
+    }
+
+    with patch("candidates.kp_enrichment.kp_match_is_safe", return_value=(True, None)):
+        with patch("candidates.candidate_pool.api.find_series_raw", return_value={"ok": True, "data": kp_movie}):
+            with patch(
+                "candidates.candidate_pool.retry_kp_enrichment_for_pool",
+                wraps=candidate_pool.retry_kp_enrichment_for_pool,
+            ) as retry_mock:
+                result = candidate_service.retry_kp_enrichment_in_pool(limit=1)
+
+    assert_check("Service делегирует в retry_kp_enrichment_for_pool", retry_mock.call_count == 1)
+    assert_check("Service retry saved_pool=True при попытке", result["saved_pool"] is True)
+    assert_check("Service retry kp_found=1", result["stats"]["kp_found"] == 1)
+
+    pool = candidate_pool.load_candidate_pool()
+    candidate = next(item for item in pool.values() if item.get("title") == "Retry Service Candidate")
+    assert_check("После service retry кандидат complete", candidate["is_complete"] is True)
+    assert_check("После service retry kp_status=done", candidate["kp_status"] == "done")
+
+
+def test_candidate_service_tmdb_import_result() -> None:
+    """Проверяет TMDb import view/preview/write-flow через candidates.service."""
+    print("\n27) Проверяем candidates.service TMDb import result")
+
+    import inspect
+
+    flow_source = inspect.getsource(interface_funcs.import_tmdb_result_to_common_pool_flow)
+    assert_check(
+        "UI import flow вызывает candidate_service.import_tmdb_result_to_pool",
+        "candidate_service.import_tmdb_result_to_pool" in flow_source,
+    )
+    assert_check(
+        "UI import flow не вызывает import_tmdb напрямую",
+        "import_tmdb_result_to_common_pool(" not in flow_source,
+    )
+
+    tmdb_dir = Path(constant.DATA_DIR) / "candidate_pool"
+    tmdb_dir.mkdir(parents=True, exist_ok=True)
+    result_path = tmdb_dir / "tmdb_candidate_pool_service_test.json"
+    result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Service Import Candidate",
+                "year": 2023,
+                "tmdb_id": 501,
+                "tmdb_rating": 7.5,
+                "tmdb_votes": 100,
+                "imdb_rating": 7.0,
+                "imdb_votes": 5000,
+            }
+        ],
+    }
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+    with patch("candidates.import_tmdb.OUTPUT_DIR", tmdb_dir):
+        files_view = candidate_service.get_tmdb_import_files_view()
+        assert_check("get_tmdb_import_files_view не пустой", files_view["is_empty"] is False)
+        assert_check(
+            "get_tmdb_import_files_view находит result file",
+            result_path.name in files_view["file_names"],
+        )
+
+        missing_preview = candidate_service.load_tmdb_result_import_preview(tmdb_dir / "missing.json")
+        assert_check("preview missing file ok=False", missing_preview["ok"] is False)
+
+        bad_path = tmdb_dir / "tmdb_candidate_pool_bad.json"
+        bad_path.write_text(json.dumps({"candidates": "not a list"}), encoding="utf-8")
+        bad_preview = candidate_service.load_tmdb_result_import_preview(bad_path)
+        assert_check("preview invalid candidates ok=False", bad_preview["ok"] is False)
+
+        preview = candidate_service.load_tmdb_result_import_preview(result_path)
+        assert_check("preview ok=True", preview["ok"] is True)
+        assert_check("preview candidate_count=1", preview["candidate_count"] == 1)
+        assert_check(
+            "preview default_criteria_name",
+            preview["default_criteria_name"] == "tmdb_RU_quality",
+        )
+
+        with patch(
+            "candidates.import_tmdb.import_tmdb_result_to_common_pool",
+            wraps=tmdb_import.import_tmdb_result_to_common_pool,
+        ) as import_mock:
+            import_result = candidate_service.import_tmdb_result_to_pool(
+                result_path,
+                criteria_name="tmdb_RU_quality",
+            )
+
+    assert_check("Service делегирует в import_tmdb_result_to_common_pool", import_mock.call_count == 1)
+    assert_check("Service import ok=True", import_result["ok"] is True)
+    assert_check("Service import stats read=1", import_result["stats"]["read"] == 1)
+    assert_check("Service import возвращает result_file", import_result["result_file"] == str(result_path))
+    assert_check(
+        "Service import возвращает criteria_name",
+        import_result["criteria_name"] == "tmdb_RU_quality",
+    )
+
+    pool = candidate_pool.load_candidate_pool()
+    assert_check(
+        "После service import кандидат в pool",
+        any(item.get("title") == "Service Import Candidate" for item in pool.values()),
+    )
+
+    criteria = candidate_pool.load_candidate_criteria()["tmdb_RU_quality"]
+    assert_check("Service import metadata source", criteria["source"] == "tmdb_imdb_kp_v1")
+    assert_check("Service import metadata country", criteria["country"] == "RU")
+    assert_check("Service import metadata mode", criteria["mode"] == "quality")
+    assert_check(
+        "Service import metadata result_file",
+        criteria["result_file"].endswith("tmdb_candidate_pool_service_test.json"),
+    )
+    assert_check("Service import metadata candidate_count", criteria["candidate_count"] == 1)
+
+    candidate_pool.save_named_criteria("tmdb_RU_quality", {
+        "criteria_name": "tmdb_RU_quality",
+        "genres": ["драма"],
+        "excluded_genres": ["мелодрама"],
+        "min_kp": 7.0,
+        "max_kp": 9.0,
+        "min_imdb": 6.5,
+        "max_imdb": 8.5,
+        "min_year": 2010,
+        "max_year": 2025,
+        "custom_note": "service import filters",
+    })
+    second_result_path = Path(constant.DATA_DIR) / "tmdb_service_filters.json"
+    second_result_path.write_text(json.dumps({
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Service Filters Candidate",
+                "year": 2024,
+                "tmdb_id": 502,
+                "tmdb_rating": 7.2,
+                "tmdb_votes": 60,
+            }
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+
+    candidate_service.import_tmdb_result_to_pool(second_result_path, criteria_name="tmdb_RU_quality")
+    criteria = candidate_pool.load_candidate_criteria()["tmdb_RU_quality"]
+    assert_check("Service import сохраняет genres", criteria["genres"] == ["драма"])
+    assert_check("Service import сохраняет excluded_genres", criteria["excluded_genres"] == ["мелодрама"])
+    assert_check("Service import сохраняет min_kp", criteria["min_kp"] == 7.0)
+    assert_check("Service import сохраняет max_kp", criteria["max_kp"] == 9.0)
+    assert_check("Service import сохраняет min_imdb", criteria["min_imdb"] == 6.5)
+    assert_check("Service import сохраняет max_imdb", criteria["max_imdb"] == 8.5)
+    assert_check("Service import сохраняет min_year", criteria["min_year"] == 2010)
+    assert_check("Service import сохраняет max_year", criteria["max_year"] == 2025)
+    assert_check("Service import сохраняет custom unknown field", criteria["custom_note"] == "service import filters")
+
+    other_result_path = Path(constant.DATA_DIR) / "tmdb_service_cross_criteria.json"
+    other_result_path.write_text(json.dumps({
+        "criteria_name": "tmdb_US_quality",
+        "country": "US",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Service Import Candidate",
+                "year": 2023,
+                "tmdb_id": 503,
+                "tmdb_rating": 7.1,
+                "tmdb_votes": 40,
+            }
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+    candidate_service.import_tmdb_result_to_pool(other_result_path, criteria_name="tmdb_US_quality")
+    pool = candidate_pool.load_candidate_pool()
+    cross_criteria_keys = [
+        key for key, item in pool.items()
+        if item.get("title") == "Service Import Candidate" and item.get("year") == 2023
+    ]
+    assert_check("Service import cross-criteria хранит 2 записи", len(cross_criteria_keys) == 2)
+
+    storage_movie.add_movie(make_movie(title="Service Watched Import", user_score=8.0))
+    watched_result_path = Path(constant.DATA_DIR) / "tmdb_service_watched.json"
+    watched_result_path.write_text(json.dumps({
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Service Watched Import",
+                "year": 2024,
+                "tmdb_id": 504,
+                "tmdb_rating": 7.0,
+                "tmdb_votes": 30,
+            }
+        ],
+    }, ensure_ascii=False), encoding="utf-8")
+    watched_result = candidate_service.import_tmdb_result_to_pool(
+        watched_result_path,
+        criteria_name="tmdb_RU_quality",
+    )
+    pool = candidate_pool.load_candidate_pool()
+    assert_check("Service import watched_skipped=1", watched_result["stats"]["watched_skipped"] == 1)
+    assert_check(
+        "Service import не сохраняет watched candidate",
+        all(item.get("title") != "Service Watched Import" for item in pool.values()),
+    )
+
+
+def test_candidate_service_tmdb_build_and_auto_import() -> None:
+    """Проверяет TMDb build/save/auto-import facade через candidates.service."""
+    print("\n28) Проверяем candidates.service TMDb build and auto-import")
+
+    import inspect
+
+    build_flow_source = inspect.getsource(interface_funcs.run_tmdb_candidate_pool_flow)
+    auto_import_source = inspect.getsource(interface_funcs.maybe_auto_import_tmdb_result)
+    assert_check(
+        "UI build flow вызывает candidate_service.build_tmdb_candidate_pool",
+        "candidate_service.build_tmdb_candidate_pool" in build_flow_source,
+    )
+    assert_check(
+        "UI build flow вызывает candidate_service.save_tmdb_build_result",
+        "candidate_service.save_tmdb_build_result" in build_flow_source,
+    )
+    assert_check(
+        "UI build flow не вызывает build_candidate_pool напрямую",
+        "build_candidate_pool(" not in build_flow_source,
+    )
+    assert_check(
+        "Auto-import helper по умолчанию использует candidate_service.import_tmdb_result_to_pool",
+        "candidate_service.import_tmdb_result_to_pool" in auto_import_source,
+    )
+
+    build_result = {
+        "country": "RU",
+        "mode": "quality",
+        "criteria_name": "tmdb_RU_quality",
+        "stats": {"discover_total": 2, "final_candidates": 1},
+        "candidates": [{"title": "Build Service Candidate", "year": 2022}],
+    }
+    fake_json_path = Path(constant.DATA_DIR) / "candidate_pool_RU_quality.json"
+    fake_csv_path = fake_json_path.with_suffix(".csv")
+
+    with patch("candidates.tmdb_candidate_pool.build_candidate_pool", return_value=build_result) as build_mock:
+        result = candidate_service.build_tmdb_candidate_pool(
+            country="RU",
+            pages=1,
+            details_limit=5,
+            mode="quality",
+            criteria_name="tmdb_RU_quality",
+        )
+    assert_check("Service build делегирует в build_candidate_pool", build_mock.call_count == 1)
+    assert_check("Service build возвращает snapshot", result["criteria_name"] == "tmdb_RU_quality")
+
+    with patch(
+        "candidates.tmdb_candidate_pool.save_candidate_pool_result",
+        return_value=(fake_json_path, fake_csv_path),
+    ) as save_mock:
+        save_result = candidate_service.save_tmdb_build_result(build_result, is_test_run=False)
+    assert_check("Service save делегирует в save_candidate_pool_result", save_mock.call_count == 1)
+    assert_check("Service save возвращает json_path", save_result["json_path"] == fake_json_path)
+
+    with patch("candidates.tmdb_candidate_pool.build_candidate_pool", return_value=build_result):
+        with patch(
+            "candidates.tmdb_candidate_pool.save_candidate_pool_result",
+            return_value=(fake_json_path, fake_csv_path),
+        ):
+            combined = candidate_service.build_and_save_tmdb_candidate_pool(
+                country="RU",
+                pages=1,
+                details_limit=5,
+                mode="quality",
+                criteria_name="tmdb_RU_quality",
+                is_test_run=False,
+            )
+    assert_check("build_and_save ok=True", combined["ok"] is True)
+    assert_check("build_and_save возвращает paths", combined["json_path"] == fake_json_path)
+    assert_check("build_and_save возвращает candidates", len(combined["candidates"]) == 1)
+
+    criteria_name = candidate_service.build_tmdb_criteria_name("RU", "quality", year_min=2020, min_tmdb_score=7.5)
+    assert_check(
+        "Service build_tmdb_criteria_name совпадает с tmdb_candidate_pool",
+        criteria_name == tmdb_candidate_pool.build_tmdb_criteria_name("RU", "quality", year_min=2020, min_tmdb_score=7.5),
+    )
+
+    import_calls = []
+
+    def capture_import(result_path, criteria_name=None):
+        import_calls.append((result_path, criteria_name))
+        return {
+            "ok": True,
+            "stats": {
+                "ok": True,
+                "read": 1,
+                "added": 1,
+                "updated": 0,
+                "watched_skipped": 0,
+                "skipped_watched": 0,
+                "duplicates": 0,
+                "skipped_duplicates": 0,
+                "errors": 0,
+                "criteria_name": criteria_name,
+                "pool_size_before": 0,
+                "pool_size_after": 1,
+                "pool_size": 1,
+            },
+            "result_file": str(result_path),
+            "criteria_name": criteria_name,
+            "error": None,
+        }
+
+    with patch("candidates.service.import_tmdb_result_to_pool", side_effect=capture_import) as service_import_mock:
+        stats = interface_funcs.maybe_auto_import_tmdb_result(
+            fake_json_path,
+            "tmdb_RU_quality",
+            input_func=lambda _prompt: "",
+            output_func=lambda _line: None,
+        )
+    assert_check("Auto-import default вызывает service import", service_import_mock.call_count == 1)
+    assert_check(
+        "Auto-import default передаёт path и criteria_name",
+        import_calls == [(fake_json_path, "tmdb_RU_quality")],
+    )
+    assert_check("Auto-import default возвращает stats", stats["ok"] is True)
+
+
+def test_candidate_service_polish_flows() -> None:
+    """Проверяет J5 polish facade: menu stats, mark watched view, delete, duplicates."""
+    print("\n29) Проверяем candidates.service polish flows")
+
+    import inspect
+
+    global_menu_source = inspect.getsource(__import__("ui.console.global_menu", fromlist=["global_menu"]))
+    mark_watched_source = inspect.getsource(interface_funcs.mark_candidate_as_watched)
+    delete_source = inspect.getsource(interface_funcs.delete_candidate_pool)
+    duplicates_source = inspect.getsource(interface_funcs.show_suspicious_candidate_duplicates)
+
+    assert_check(
+        "global_menu использует candidate_service.get_pool_stats_view",
+        "candidate_service.get_pool_stats_view" in global_menu_source,
+    )
+    assert_check(
+        "mark_candidate_as_watched использует get_mark_watched_view",
+        "candidate_service.get_mark_watched_view" in mark_watched_source,
+    )
+    assert_check(
+        "delete_candidate_pool использует delete_candidate_pool_criteria",
+        "candidate_service.delete_candidate_pool_criteria" in delete_source,
+    )
+    assert_check(
+        "show_suspicious_candidate_duplicates использует get_suspicious_duplicates_view",
+        "candidate_service.get_suspicious_duplicates_view" in duplicates_source,
+    )
+
+    candidate_pool.save_named_criteria("legacy", {"country": "Россия"})
+    candidate_pool.save_candidate_pool({
+        "legacy|Polish Service One|2020": {
+            "title": "Polish Service One",
+            "year": 2020,
+            "criteria_name": "legacy",
+            "kp_score": 7.0,
+            "kp_votes": 1000,
+            "imdb_score": 7.1,
+            "imdb_votes": 2000,
+        },
+        "legacy|Polish Service Two|2021": {
+            "title": "Polish Service Two",
+            "year": 2021,
+            "criteria_name": "legacy",
+            "kp_score": None,
+            "kp_votes": None,
+            "imdb_score": 7.0,
+            "imdb_votes": 1500,
+            "kp_status": "missing",
+        },
+        "other|Polish Service Other|2022": {
+            "title": "Polish Service Other",
+            "year": 2022,
+            "criteria_name": "other",
+            "kp_score": 7.5,
+            "kp_votes": 900,
+            "imdb_score": 7.4,
+            "imdb_votes": 1800,
+        },
+    })
+
+    watched_view = candidate_service.get_mark_watched_view("legacy")
+    assert_check("get_mark_watched_view видит 2 candidates", len(watched_view["candidates"]) == 2)
+    assert_check(
+        "get_mark_watched_view lines совпадают с get_pool_stats_view",
+        watched_view["lines"] == candidate_service.get_pool_stats_view("legacy")["lines"],
+    )
+
+    incomplete_candidate = next(
+        item for item in watched_view["candidates"] if item.get("title") == "Polish Service Two"
+    )
+    assert_check(
+        "is_pool_candidate_incomplete совпадает с candidate_pool",
+        candidate_service.is_pool_candidate_incomplete(incomplete_candidate)
+        == candidate_pool.is_candidate_incomplete(incomplete_candidate),
+    )
+
+    with patch(
+        "candidates.candidate_pool.delete_criteria_and_candidates",
+        wraps=candidate_pool.delete_criteria_and_candidates,
+    ) as delete_mock:
+        delete_result = candidate_service.delete_candidate_pool_criteria("legacy")
+
+    assert_check("delete_candidate_pool_criteria делегирует в delete_criteria_and_candidates", delete_mock.call_count == 1)
+    assert_check("delete_candidate_pool_criteria deleted=True", delete_result["deleted"] is True)
+    assert_check("delete_candidate_pool_criteria удаляет 2 candidates", delete_result["deleted_candidates"] == 2)
+
+    remaining_pool = candidate_pool.load_candidate_pool()
+    assert_check("После delete остаётся только other criteria", len(remaining_pool) == 1)
+    assert_check(
+        "После delete остаётся Polish Service Other",
+        next(iter(remaining_pool.values())).get("title") == "Polish Service Other",
+    )
+
+    candidate_pool.save_candidate_pool({
+        "dup_a|Polish Dup Alpha|2020": {
+            "title": "Polish Dup Alpha",
+            "year": 2020,
+            "criteria_name": "dup_a",
+        },
+        "dup_b|Polish Dup Alphа|2020": {
+            "title": "Polish Dup Alphа",
+            "year": 2020,
+            "criteria_name": "dup_b",
+        },
+    })
+
+    with patch(
+        "candidates.candidate_pool.find_suspicious_duplicates",
+        wraps=candidate_pool.find_suspicious_duplicates,
+    ) as duplicates_mock:
+        duplicates_view = candidate_service.get_suspicious_duplicates_view()
+
+    assert_check("get_suspicious_duplicates_view делегирует в find_suspicious_duplicates", duplicates_mock.call_count == 1)
+    assert_check("get_suspicious_duplicates_view count совпадает", duplicates_view["count"] == len(duplicates_view["pairs"]))
+    assert_check(
+        "get_suspicious_duplicates_view is_empty корректен",
+        duplicates_view["is_empty"] == (duplicates_view["count"] == 0),
+    )
+
+
 def test_candidate_schema_normalizes_legacy_complete_record() -> None:
     """Проверяет legacy backfill для complete-кандидата без is_complete/kp_status."""
     print("\n15) Проверяем schema backfill для complete legacy candidate")
@@ -1399,7 +2529,7 @@ def test_retry_kp_enrichment_makes_candidate_complete() -> None:
         "description": "Filled from KP",
     }
 
-    with patch("candidates.tmdb_candidate_pool.kp_match_is_safe", return_value=(True, None)):
+    with patch("candidates.kp_enrichment.kp_match_is_safe", return_value=(True, None)):
         with patch("candidates.candidate_pool.api.find_series_raw", return_value={"ok": True, "data": kp_movie}):
             stats = candidate_pool.retry_kp_enrichment_for_pool(limit=1)
 
@@ -2156,6 +3286,21 @@ def run_tests() -> None:
         test_candidate_pool_cross_criteria_keys_survive_save_load()
         test_candidate_pool_same_criteria_duplicates_keep_best()
         test_load_candidate_pool_is_read_only()
+        test_read_path_keeps_watched_in_json()
+        test_write_path_purges_watched_from_json()
+        test_get_pool_stats_reports_raw_storage_watched_ready()
+        test_build_prediction_filter_defaults_from_saved_criteria()
+        test_prediction_filters_apply_saved_criteria_defaults()
+        test_genre_normalization_runtime_filters()
+        test_contributions_readiness_gate()
+        test_candidate_service_read_only_facade()
+        test_candidate_service_top_prediction_view()
+        test_candidate_service_prediction_filter_defaults_view()
+        test_candidate_service_mark_watched_in_pool()
+        test_candidate_service_retry_kp_enrichment()
+        test_candidate_service_tmdb_import_result()
+        test_candidate_service_tmdb_build_and_auto_import()
+        test_candidate_service_polish_flows()
         test_candidate_schema_normalizes_legacy_complete_record()
         test_candidate_schema_marks_missing_kp()
         test_candidate_schema_preserves_specific_kp_status()

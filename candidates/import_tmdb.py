@@ -163,7 +163,7 @@ def import_tmdb_candidates_to_common_pool(
 ) -> dict[str, Any]:
     result_metadata = result_metadata or {}
     resolved_criteria_name = resolve_tmdb_import_criteria_name(result_metadata, criteria_name)
-    pool = legacy_candidate_pool.normalize_pool(legacy_candidate_pool.load_candidate_pool())
+    pool = legacy_candidate_pool.normalize_storage_pool(legacy_candidate_pool.load_candidate_pool())
     watched_signatures = legacy_candidate_pool.build_watched_signatures()
     stats = _base_import_stats(len(candidates), resolved_criteria_name, len(pool))
 

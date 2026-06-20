@@ -26,10 +26,11 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 2. `ui.console.menu_state` собирает текущий state: dataset, weights, счётчики, ошибки модели.
 3. `ui.console.ui` печатает меню.
 4. `ui.console.global_menu` маршрутизирует пользователя по разделам.
-5. `ui.console.interface_funcs` запускает конкретные сценарии UI.
-6. `storage` / `dataset` / `candidates` выполняют работу с данными.
-7. `apis` отдаёт внешние данные (KP, TMDb, IMDb SQL).
-8. `model` строит признаки, считает предикт, ошибки и обучение.
+5. `ui.console.interface_funcs` запускает конкретные сценарии UI (input/print, prompts, подтверждения).
+6. Для candidate pool console flows UI вызывает `candidates/service.py` (facade), который делегирует в core.
+7. `storage` / `dataset` / `candidates` выполняют работу с данными.
+8. `apis` отдаёт внешние данные (KP, TMDb, IMDb SQL).
+9. `model` строит признаки, считает предикт, ошибки и обучение.
 
 ## Папки и роли
 
@@ -74,10 +75,32 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 
 ### `candidates/`
 
-Пулы кандидатов к просмотру. Не вызывает `print()/input()` - прогресс отдаётся наверх через reporter.
+Пулы кандидатов к просмотру. Core-модули не вызывают `print()/input()` — прогресс отдаётся наверх через reporter.
 
-- [candidates/candidate_pool.py](../candidates/candidate_pool.py) - общий candidate pool: сбор, фильтры, ranking, retry KP, import/remove.
-- [candidates/tmdb_candidate_pool.py](../candidates/tmdb_candidate_pool.py) - TMDb candidate pool v1; `set_progress_reporter()`, `build_summary_lines()`.
+**Console facade (после J1–J5):**
+
+- [candidates/service.py](../candidates/service.py) — тонкий facade между `ui/console` и candidates core для console flows. Не содержит `input()/print()`, не должен разрастаться в god-module: orchestration + делегирование, без model scoring.
+
+**Core:**
+
+- [candidates/candidate_pool.py](../candidates/candidate_pool.py) — общий candidate pool: storage, filters, dedupe, collect (KP API), retry KP, ranking helpers, delete, suspicious duplicates.
+- [candidates/import_tmdb.py](../candidates/import_tmdb.py) — import saved TMDb result JSON в общий pool + merge criteria metadata.
+- [candidates/tmdb_candidate_pool.py](../candidates/tmdb_candidate_pool.py) — TMDb candidate pool v1 (discover/details/build/save); `set_progress_reporter()`, `build_summary_lines()`, genre diagnostics.
+- [candidates/kp_enrichment.py](../candidates/kp_enrichment.py) — shared KP lookup/enrichment для pool и TMDb build.
+- [candidates/schema.py](../candidates/schema.py) — нормализация candidate record, completeness, readiness.
+- [candidates/keys.py](../candidates/keys.py) — `pool_entry_key`, `title_identity_key`, criteria defaults.
+- [candidates/genres.py](../candidates/genres.py) — runtime genre aliases для фильтров (JSON не мигрируется).
+
+**Через `candidates/service.py` (console):** pool read/stats, top prediction read/filter/defaults, contributions readiness split, mark watched write, retry KP, manual TMDb import, TMDb build/save/auto-import, delete criteria, suspicious duplicates view.
+
+**Намеренно вне service:** model scoring/ranking (`rank_candidates_by_predict`, contribution reports), legacy `collect_candidates` (KP API), `candidate_pool_ui.py` (criteria input), TMDb genre diagnostics, standalone CLI (`build_candidate_pool.py`).
+
+**Инварианты pool:**
+
+- `pool_entry_key = criteria_name|normalized_title|year`
+- `title_identity_key = normalized_title|year` (watched remove / import skip)
+- read-path не purge watched; write-path purge watched
+- genre filters — runtime-only; `candidate_criteria` filters — defaults для top prediction, pool не пересобирают
 
 ### `apis/`
 
@@ -103,10 +126,10 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 - [ui/console/console_app.py](../ui/console/console_app.py) - запуск консольного приложения.
 - [ui/console/ui.py](../ui/console/ui.py) - печать экранов и меню.
 - [ui/console/global_menu.py](../ui/console/global_menu.py) - циклы меню и переходы между разделами.
-- [ui/console/interface_funcs.py](../ui/console/interface_funcs.py) - UI-оркестрация сценариев.
+- [ui/console/interface_funcs.py](../ui/console/interface_funcs.py) - UI-оркестрация сценариев (input/print, prompts); candidate pool flows → `candidates/service.py`.
 - [ui/console/request.py](../ui/console/request.py) - формы, prompts, сбор `movie_request`.
 - [ui/console/title_presenters.py](../ui/console/title_presenters.py) - карточки SQL/API/defaults.
-- [ui/console/candidate_pool_ui.py](../ui/console/candidate_pool_ui.py) - интерактивная работа с criteria.
+- [ui/console/candidate_pool_ui.py](../ui/console/candidate_pool_ui.py) - input-layer для criteria; напрямую в `candidate_pool`, не через service.
 - [ui/console/tags_menu.py](../ui/console/tags_menu.py) - управление vibe-тегами.
 - [ui/console/backup_menu.py](../ui/console/backup_menu.py) - backup и restore.
 - [ui/console/train_menu.py](../ui/console/train_menu.py) - интерактивные режимы обучения и шумовой эксперимент.
@@ -174,38 +197,52 @@ UI печатает финальное сообщение сам. Service воз
 ### 2. Перенос кандидата из пула в dataset
 
 1. `ui.console.interface_funcs.mark_candidate_as_watched()`
-2. выбор `criteria_name` и кандидата;
+2. выбор `criteria_name` и кандидата через `candidate_pool_ui` + `candidates.service.get_mark_watched_view()`;
 3. `dataset.title_resolve.build_candidate_transfer_payload(candidate)`;
-4. предупреждение для incomplete-кандидата, если нужно;
+4. предупреждение для incomplete через `candidates.service.is_pool_candidate_incomplete()`;
 5. `ui.console.request.request_all_scores(defaults)`;
 6. `dataset.storage_movie.add_movie(meta_payload=..., pool_candidate=..., print_message=False)`;
 7. `add_dataset_record()` сохраняет запись;
-8. после успеха связанный кандидат удаляется из общего пула.
+8. `dataset.dataset_records._cleanup_candidate_pool()` → `candidates.service.mark_candidate_watched_in_pool()` удаляет кандидата из общего пула (fuzzy by title+year).
 
 ### 3. Top prediction из общего пула
 
 1. `ui.console.interface_funcs.show_global_candidate_top()`
-2. загрузка всех кандидатов;
-3. runtime-фильтр через `candidate_pool.filter_saved_candidates_for_prediction()`;
-4. ready-filter через `candidate_pool.is_candidate_ready_for_prediction()`;
-5. ranking через `candidate_pool.rank_candidates_by_predict()`.
+2. read/filter через `candidates.service` (`get_global_top_prediction_view`, `get_prediction_filter_view`, `get_prediction_filter_defaults_view`);
+3. runtime-фильтр и ready/incomplete split — в service (делегирует в `candidate_pool`);
+4. ranking через `candidate_pool.rank_candidates_by_predict()` — **намеренно в UI/core**, не в service.
 
 ### 4. Retry KP для incomplete-кандидатов
 
 1. `ui.console.interface_funcs.retry_kp_for_incomplete_candidates()`
-2. выбор scope: все или конкретный `criteria_name`;
-3. preview и подтверждение перед API-запросами;
-4. запуск `candidates.candidate_pool.retry_kp_enrichment_for_pool(...)`.
+2. preview через `candidates.service.get_retry_kp_view()`;
+3. выбор scope и подтверждение — в UI;
+4. write через `candidates.service.retry_kp_enrichment_in_pool()` → `candidate_pool.retry_kp_enrichment_for_pool()`.
 
 ### 5. TMDb candidate pool v1
 
 1. `ui.console.interface_funcs.run_tmdb_candidate_pool_flow()`
-2. выбор страны и режима;
-3. ввод названия пулла / `criteria_name` или auto;
-4. ввод ранних Discover-фильтров (`year_min`, `year_max`, `min_tmdb_score`, `min_tmdb_votes`);
-5. `candidates.tmdb_candidate_pool.build_candidate_pool(...)`;
-6. прогресс отдаётся через `set_progress_reporter` (печатает UI), итог - `build_summary_lines`;
-7. сохранение отдельного TMDb result; при необходимости импорт в общий пул.
+2. выбор страны, режима, `criteria_name`, Discover-фильтров — в UI;
+3. build/save через `candidates.service` (`build_tmdb_candidate_pool`, `save_tmdb_build_result`);
+4. прогресс TMDb — через `set_progress_reporter` (регистрируется в `console_app.py`), итог — `build_summary_lines`;
+5. после обычного save UI предлагает auto-import → `maybe_auto_import_tmdb_result()` → `candidates.service.import_tmdb_result_to_pool()`;
+6. ручной import saved result — `import_tmdb_result_to_common_pool_flow()` через тот же service import path.
+
+### 5a. Manual TMDb result import
+
+1. `ui.console.interface_funcs.import_tmdb_result_to_common_pool_flow()`
+2. выбор result file, preview, `criteria_name`, подтверждение — в UI;
+3. import через `candidates.service.import_tmdb_result_to_pool()` → `import_tmdb.import_tmdb_result_to_common_pool()`.
+
+### 5b. Удаление criteria / suspicious duplicates
+
+- delete: `delete_candidate_pool()` → `candidates.service.delete_candidate_pool_criteria()`
+- duplicates: `show_suspicious_candidate_duplicates()` → `candidates.service.get_suspicious_duplicates_view()`
+
+### 5c. Contributions (readiness gate через service, scoring в UI)
+
+1. `show_candidate_contributions()` — split ready/incomplete через `get_contribution_ready_view()`;
+2. отчёты вкладов — `candidate_pool.build_contribution_reports_for_ready_candidates()` (model scoring, вне service).
 
 ### 6. Обучение модели
 
@@ -217,10 +254,13 @@ UI печатает финальное сообщение сам. Service воз
 
 - меню и маршрутизацию: `ui/console/ui.py`, `ui/console/global_menu.py`
 - prompts и UI-сценарии: `ui/console/interface_funcs.py`, `ui/console/request.py`, `ui/console/train_menu.py`
+- console facade candidate pool: `candidates/service.py` (новые console flows добавлять сюда, не раздувать)
+- criteria input (forms): `ui/console/candidate_pool_ui.py`
 - правила сохранения записи: `dataset/storage_movie.py`, `dataset/dataset_records.py`
 - defaults и перенос кандидата: `dataset/title_resolve.py`
-- общий candidate pool: `candidates/candidate_pool.py`
-- TMDb pipeline: `apis/tmdb_api.py`, `candidates/tmdb_candidate_pool.py`
+- core candidate pool (алгоритмы, keys, purge): `candidates/candidate_pool.py`, `candidates/schema.py`, `candidates/keys.py`
+- TMDb import merge: `candidates/import_tmdb.py`
+- TMDb build pipeline: `apis/tmdb_api.py`, `candidates/tmdb_candidate_pool.py`
 - SQL-поиск: `apis/imdb_sql.py`
 - обучение и предикт: `model/model.py`, `model/linear_regression_train.py`
 - низкоуровневое сохранение: `storage/data.py`, `storage/files.py`
@@ -231,6 +271,7 @@ UI печатает финальное сообщение сам. Service воз
 - `C:/META/meta-movies-learn/meta_data.json` - meta.
 - `C:/DATA/movies-learn/weights.json` - веса модели.
 - `C:/DATA/movies-learn/candidate_pool.json` - общий candidate pool.
+- `C:/DATA/movies-learn/candidate_criteria.json` - сохранённые criteria (filters + TMDb metadata).
 - `data/candidate_pool/*.json|*.csv` - TMDb candidate pool result.
 - `data/diagnostics/tmdb_genre_distribution_*.json` - диагностические отчёты TMDb-жанров по dataset.
 - `data/cache/tmdb/` - локальный кэш TMDb Discover/Details.

@@ -103,15 +103,15 @@ def _extract_extra_meta(meta_payload) -> dict:
 
 def _cleanup_candidate_pool(pool_candidate=None) -> None:
     try:
-        from candidates import candidate_pool
+        from candidates import service as candidate_service
 
         if pool_candidate is not None:
-            candidate_pool.remove_candidate_from_pool(pool_candidate)
+            candidate_service.mark_candidate_watched_in_pool(pool_candidate)
             return
 
-        pool = candidate_pool.load_candidate_pool()
-        pool = candidate_pool.remove_watched_candidates(pool)
-        candidate_pool.save_candidate_pool(pool)
+        from candidates import candidate_pool
+
+        candidate_pool.save_candidate_pool(candidate_pool.load_candidate_pool())
     except Exception:
         pass
 

@@ -11,6 +11,7 @@ from config import genre_tags
 from common import format_score
 from apis import kp_api as api
 from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
+from candidates import genres as candidate_genres
 from candidates.schema import (
     compute_completeness as schema_compute_completeness,
     is_ready_for_predict as schema_is_ready_for_predict,
@@ -63,7 +64,7 @@ def load_candidate_pool() -> dict:
 
 def save_candidate_pool(data: dict) -> None:
     """Сохраняет пул кандидатов."""
-    data = normalize_pool(data)
+    data = purge_watched_from_pool(normalize_storage_pool(data))
     with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=4)
 
@@ -149,7 +150,7 @@ def delete_criteria_and_candidates(criteria_name: str) -> dict:
     all_criteria.pop(criteria_name, None)
     save_candidate_criteria(all_criteria)
 
-    pool = normalize_pool(load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     filtered_pool = {}
     deleted_candidates = 0
     for key, candidate in pool.items():
@@ -273,17 +274,27 @@ def migrate_pool_keys(pool: dict) -> dict:
     return migrated
 
 
-def normalize_pool(pool: dict) -> dict:
-    """Приводит пул к каноническому виду без автоматической записи."""
+def normalize_storage_pool(pool: dict) -> dict:
+    """Приводит пул к каноническому виду без удаления просмотренных (read-path)."""
     if isinstance(pool, dict) is False:
         return {}
-    return remove_watched_candidates(deduplicate_pool(migrate_pool_keys(pool)))
+    return deduplicate_pool(migrate_pool_keys(pool))
+
+
+def purge_watched_from_pool(pool: dict) -> dict:
+    """Удаляет просмотренных кандидатов из пула (write-path only)."""
+    return remove_watched_candidates(pool)
+
+
+def normalize_pool(pool: dict) -> dict:
+    """Legacy wrapper: только storage-normalize, без purge watched."""
+    return normalize_storage_pool(pool)
 
 
 def normalize_or_migrate_candidate_pool_file() -> dict:
     """Явно мигрирует и нормализует candidate_pool.json."""
     original = load_candidate_pool()
-    normalized = normalize_pool(original)
+    normalized = purge_watched_from_pool(normalize_storage_pool(original))
     changed = normalized != original
     if changed:
         save_candidate_pool(normalized)
@@ -383,7 +394,7 @@ def normalize_candidate(movie: dict, criteria_name: str) -> dict:
 
 def collect_candidates(criteria_name: str, criteria: dict) -> dict:
     """Собирает новых кандидатов из API по критериям."""
-    pool = normalize_pool(load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     watched_signatures = build_watched_signatures()
     target_count = int(criteria.get("count") or 20)
     availability = api.check_api_available()
@@ -469,7 +480,7 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
 
 def get_candidates_by_criteria(criteria_name: str) -> list:
     """Возвращает кандидатов, собранных по выбранному набору критериев."""
-    pool = normalize_pool(load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     candidates = [
         candidate
         for candidate in pool.values()
@@ -487,7 +498,7 @@ def get_candidates_by_criteria(criteria_name: str) -> list:
 
 def get_all_candidates() -> list:
     """Возвращает всех кандидатов из общего пула."""
-    pool = normalize_pool(load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     candidates = list(pool.values())
     candidates.sort(
         key=lambda item: (
@@ -497,6 +508,148 @@ def get_all_candidates() -> list:
         )
     )
     return candidates
+
+
+def _count_raw_pool_entries(raw_pool: dict, criteria_name: str | None = None) -> int:
+    if isinstance(raw_pool, dict) is False:
+        return 0
+    if criteria_name is None:
+        return len(raw_pool)
+    return sum(
+        1
+        for candidate in raw_pool.values()
+        if isinstance(candidate, dict) and candidate.get("criteria_name") == criteria_name
+    )
+
+
+def get_pool_stats(criteria_name: str | None = None) -> dict:
+    """Возвращает согласованные счётчики pool для UI и диагностики."""
+    raw_pool = load_candidate_pool()
+    storage_pool = normalize_storage_pool(raw_pool)
+    watched_signatures = build_watched_signatures()
+
+    candidates = [
+        candidate
+        for candidate in storage_pool.values()
+        if isinstance(candidate, dict)
+        and (criteria_name is None or candidate.get("criteria_name") == criteria_name)
+    ]
+
+    storage_total = len(candidates)
+    watched_total = sum(
+        1 for candidate in candidates
+        if is_watched_candidate(candidate, watched_signatures)
+    )
+    ready_total = sum(
+        1 for candidate in candidates
+        if schema_is_ready_for_predict(candidate)
+    )
+    incomplete_total = storage_total - ready_total
+
+    return {
+        "criteria_name": criteria_name,
+        "raw_total": _count_raw_pool_entries(raw_pool, criteria_name=criteria_name),
+        "storage_total": storage_total,
+        "watched_total": watched_total,
+        "active_total": storage_total - watched_total,
+        "ready_total": ready_total,
+        "incomplete_total": incomplete_total,
+    }
+
+
+def format_pool_stats_summary(stats: dict) -> str:
+    """Формирует однострочную сводку pool stats для меню."""
+    parts = [
+        f"в pool: {stats['storage_total']}",
+        f"ready: {stats['ready_total']}",
+        f"incomplete: {stats['incomplete_total']}",
+    ]
+    if stats.get("watched_total", 0) > 0:
+        parts.append(f"watched: {stats['watched_total']}")
+    if stats.get("criteria_name") is None and stats.get("raw_total") != stats.get("storage_total"):
+        parts.append(f"JSON keys: {stats['raw_total']}")
+    return " | ".join(parts)
+
+
+def format_pool_stats_lines(stats: dict) -> list[str]:
+    """Формирует многострочную сводку pool stats для экранов pool/top."""
+    lines = [
+        f"В pool (normalized): {stats['storage_total']}",
+        f"Ready: {stats['ready_total']} | Incomplete: {stats['incomplete_total']}",
+    ]
+    if stats.get("watched_total", 0) > 0:
+        lines.append(
+            f"Watched in pool: {stats['watched_total']} "
+            f"(после save active: {stats['active_total']})"
+        )
+    if stats.get("criteria_name") is None:
+        lines.append(f"Записей в JSON: {stats['raw_total']}")
+    return lines
+
+
+def _format_optional_filter_value(value) -> str:
+    if value in (None, ""):
+        return "не важно"
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value) if len(value) > 0 else "не важно"
+    return str(value)
+
+
+def build_prediction_filter_defaults(criteria_name: str | None = None) -> dict:
+    """Возвращает defaults runtime-фильтров top prediction из candidate_criteria.json."""
+    defaults = {
+        "criteria_name": criteria_name,
+        "source": None,
+        "country": None,
+        "year_min": None,
+        "year_max": None,
+        "include_genres": [],
+        "exclude_genres": [],
+        "min_kp_score": None,
+        "min_kp_votes": None,
+        "min_imdb_score": None,
+        "min_imdb_votes": None,
+        "min_tmdb_score": None,
+        "min_tmdb_votes": None,
+        "only_complete": True,
+    }
+    if criteria_name is None:
+        return defaults
+
+    criteria = load_candidate_criteria().get(criteria_name) or {}
+    if isinstance(criteria, dict) is False:
+        return defaults
+
+    country = str(criteria.get("country") or "").strip()
+    defaults.update({
+        "country": country or None,
+        "year_min": criteria.get("min_year"),
+        "year_max": criteria.get("max_year"),
+        "include_genres": list(criteria.get("genres") or []),
+        "exclude_genres": list(criteria.get("excluded_genres") or []),
+        "min_kp_score": criteria.get("min_kp"),
+        "min_kp_votes": criteria.get("min_kp_votes"),
+        "min_imdb_score": criteria.get("min_imdb"),
+        "min_imdb_votes": criteria.get("min_imdb_votes"),
+    })
+    return defaults
+
+
+def format_prediction_filter_default_lines(defaults: dict) -> list[str]:
+    """Формирует краткую сводку defaults для экрана top prediction."""
+    return [
+        f"country: {_format_optional_filter_value(defaults.get('country'))}",
+        (
+            f"year: {_format_optional_filter_value(defaults.get('year_min'))}"
+            f"..{_format_optional_filter_value(defaults.get('year_max'))}"
+        ),
+        f"include genres: {_format_optional_filter_value(defaults.get('include_genres'))}",
+        f"exclude genres: {_format_optional_filter_value(defaults.get('exclude_genres'))}",
+        f"min KP: {_format_optional_filter_value(defaults.get('min_kp_score'))}",
+        f"min KP votes: {_format_optional_filter_value(defaults.get('min_kp_votes'))}",
+        f"min IMDb: {_format_optional_filter_value(defaults.get('min_imdb_score'))}",
+        f"min IMDb votes: {_format_optional_filter_value(defaults.get('min_imdb_votes'))}",
+    ]
 
 
 def _normalized_optional_text(value) -> str:
@@ -530,19 +683,12 @@ def _matches_optional_country(candidate: dict, country_filter: str | None) -> bo
 
 
 def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude_genres: list[str]) -> bool:
-    candidate_genres = {_normalized_optional_text(item) for item in _candidate_list_values(candidate, "genres")}
-    candidate_genres.discard("")
-
-    include = {_normalized_optional_text(item) for item in include_genres or []}
-    include.discard("")
-    exclude = {_normalized_optional_text(item) for item in exclude_genres or []}
-    exclude.discard("")
-
-    if len(exclude & candidate_genres) > 0:
+    candidate_genre_values = _candidate_list_values(candidate, "genres")
+    if candidate_genres.genres_match_none(candidate_genre_values, exclude_genres or []) is False:
         return False
-    if len(include) == 0:
+    if len(include_genres or []) == 0:
         return True
-    return len(include & candidate_genres) > 0
+    return candidate_genres.genres_match_any(candidate_genre_values, include_genres)
 
 
 def _matches_min_value(candidate: dict, field_name: str, min_value) -> bool:
@@ -657,9 +803,9 @@ def _mark_kp_retry_attempt(candidate: dict) -> None:
 
 def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = None) -> dict:
     """Повторно добирает KP-данные для неполных кандидатов в общем candidate_pool."""
-    from candidates import tmdb_candidate_pool
+    from candidates import kp_enrichment
 
-    pool = normalize_pool(load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     incomplete_candidates = get_incomplete_candidates(pool, criteria_name=criteria_name)
     selected_candidates = incomplete_candidates[:max(0, int(limit))]
     stats = {
@@ -677,12 +823,7 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
         _mark_kp_retry_attempt(candidate)
 
         country = _criteria_country(candidate.get("criteria_name") or criteria_name)
-        queries = tmdb_candidate_pool.unique_non_empty([
-            candidate.get("title"),
-            candidate.get("original_title"),
-            candidate.get("alternative_title"),
-        ])
-        year = tmdb_candidate_pool.candidate_year(candidate)
+        queries = kp_enrichment.candidate_kp_queries(candidate, include_alternative_title=True)
         if len(queries) == 0:
             candidate["kp_status"] = "not_found"
             candidate["last_kp_error"] = "empty_query"
@@ -691,35 +832,16 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
             stats["kp_not_found"] += 1
             continue
 
-        found = False
-        last_error = None
-        for query in queries:
-            result = api.find_series_raw(str(query), country, year=year)
-            if result.get("ok") is False:
-                error_code = result.get("error") or "unknown"
-                if error_code in {"not_found", "country_not_found", "empty_title"}:
-                    last_error = error_code
-                    continue
+        lookup = kp_enrichment.lookup_kp_via_api(
+            candidate,
+            queries,
+            country,
+            find_series_raw=api.find_series_raw,
+            continue_on_reject=True,
+        )
 
-                candidate["kp_status"] = "error"
-                candidate["last_kp_error"] = error_code
-                append_signal(candidate, "kp_api_error_retry")
-                candidate.update(normalize_candidate_record(candidate))
-                stats["api_errors"] += 1
-                found = True
-                break
-
-            movie = result.get("data") or {}
-            is_safe, reason = tmdb_candidate_pool.kp_match_is_safe(candidate, movie)
-            if is_safe is False:
-                last_error = f"rejected_{reason}"
-                candidate["kp_status"] = "not_found"
-                candidate["last_kp_error"] = last_error
-                append_signal(candidate, f"kp_api_retry_rejected_{reason}")
-                candidate.update(normalize_candidate_record(candidate))
-                continue
-
-            tmdb_candidate_pool.fill_candidate_from_kp_api(candidate, movie)
+        if lookup["status"] == "found":
+            kp_enrichment.fill_candidate_from_kp_api(candidate, lookup["movie"] or {})
             candidate["kp_score"] = candidate.get("kp_rating")
             candidate["kp_status"] = "done"
             candidate.pop("last_kp_error", None)
@@ -728,14 +850,25 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
             stats["kp_found"] += 1
             if candidate["is_complete"]:
                 stats["became_complete"] += 1
-            found = True
-            break
-
-        if found:
             continue
 
+        if lookup["status"] == "error":
+            error_code = lookup.get("error") or "unknown"
+            candidate["kp_status"] = "error"
+            candidate["last_kp_error"] = error_code
+            append_signal(candidate, "kp_api_error_retry")
+            candidate.update(normalize_candidate_record(candidate))
+            stats["api_errors"] += 1
+            continue
+
+        last_error = lookup.get("error") or "not_found"
+        reject_reason = lookup.get("reject_reason")
+        if reject_reason:
+            last_error = f"rejected_{reject_reason}"
+            append_signal(candidate, f"kp_api_retry_rejected_{reject_reason}")
+
         candidate["kp_status"] = "not_found"
-        candidate["last_kp_error"] = last_error or "not_found"
+        candidate["last_kp_error"] = last_error
         append_signal(candidate, "kp_api_not_found_retry")
         candidate.update(normalize_candidate_record(candidate))
         stats["kp_not_found"] += 1
@@ -748,7 +881,7 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
 
 def remove_candidate_from_pool(target_candidate: dict) -> int:
     """Удаляет из общего пула все варианты кандидата, совпадающие по названию и году."""
-    pool = normalize_pool(load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     filtered_pool = {}
     removed = 0
 
@@ -856,6 +989,31 @@ def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
     return scored_candidates
 
 
+def select_ready_candidates_for_contributions(candidates: list) -> list:
+    """Возвращает кандидатов, безопасных для расчёта feature contributions."""
+    return [
+        candidate for candidate in candidates
+        if schema_is_ready_for_predict(candidate)
+    ]
+
+
+def candidate_not_ready_for_contributions_message(candidate: dict) -> str | None:
+    """Возвращает понятное сообщение, если кандидат не готов для contributions."""
+    if schema_is_ready_for_predict(candidate):
+        return None
+
+    missing_fields = schema_compute_completeness(candidate).get("missing_fields") or []
+    if len(missing_fields) == 0:
+        missing_text = "неизвестно"
+    else:
+        missing_text = ", ".join(missing_fields)
+
+    return (
+        "Кандидат ещё не готов для predict/contributions: не хватает данных. "
+        f"Не хватает: {missing_text}."
+    )
+
+
 def candidate_feature_contributions(candidate: dict, weights: dict) -> dict:
     """Считает вклад каждого признака в предикт кандидата без вайб-тегов."""
     from model import model
@@ -901,3 +1059,11 @@ def candidate_feature_contributions(candidate: dict, weights: dict) -> dict:
         "positive": positive,
         "negative": negative,
     }
+
+
+def build_contribution_reports_for_ready_candidates(candidates: list, weights: dict) -> list:
+    """Считает contributions только для prediction-ready кандидатов."""
+    return [
+        candidate_feature_contributions(candidate, weights)
+        for candidate in select_ready_candidates_for_contributions(candidates)
+    ]

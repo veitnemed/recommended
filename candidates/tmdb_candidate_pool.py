@@ -12,6 +12,7 @@ from typing import Any
 
 from candidates import import_tmdb
 from candidates import candidate_pool as legacy_candidate_pool
+from candidates import kp_enrichment
 from candidates.keys import pool_entry_key
 from candidates.schema import normalize_candidate_record
 from apis import imdb_sql as sql_search
@@ -67,13 +68,6 @@ JUNK_IMDB_GENRES = {
     "Adult",
 }
 CORE_IMDB_GENRES = {"Crime", "Drama", "Mystery"}
-KP_COUNTRY_BY_ISO2 = {
-    "RU": "Россия",
-    "KR": "Южная Корея",
-    "US": "США",
-    "GB": "Великобритания",
-    "DE": "Германия",
-}
 TMDB_TV_GENRE_NAMES_BY_ID = {
     10759: "Action & Adventure",
     16: "Animation",
@@ -531,68 +525,27 @@ def safe_int(value: Any) -> int | None:
 
 
 def unique_non_empty(values: list[Any]) -> list[Any]:
-    result: list[Any] = []
-    seen: set[str] = set()
-    for value in values:
-        if value in (None, ""):
-            continue
-        key = str(value).strip()
-        if key == "" or key in seen:
-            continue
-        seen.add(key)
-        result.append(value)
-    return result
+    return kp_enrichment.unique_non_empty(values)
 
 
 def tmdb_country_to_kp_country(country: str) -> str:
-    return KP_COUNTRY_BY_ISO2.get(normalize_country_code(country), "")
+    return kp_enrichment.kp_country_from_iso2(country)
 
 
 def candidate_year(candidate: dict[str, Any]) -> int | None:
-    return safe_int(candidate.get("year") or candidate.get("imdb_start_year"))
+    return kp_enrichment.candidate_year(candidate)
 
 
 def kp_api_description(movie: dict[str, Any]) -> str:
-    return str(movie.get("description") or movie.get("shortDescription") or "").strip()
+    return kp_enrichment.kp_api_description(movie)
 
 
 def kp_match_is_safe(candidate: dict[str, Any], movie: dict[str, Any]) -> tuple[bool, str | None]:
-    if kp_api.is_series(movie) is False:
-        return False, "not_series"
-
-    candidate_titles = unique_non_empty([
-        candidate.get("title"),
-        candidate.get("original_title"),
-    ])
-    title_score = 0.0
-    for title in candidate_titles:
-        title_score = max(title_score, kp_api.title_match_score(str(title), movie))
-    if title_score < 0.78:
-        return False, "title_mismatch"
-
-    expected_year = candidate_year(candidate)
-    kp_year = safe_int(movie.get("year"))
-    if expected_year is not None and kp_year is not None and abs(kp_year - expected_year) > 1:
-        return False, "year_mismatch"
-
-    return True, None
+    return kp_enrichment.kp_match_is_safe(candidate, movie)
 
 
 def fill_candidate_from_kp_api(candidate: dict[str, Any], movie: dict[str, Any]) -> None:
-    kp_rating = kp_api.safe_nested(movie, "rating", "kp")
-    kp_votes = kp_api.safe_nested(movie, "votes", "kp")
-    if movie.get("id") not in (None, ""):
-        candidate["kp_id"] = movie.get("id")
-    if kp_rating not in (None, ""):
-        candidate["kp_rating"] = kp_rating
-    if kp_votes not in (None, ""):
-        candidate["kp_votes"] = kp_votes
-
-    description = kp_api_description(movie)
-    if description and not str(candidate.get("overview") or "").strip():
-        candidate["overview"] = description
-    if movie.get("name"):
-        candidate["kp_title"] = movie.get("name")
+    kp_enrichment.fill_candidate_from_kp_api(candidate, movie)
 
 
 def mark_kp_pending_limit(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -610,8 +563,7 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
         return candidate
 
     kp_country = tmdb_country_to_kp_country(country)
-    queries = unique_non_empty([candidate.get("title"), candidate.get("original_title")])
-    year = candidate_year(candidate)
+    queries = kp_enrichment.candidate_kp_queries(candidate)
     if len(queries) == 0:
         stats["kp_api_not_found"] += 1
         set_kp_status(candidate, "not_requested", False)
@@ -619,37 +571,38 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
         report_progress("KP API", "Нет кандидатов")
         return candidate
 
-    last_error = None
-    for query in queries:
-        stats["kp_api_requested"] += 1
-        report_progress("KP API", "Ожидание ответа")
-        result = kp_api.find_series_raw(str(query), kp_country, year=year)
-        if result.get("ok") is False:
-            error_code = result.get("error")
-            if error_code in {"not_found", "country_not_found", "empty_title"}:
-                last_error = error_code
-                continue
-            stats["kp_api_errors"] += 1
-            set_kp_status(candidate, "error", False)
-            append_signal(candidate, "kp_api_error")
-            append_signal(candidate, f"kp_api_error_{error_code or 'unknown'}")
-            report_progress("KP API", "Ошибка сети")
-            return candidate
+    report_progress("KP API", "Ожидание ответа")
+    lookup = kp_enrichment.lookup_kp_via_api(
+        candidate,
+        queries,
+        kp_country,
+        continue_on_reject=False,
+    )
+    stats["kp_api_requested"] += int(lookup.get("attempts") or 0)
 
-        movie = result.get("data") or {}
-        is_safe, reason = kp_match_is_safe(candidate, movie)
-        if is_safe is False:
-            stats["kp_api_rejected_by_match"] += 1
-            set_kp_status(candidate, "not_found", False)
-            append_signal(candidate, f"kp_api_rejected_{reason}")
-            report_progress("KP API", "Отклонено match-check")
-            return candidate
-
-        fill_candidate_from_kp_api(candidate, movie)
+    if lookup["status"] == "found":
+        fill_candidate_from_kp_api(candidate, lookup["movie"] or {})
         stats["kp_api_found"] += 1
         set_kp_status(candidate, "done", True)
         append_signal(candidate, "kp_api_hit")
         report_progress("KP API", "Успешно")
+        return candidate
+
+    if lookup["status"] == "error":
+        error_code = lookup.get("error") or "unknown"
+        stats["kp_api_errors"] += 1
+        set_kp_status(candidate, "error", False)
+        append_signal(candidate, "kp_api_error")
+        append_signal(candidate, f"kp_api_error_{error_code}")
+        report_progress("KP API", "Ошибка сети")
+        return candidate
+
+    if lookup["status"] == "rejected":
+        reason = lookup.get("reject_reason") or "unknown"
+        stats["kp_api_rejected_by_match"] += 1
+        set_kp_status(candidate, "not_found", False)
+        append_signal(candidate, f"kp_api_rejected_{reason}")
+        report_progress("KP API", "Отклонено match-check")
         return candidate
 
     stats["kp_api_not_found"] += 1
