@@ -24,6 +24,7 @@ from storage import normalize as storage_normalize
 from dataset import storage_movie
 from dataset import excel_work
 from candidates import candidate_pool
+from candidates import import_tmdb as tmdb_import
 from candidates import schema as candidate_schema
 from candidates import tmdb_candidate_pool
 from apis import imdb_sql as sql_search
@@ -785,10 +786,146 @@ def test_manual_add_defaults_when_lookup_fails() -> None:
     assert_check("Печатается режим ручной разметки", "Режим: ручная разметка" in output.getvalue())
 
 
+def test_add_defaults_rejects_sql_api_identity_mismatch() -> None:
+    """Проверяет, что SQL IMDb не подмешивается к другому API-объекту."""
+    print("\n11.6) Проверяем identity gate при SQL/API mismatch")
+    sql_data = {
+        "title": "Mad",
+        "original_title": "Mad",
+        "year": 2010,
+        "genres": ["Animation", "Comedy"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+    api_data = {
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.372, "imdb": 7.0},
+        "votes": {"kp": 173943, "imdb": 584},
+        "genres": [{"name": "драма"}],
+    }
+
+    built = title_resolve.build_add_defaults_by_priority("Псих", sql_data, api_data, None)
+    defaults = built["defaults"]
+    sql_status = title_resolve.get_sql_status(sql_data, built["sql_identity"])
+
+    assert_check("SQL candidate отклонён", built["sql_identity"]["accepted"] is False)
+    assert_check("Причина reject зафиксирована", built["sql_identity"]["reason"] == "identity_mismatch")
+    assert_check("SQL статус показывает reject", sql_status == "найдено, но отклонено (identity_mismatch)")
+    assert_check("Title остаётся из KP API", defaults["main_info"]["title"] == "Псих")
+    assert_check("Год остаётся из KP API", defaults["main_info"]["year"] == 2020)
+    assert_check("IMDb rating берётся из KP API", defaults["raw_scores"]["imdb_score"] == 7.0)
+    assert_check("IMDb votes берутся из KP API", defaults["raw_scores"]["imdb_votes"] == 584)
+    assert_check("Источник IMDb не SQL", built["sources"]["imdb_score"] == "kp_api")
+
+
+def test_add_defaults_accepts_sql_when_imdb_id_matches() -> None:
+    """Проверяет, что совпадающий imdb_id разрешает SQL-кандидата."""
+    print("\n11.7) Проверяем identity gate по imdb_id")
+    sql_data = {
+        "tconst": "tt1234567",
+        "title": "SQL Title",
+        "original_title": "SQL Original",
+        "year": 2020,
+        "genres": ["драма"],
+        "imdb_rating": 7.8,
+        "imdb_votes": 1000,
+    }
+    api_data = {
+        "externalId": {"imdb": "tt1234567"},
+        "name": "API Title",
+        "year": 2021,
+        "rating": {"kp": 8.0, "imdb": 6.0},
+        "votes": {"kp": 2000, "imdb": 300},
+        "genres": [{"name": "драма"}],
+    }
+
+    built = title_resolve.build_add_defaults_by_priority("Input Title", sql_data, api_data, None)
+
+    assert_check("SQL принят по imdb_id", built["sql_identity"]["accepted"] is True)
+    assert_check("Причина принятия imdb_id_match", built["sql_identity"]["reason"] == "imdb_id_match")
+    assert_check("IMDb rating может быть из SQL", built["defaults"]["raw_scores"]["imdb_score"] == 7.8)
+    assert_check("Источник IMDb SQL", built["sources"]["imdb_score"] == "imdb_sql")
+
+
+def test_add_defaults_accepts_sql_when_title_year_match_without_imdb_id() -> None:
+    """Проверяет fallback identity по похожему названию и году."""
+    print("\n11.8) Проверяем identity gate по title/year без imdb_id")
+    sql_data = {
+        "title": "Псих",
+        "original_title": "Псих",
+        "year": 2020,
+        "genres": ["драма"],
+        "imdb_rating": 7.1,
+        "imdb_votes": 600,
+    }
+    api_data = {
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.3, "imdb": 7.0},
+        "votes": {"kp": 1000, "imdb": 500},
+        "genres": [{"name": "драма"}],
+    }
+
+    built = title_resolve.build_add_defaults_by_priority("Псих", sql_data, api_data, None)
+
+    assert_check("SQL принят по title/year", built["sql_identity"]["accepted"] is True)
+    assert_check("Причина принятия title_year_match", built["sql_identity"]["reason"] == "title_year_match")
+    assert_check("IMDb rating остаётся из SQL", built["defaults"]["raw_scores"]["imdb_score"] == 7.1)
+
+
+def test_add_defaults_rejects_sql_when_year_differs_more_than_one() -> None:
+    """Проверяет reject при несовпадении года больше чем на один."""
+    print("\n11.9) Проверяем identity gate по year_mismatch")
+    sql_data = {
+        "title": "Псих",
+        "original_title": "Псих",
+        "year": 2010,
+        "genres": ["драма"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+    api_data = {
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.3, "imdb": 7.0},
+        "votes": {"kp": 1000, "imdb": 500},
+        "genres": [{"name": "драма"}],
+    }
+
+    built = title_resolve.build_add_defaults_by_priority("Псих", sql_data, api_data, None)
+
+    assert_check("SQL отклонён по году", built["sql_identity"]["accepted"] is False)
+    assert_check("Причина reject year_mismatch", built["sql_identity"]["reason"] == "year_mismatch")
+    assert_check("IMDb rating берётся из API после reject", built["defaults"]["raw_scores"]["imdb_score"] == 7.0)
+
+
+def test_add_defaults_keeps_sql_only_flow() -> None:
+    """Проверяет, что SQL-only сценарий не сломан при отсутствии API."""
+    print("\n11.10) Проверяем SQL-only add-flow")
+    sql_data = {
+        "title": "Mad",
+        "original_title": "Mad",
+        "year": 2010,
+        "genres": ["Animation", "Comedy"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+
+    built = title_resolve.build_add_defaults_by_priority("Mad", sql_data, None, None)
+    defaults = built["defaults"]
+
+    assert_check("SQL-only кандидат принят", built["sql_identity"]["accepted"] is True)
+    assert_check("Причина SQL-only зафиксирована", built["sql_identity"]["reason"] == "sql_only")
+    assert_check("IMDb rating приходит из SQL-only", defaults["raw_scores"]["imdb_score"] == 6.0)
+    assert_check("Источник IMDb SQL-only", built["sources"]["imdb_score"] == "imdb_sql")
+
+
 def test_add_resolver_prioritizes_sql_and_kp() -> None:
     """Проверяет приоритет SQL для IMDb и KP API для KP/жанров/описания."""
-    print("\n11.6) Проверяем приоритеты источников SQL + KP API")
+    print("\n11.11) Проверяем приоритеты источников SQL + KP API")
     sql_data = {
+        "tconst": "tt7654321",
         "title": "SQL Title",
         "original_title": "SQL Original",
         "year": 2022,
@@ -797,6 +934,7 @@ def test_add_resolver_prioritizes_sql_and_kp() -> None:
         "imdb_votes": 12345,
     }
     kp_data = {
+        "externalId": {"imdb": "tt7654321"},
         "name": "KP Title",
         "year": 2024,
         "rating": {"kp": 8.1, "imdb": 6.1},
@@ -821,8 +959,9 @@ def test_add_resolver_prioritizes_sql_and_kp() -> None:
 
 def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
     """Проверяет fallback на TMDb для жанров/описания, без подстановки KP/IMDb оценок."""
-    print("\n11.7) Проверяем fallback на TMDb при падении KP API")
+    print("\n11.12) Проверяем fallback на TMDb при падении KP API")
     sql_data = {
+        "tconst": "tt2468135",
         "title": "SQL Title",
         "original_title": "SQL Original",
         "year": 2021,
@@ -837,7 +976,7 @@ def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
         "first_air_date": "2023-01-01",
         "genres": [{"name": "драма"}],
         "overview": "TMDb overview",
-        "external_ids": {},
+        "external_ids": {"imdb_id": "tt2468135"},
         "credits": {},
     }
 
@@ -858,7 +997,7 @@ def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
 
 def test_add_resolver_offline_without_sql_is_manual() -> None:
     """Проверяет, что полный offline/no-match сценарий остаётся ручным."""
-    print("\n11.8) Проверяем полный offline/manual сценарий resolver-а")
+    print("\n11.13) Проверяем полный offline/manual сценарий resolver-а")
 
     with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": False, "details": "not_found"}):
         with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
@@ -1322,6 +1461,104 @@ def test_tmdb_import_keeps_cross_criteria_entries() -> None:
     assert_check("После двух import остаются обе criteria-версии", criteria_names == {"tmdb_RU_quality", "tmdb_RU_hidden"})
     assert_check("TMDb import не схлопывает одинаковый title/year из разных criteria", len(method_candidates) == 2)
 
+def test_import_tmdb_module_normalizes_schema_and_keeps_unknown_fields() -> None:
+    """Проверяет новый import_tmdb модуль: criteria, schema и unknown fields."""
+    print("\n17) Проверяем import_tmdb module schema normalization")
+
+    result_path = Path(constant.DATA_DIR) / "tmdb_module_result.json"
+    result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Schema Candidate",
+                "year": 2022,
+                "tmdb_id": 401,
+                "tmdb_rating": 7.9,
+                "tmdb_votes": 77,
+                "imdb_rating": 7.2,
+                "imdb_votes": 8800,
+                "custom_payload": {"hello": "world"},
+            }
+        ],
+    }
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+    stats = tmdb_import.import_tmdb_result_to_common_pool(result_path)
+    pool = candidate_pool.load_candidate_pool()
+    candidate = next(
+        item for item in pool.values()
+        if item.get("title") == "Schema Candidate"
+    )
+
+    assert_check("Новый import_tmdb import успешен", stats["ok"] is True)
+    assert_check("criteria_name перенесён в common pool", candidate["criteria_name"] == "tmdb_RU_quality")
+    assert_check("source нормализован", candidate["source"] == "tmdb_imdb_kp_v1")
+    assert_check("tmdb_score нормализован", candidate["tmdb_score"] == 7.9)
+    assert_check("Unknown field не теряется", candidate["custom_payload"] == {"hello": "world"})
+
+
+def test_import_tmdb_module_skips_watched_by_title_identity() -> None:
+    """Проверяет watched-skip через title/year identity."""
+    print("\n18) Проверяем watched skip в import_tmdb module")
+
+    storage_movie.add_movie(make_movie(title="Watched Import", user_score=8.0))
+    result_path = Path(constant.DATA_DIR) / "tmdb_watched_result.json"
+    result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Watched Import",
+                "year": 2024,
+                "tmdb_id": 402,
+                "tmdb_rating": 7.1,
+                "tmdb_votes": 42,
+            }
+        ],
+    }
+    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+
+    stats = tmdb_import.import_tmdb_result_to_common_pool(result_path)
+    pool = candidate_pool.load_candidate_pool()
+
+    assert_check("Watched candidate пропускается", stats["watched_skipped"] == 1)
+    assert_check("Совместимый alias skipped_watched тоже заполнен", stats["skipped_watched"] == 1)
+    assert_check(
+        "Watched candidate не попадает в common pool",
+        all(candidate.get("title") != "Watched Import" for candidate in pool.values())
+    )
+
+
+def test_tmdb_candidate_pool_import_wrapper_delegates_to_new_module() -> None:
+    """Проверяет, что legacy wrapper вызывает новый import_tmdb модуль."""
+    print("\n19) Проверяем wrapper import в tmdb_candidate_pool")
+
+    fake_stats = {
+        "ok": True,
+        "read": 1,
+        "added": 1,
+        "updated": 0,
+        "watched_skipped": 0,
+        "skipped_watched": 0,
+        "duplicates": 0,
+        "skipped_duplicates": 0,
+        "errors": 0,
+        "criteria_name": "tmdb_RU_quality",
+        "pool_size_before": 0,
+        "pool_size_after": 1,
+        "pool_size": 1,
+    }
+
+    with patch("candidates.import_tmdb.import_tmdb_result_to_common_pool", return_value=fake_stats) as mocked:
+        stats = tmdb_candidate_pool.import_tmdb_result_to_common_pool("dummy.json", criteria_name="tmdb_RU_quality")
+
+    assert_check("Wrapper возвращает статистику нового модуля", stats == fake_stats)
+    assert_check("Wrapper реально делегирует в новый модуль", mocked.called is True)
+
+
 def test_tmdb_genre_diagnostics_and_helpers() -> None:
     """Проверяет TMDb genre diagnostics и чистые genre helpers без изменения dataset."""
     print("\n15) Проверяем TMDb genre diagnostics")
@@ -1423,6 +1660,11 @@ def run_tests() -> None:
         test_merge_defaults_prefers_api_and_keeps_sql()
         test_build_genre_defaults_ignores_unknown()
         test_manual_add_defaults_when_lookup_fails()
+        test_add_defaults_rejects_sql_api_identity_mismatch()
+        test_add_defaults_accepts_sql_when_imdb_id_matches()
+        test_add_defaults_accepts_sql_when_title_year_match_without_imdb_id()
+        test_add_defaults_rejects_sql_when_year_differs_more_than_one()
+        test_add_defaults_keeps_sql_only_flow()
         test_add_resolver_prioritizes_sql_and_kp()
         test_add_resolver_uses_tmdb_when_kp_fails()
         test_add_resolver_offline_without_sql_is_manual()
@@ -1439,6 +1681,9 @@ def run_tests() -> None:
         test_candidate_pool_genre_filters()
         test_tmdb_candidate_pool_criteria_name()
         test_tmdb_import_keeps_cross_criteria_entries()
+        test_import_tmdb_module_normalizes_schema_and_keeps_unknown_fields()
+        test_import_tmdb_module_skips_watched_by_title_identity()
+        test_tmdb_candidate_pool_import_wrapper_delegates_to_new_module()
         test_tmdb_genre_diagnostics_and_helpers()
         print("\nВсе проверки пройдены: True")
     finally:

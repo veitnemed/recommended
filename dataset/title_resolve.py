@@ -1,5 +1,7 @@
 """Поиск тайтла через SQL и API и сбор defaults без UI."""
 
+from difflib import SequenceMatcher
+
 from config import constant
 from config import genre_tags
 from config import scheme
@@ -79,6 +81,154 @@ def extract_api_title(series: dict) -> str:
         if str(value or "").strip() != "":
             return str(value).strip()
     return ""
+
+
+def extract_candidate_imdb_id(candidate: dict | None) -> str | None:
+    """Достаёт IMDb id из SQL/KP/TMDb кандидата в едином виде."""
+    if not isinstance(candidate, dict):
+        return None
+
+    for key in ("imdb_id", "imdbId", "imdbID", "tconst"):
+        value = str(candidate.get(key) or "").strip()
+        if value:
+            return value.casefold()
+
+    for nested_key in ("externalId", "external_ids"):
+        nested = candidate.get(nested_key)
+        if not isinstance(nested, dict):
+            continue
+        for key in ("imdb", "imdb_id", "imdbId", "imdbID"):
+            value = str(nested.get(key) or "").strip()
+            if value:
+                return value.casefold()
+
+    return None
+
+
+def extract_candidate_year(candidate: dict | None) -> int | None:
+    """Достаёт год из кандидата, если он представлен числом."""
+    if not isinstance(candidate, dict):
+        return None
+
+    for key in ("year", "startYear"):
+        value = candidate.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _add_title_value(values: list, value) -> None:
+    text = str(value or "").strip()
+    if text and text not in values:
+        values.append(text)
+
+
+def extract_sql_identity_titles(candidate: dict | None) -> list:
+    """Собирает названия SQL-кандидата, по которым можно проверять identity."""
+    if not isinstance(candidate, dict):
+        return []
+
+    titles = []
+    for key in ("title", "original_title", "primaryTitle", "originalTitle"):
+        _add_title_value(titles, candidate.get(key))
+
+    for item in candidate.get("alternative_titles", []) or []:
+        if isinstance(item, dict):
+            _add_title_value(titles, item.get("title"))
+        else:
+            _add_title_value(titles, item)
+
+    match = candidate.get("match") or {}
+    if isinstance(match, dict):
+        for item in match.get("matched_titles", []) or []:
+            _add_title_value(titles, item)
+
+    return titles
+
+
+def extract_api_identity_titles(candidate: dict | None) -> list:
+    """Собирает названия API-кандидата, по которым можно проверять identity."""
+    if not isinstance(candidate, dict):
+        return []
+
+    titles = []
+    for key in ("title", "name", "original_title", "original_name", "originalName", "alternativeName", "enName"):
+        _add_title_value(titles, candidate.get(key))
+    return titles
+
+
+def normalize_identity_title(value) -> str:
+    """Нормализует название для безопасного сравнения identity."""
+    return sql_search.normalize_for_match(value).replace("ё", "е")
+
+
+def title_identity_match(left, right) -> bool:
+    """Проверяет, похожи ли два названия достаточно для identity gate."""
+    left_norm = normalize_identity_title(left)
+    right_norm = normalize_identity_title(right)
+    if left_norm == "" or right_norm == "":
+        return False
+    if left_norm == right_norm:
+        return True
+    if min(len(left_norm), len(right_norm)) >= 4 and (left_norm in right_norm or right_norm in left_norm):
+        return True
+
+    left_translit = sql_search.transliterate_to_latin(left_norm)
+    right_translit = sql_search.transliterate_to_latin(right_norm)
+    if left_translit and right_translit and left_translit == right_translit:
+        return True
+
+    ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
+    if ratio >= 0.82:
+        return True
+
+    left_tokens = set(left_norm.split())
+    right_tokens = set(right_norm.split())
+    common = left_tokens & right_tokens
+    if len(common) >= 2:
+        return True
+    return len(common) == 1 and min(len(left_tokens), len(right_tokens)) == 1
+
+
+def sql_titles_match_identity(sql_candidate: dict, api_candidate: dict, query: str) -> bool:
+    """Проверяет, что SQL title/original похожи на query или API title/original."""
+    sql_titles = extract_sql_identity_titles(sql_candidate)
+    trusted_titles = extract_api_identity_titles(api_candidate)
+    _add_title_value(trusted_titles, query)
+
+    for sql_title in sql_titles:
+        for trusted_title in trusted_titles:
+            if title_identity_match(sql_title, trusted_title):
+                return True
+    return False
+
+
+def is_sql_candidate_identity_safe(sql_candidate: dict | None, api_candidate: dict | None, query: str) -> tuple[bool, str]:
+    """Решает, можно ли смешивать SQL IMDb candidate с API candidate."""
+    if sql_candidate is None:
+        return False, "sql_missing"
+    if api_candidate is None:
+        return True, "sql_only"
+
+    sql_imdb_id = extract_candidate_imdb_id(sql_candidate)
+    api_imdb_id = extract_candidate_imdb_id(api_candidate)
+    if sql_imdb_id and api_imdb_id:
+        if sql_imdb_id == api_imdb_id:
+            return True, "imdb_id_match"
+        return False, "imdb_id_mismatch"
+
+    sql_year = extract_candidate_year(sql_candidate)
+    api_year = extract_candidate_year(api_candidate)
+    if sql_titles_match_identity(sql_candidate, api_candidate, query) is False:
+        return False, "identity_mismatch"
+    if sql_year is not None and api_year is not None and abs(sql_year - api_year) > 1:
+        return False, "year_mismatch"
+
+    return True, "title_year_match"
 
 
 def extract_api_raw_scores(series: dict) -> dict:
@@ -308,28 +458,35 @@ def build_add_defaults_by_priority(input_title: str, sql_data: dict | None, api_
         "description": None,
     }
 
+    api_identity_candidate = api_data if api_data is not None else tmdb_data
+    sql_identity_accepted, sql_identity_reason = is_sql_candidate_identity_safe(
+        sql_data,
+        api_identity_candidate,
+        input_title,
+    )
+    effective_sql_data = sql_data if sql_identity_accepted else None
     api_scores = extract_api_raw_scores(api_data) if api_data is not None else {}
     api_genres = extract_api_genres(api_data) if api_data is not None else []
-    sql_genres = unique_preserve_order((sql_data or {}).get("genres", []) or [])
+    sql_genres = unique_preserve_order((effective_sql_data or {}).get("genres", []) or [])
     tmdb_genres = extract_tmdb_genres(tmdb_data)
 
     title_value, title_source = first_value(
         (extract_api_title(api_data) if api_data is not None else None, "kp_api"),
         (input_title, "input"),
         (extract_tmdb_title(tmdb_data), "tmdb_api"),
-        ((sql_data or {}).get("title") or (sql_data or {}).get("original_title"), "imdb_sql"),
+        ((effective_sql_data or {}).get("title") or (effective_sql_data or {}).get("original_title"), "imdb_sql"),
     )
     year_value, year_source = first_value(
         ((api_data or {}).get("year"), "kp_api"),
-        ((sql_data or {}).get("year"), "imdb_sql"),
+        ((effective_sql_data or {}).get("year"), "imdb_sql"),
         ((tmdb_data or {}).get("year"), "tmdb_api"),
     )
     imdb_score, imdb_score_source = first_value(
-        ((sql_data or {}).get("imdb_rating"), "imdb_sql"),
+        ((effective_sql_data or {}).get("imdb_rating"), "imdb_sql"),
         (api_scores.get("imdb_score"), "kp_api"),
     )
     imdb_votes, imdb_votes_source = first_value(
-        ((sql_data or {}).get("imdb_votes"), "imdb_sql"),
+        ((effective_sql_data or {}).get("imdb_votes"), "imdb_sql"),
         (api_scores.get("imdb_votes"), "kp_api"),
     )
     kp_score, kp_score_source = first_value((api_scores.get("kp_score"), "kp_api"))
@@ -367,6 +524,10 @@ def build_add_defaults_by_priority(input_title: str, sql_data: dict | None, api_
         "defaults": defaults,
         "sources": sources,
         "source_values": source_values,
+        "sql_identity": {
+            "accepted": sql_identity_accepted,
+            "reason": sql_identity_reason,
+        },
     }
 
 
@@ -379,6 +540,21 @@ def get_kp_status(api_data: dict | None, api_error: dict | None) -> str:
     if api_error.get("error") in {"not_found", "country_not_found"}:
         return "не найдено"
     return "ошибка"
+
+
+def get_sql_status(sql_data: dict | None, sql_identity: dict | None) -> str:
+    """Возвращает статус SQL-кандидата с учётом identity gate."""
+    if sql_data is None:
+        return "не найдено"
+    if not isinstance(sql_identity, dict):
+        return "найдено"
+
+    reason = sql_identity.get("reason")
+    if sql_identity.get("accepted") is False:
+        return f"найдено, но отклонено ({reason})"
+    if reason == "sql_only":
+        return "найдено (SQL-only)"
+    return "найдено и принято"
 
 
 def resolve_title_data_for_add(title: str, country: str = "Россия") -> dict:
@@ -435,11 +611,13 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
     defaults = None
     sources = {}
     source_values = {}
+    sql_identity = None
     if found:
         built = build_add_defaults_by_priority(title, sql_data, api_data, tmdb_data)
         defaults = built["defaults"]
         sources = built["sources"]
         source_values = built["source_values"]
+        sql_identity = built["sql_identity"]
 
     return {
         "title": title,
@@ -453,8 +631,9 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
         "defaults": defaults,
         "sources": sources,
         "source_values": source_values,
+        "sql_identity": sql_identity,
         "statuses": {
-            "sql": "найдено" if sql_data is not None else "не найдено",
+            "sql": get_sql_status(sql_data, sql_identity),
             "kp_api": get_kp_status(api_data, last_api_error),
             "tmdb_api": tmdb_status,
         },
