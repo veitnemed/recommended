@@ -33,6 +33,7 @@ from candidates import tmdb_candidate_pool
 from candidates import tmdb_genre_options
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
+from scripts.dublecate import instrumenty_povtorov as pool_duplicate_tools
 from ui.console import interface_funcs
 from ui.console import request as request_ui
 from apis import kp_api as api
@@ -1264,6 +1265,82 @@ def test_candidate_pool_same_criteria_duplicates_keep_best() -> None:
 
     assert_check("Дубликаты в одном criteria-aware ключе схлопываются", len(pool) == 1)
     assert_check("Остаётся лучший кандидат по текущему score-правилу", saved_candidate["kp_score"] == 8.4)
+
+
+def test_candidate_pool_duplicate_scripts_helpers() -> None:
+    """Checks offline helpers used by scripts/candidate_pool_* duplicate tools."""
+    print("\n13b) Проверяем helper для scripts candidate_pool duplicate tools")
+
+    candidate_pool.save_candidate_pool({
+        "method_quality": {
+            "title": "Method",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.1,
+            "kp_votes": 800,
+            "imdb_score": 7.0,
+            "imdb_votes": 2500,
+            "genres": ["drama"],
+        },
+        "method_hidden": {
+            "title": "Method",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_hidden",
+            "kp_score": 8.4,
+            "kp_votes": 2200,
+            "imdb_score": 8.0,
+            "imdb_votes": 9000,
+            "genres": ["drama"],
+        },
+        "trigger_one": {
+            "title": "Trigger",
+            "alternative_title": "",
+            "year": 2018,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.5,
+            "kp_votes": 1000,
+            "imdb_score": 7.3,
+            "imdb_votes": 3000,
+            "genres": ["drama"],
+        },
+        "trigger_two": {
+            "title": "Triggers",
+            "alternative_title": "",
+            "year": 2018,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.0,
+            "kp_votes": 500,
+            "imdb_score": 7.1,
+            "imdb_votes": 1500,
+            "genres": ["drama"],
+        },
+    })
+
+    groups = pool_duplicate_tools.find_exact_duplicate_groups()
+    pairs = pool_duplicate_tools.find_similar_title_pairs()
+
+    assert_check("duplicate script helper находит exact title+year повтор", len(groups) == 1)
+    assert_check("duplicate script helper ставит лучший exact candidate первым", groups[0][0].candidate["kp_score"] == 8.4)
+    assert_check(
+        "similar script helper находит похожие названия",
+        any(
+            {pair["left"].candidate["title"], pair["right"].candidate["title"]} == {"Trigger", "Triggers"}
+            for pair in pairs
+        )
+    )
+
+    trigger_entry = next(
+        entry
+        for entry in pool_duplicate_tools.load_pool_entries()
+        if entry.candidate["title"] == "Triggers"
+    )
+    removed = pool_duplicate_tools.delete_entries_by_keys({trigger_entry.key})
+    pool = candidate_pool.load_candidate_pool()
+
+    assert_check("duplicate script helper удаляет выбранный key", removed == 1)
+    assert_check("duplicate script helper не удаляет соседний похожий title", any(item.get("title") == "Trigger" for item in pool.values()))
 
 
 def test_load_candidate_pool_is_read_only() -> None:
@@ -3640,6 +3717,7 @@ def run_tests() -> None:
         test_add_resolver_offline_without_sql_is_manual()
         test_candidate_pool_cross_criteria_keys_survive_save_load()
         test_candidate_pool_same_criteria_duplicates_keep_best()
+        test_candidate_pool_duplicate_scripts_helpers()
         test_load_candidate_pool_is_read_only()
         test_read_path_keeps_watched_in_json()
         test_write_path_purges_watched_from_json()
