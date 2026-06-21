@@ -30,6 +30,7 @@ from candidates import genres as pool_genres
 from candidates import import_tmdb as tmdb_import
 from candidates import schema as candidate_schema
 from candidates import tmdb_candidate_pool
+from candidates import tmdb_country_options
 from candidates import tmdb_genre_options
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
@@ -2189,6 +2190,45 @@ def test_candidate_service_tmdb_import_result() -> None:
     """Проверяет TMDb import view/preview/write-flow через candidates.service."""
     print("\n27) Проверяем candidates.service TMDb import result")
 
+    country_output = []
+    country_codes = interface_funcs.request_tmdb_country_codes(
+        input_func=lambda _prompt: "1",
+        output_func=country_output.append,
+    )
+    country_output_text = "\n".join(country_output)
+    assert_check(
+        "TMDb country options содержат русские названия для кодов",
+        tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE["RU"] == "Россия"
+        and tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE["US"] == "США"
+        and tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE["GB"] == "Великобритания",
+    )
+    assert_check(
+        "TMDb country parser возвращает ISO-коды по номерам",
+        country_codes == ["RU"] and tmdb_country_options.parse_country_indexes("1,2,3") == ["RU", "US", "GB"],
+    )
+    assert_check(
+        "TMDb country UI просит номера стран",
+        "Введите номера стран, по которым будет производиться поиск:" in country_output_text
+        and "Список:" in country_output_text,
+    )
+    assert_check(
+        "TMDb country UI показывает названия без ISO-кодов",
+        "1. Россия" in country_output_text
+        and "2. США" in country_output_text
+        and "3. Великобритания" in country_output_text
+        and "Россия RU" not in country_output_text,
+    )
+    country_list_lines = [
+        line
+        for line in country_output
+        if "." in line and "Список:" not in line
+    ]
+    assert_check(
+        "TMDb country UI разбивает список стран по 5 пунктов в строке",
+        len(country_list_lines) > 1
+        and all(line.count(".") <= 5 for line in country_list_lines),
+    )
+
     import inspect
 
     flow_source = inspect.getsource(interface_funcs.import_tmdb_result_to_common_pool_flow)
@@ -2390,6 +2430,13 @@ def test_candidate_service_tmdb_build_and_auto_import() -> None:
     assert_check(
         "UI build flow не вызывает build_candidate_pool напрямую",
         "build_candidate_pool(" not in build_flow_source,
+    )
+    assert_check(
+        "UI build flow переименовывает режимы поиска",
+        "Поиск по популярным" in build_flow_source
+        and "Поиск по недооценённым" in build_flow_source
+        and "Лучшие по качеству" not in build_flow_source
+        and "Скрытые находки" not in build_flow_source,
     )
     assert_check(
         "Auto-import helper по умолчанию использует candidate_service.import_tmdb_result_to_pool",
@@ -2957,6 +3004,7 @@ def test_tmdb_candidate_pool_discover_genre_filters() -> None:
     or_with_genres, or_without_genres, helper_output_text, _or_prompts = run_tmdb_genre_helper(["1,2,3", "1", "0"])
     and_with_genres, _and_without_genres, and_output, _and_prompts = run_tmdb_genre_helper(["1,2,3", "2", "0"])
     _exclude_with_genres, exclude_without_genres, exclude_output, _exclude_prompts = run_tmdb_genre_helper(["0", "1,2,3,4"])
+    _all_exclude_with_genres, all_exclude_without_genres, all_exclude_output, _all_exclude_prompts = run_tmdb_genre_helper(["0", "все"])
 
     assert_check(
         "TMDb genre helper Enter include/exclude возвращает no filter",
@@ -2989,6 +3037,11 @@ def test_tmdb_candidate_pool_discover_genre_filters() -> None:
         "TMDb genre helper собирает exclude строку без сетевых запросов",
         exclude_without_genres == "10766|10764|10767|10763"
         and "Как применять выбранные жанры (TMDb)?" not in exclude_output,
+    )
+    assert_check(
+        "TMDb genre helper поддерживает пункт все для exclude",
+        all_exclude_without_genres == "10766|10764|10767|10763|10762|99"
+        and "все >>" in all_exclude_output,
     )
     assert_check(
         "TMDb genre helper показывает русские labels без ID",

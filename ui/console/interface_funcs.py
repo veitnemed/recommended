@@ -10,6 +10,7 @@ from config import constant
 from common import format_score as format
 from candidates import candidate_pool
 from candidates import service as candidate_service
+from candidates import tmdb_country_options
 from candidates import tmdb_genre_options
 from dataset import dataset_stats
 from dataset import genre_import
@@ -761,6 +762,29 @@ def _parse_iso_country_code(value: str) -> str | None:
     return None
 
 
+def _print_tmdb_country_options(output_func=print) -> None:
+    options = tmdb_country_options.country_options()
+    parts = [
+        f"{index}. {option['label']}"
+        for index, option in enumerate(options, start=1)
+    ]
+    output_func("Список:")
+    for start in range(0, len(parts), 5):
+        output_func("; ".join(parts[start:start + 5]))
+
+
+def request_tmdb_country_codes(input_func=input, output_func=print) -> list[str]:
+    output_func("Введите номера стран, по которым будет производиться поиск:")
+    _print_tmdb_country_options(output_func=output_func)
+    while True:
+        answer = input_func(">> ").strip()
+        countries = tmdb_country_options.parse_country_indexes(answer)
+        if countries is None or len(countries) == 0:
+            output_func("Введите номера стран из списка через запятую, например: 1 или 1,2,3.")
+            continue
+        return countries
+
+
 def _fit_title(title: str, width: int = 32) -> str:
     """Ограничивает ширину названия, чтобы строка Top-20 не переносилась в узкой консоли."""
     text = str(title or "Без названия")
@@ -828,8 +852,8 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
 
 def _tmdb_mode_label(mode: str) -> str:
     labels = {
-        "quality": "лучшие по качеству",
-        "hidden_gems": "скрытые находки",
+        "quality": "поиск по популярным",
+        "hidden_gems": "поиск по недооценённым",
     }
     return labels.get(mode, mode)
 
@@ -861,14 +885,20 @@ def _input_tmdb_genre_ids(
     label: str,
     options: list[dict],
     *,
+    allow_all: bool = False,
     input_func=input,
     output_func=print,
 ) -> list[int]:
     while True:
         answer = input_func(f"{label} [0] >> ").strip()
+        if allow_all and answer.casefold() in {"все", "all", "*"}:
+            return [int(option["id"]) for option in options]
         indexes = _parse_tmdb_genre_indexes(answer, options)
         if indexes is None:
-            output_func("Введите номера жанров через запятую, например: 1,2,3")
+            if allow_all:
+                output_func("Введите номера жанров через запятую, например: 1,2,3, или все.")
+            else:
+                output_func("Введите номера жанров через запятую, например: 1,2,3")
             continue
         return tmdb_genre_options.genre_ids_from_indexes(indexes, options)
 
@@ -912,11 +942,13 @@ def request_tmdb_discover_genre_filters(input_func=input, output_func=print) -> 
     output_func(f"\n{tmdb_genre_options.TMDB_EXCLUDE_LABEL}")
     output_func("Выбери жанры, которые нужно исключить:")
     output_func(" 0 >> без exclude-фильтра")
+    output_func(" все >> все перечисленные exclude-жанры")
     _print_tmdb_genre_options(tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS, output_func)
-    output_func("\nВвод через запятую, например 1,2,3,4.")
+    output_func("\nВвод через запятую, например 1,2,3,4. Можно ввести все.")
     exclude_ids = _input_tmdb_genre_ids(
         "Exclude жанры",
         tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS,
+        allow_all=True,
         input_func=input_func,
         output_func=output_func,
     )
@@ -1008,28 +1040,15 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     ui.clean_terminal()
     print("TMDb candidate_pool v1\n")
-    print("Страна:")
-    print("1 >> Россия RU")
-    print("2 >> Ввести код страны вручную")
-    country_answer = input("Выбор [1] >> ").strip()
-    if country_answer == "":
-        country = "RU"
-    elif country_answer == "1":
-        country = "RU"
-    elif country_answer == "2":
-        country = _parse_iso_country_code(
-            input("Введите код страны ISO-2, например KR, US, GB, DE: ")
-        )
-        if country is None:
-            print("Ошибка: введите корректный двухбуквенный код ISO-2 латиницей.")
-            return
-    else:
-        print("Ошибка: выберите 1 или 2.")
+    country_codes = request_tmdb_country_codes(input_func=input, output_func=print)
+    if len(country_codes) > 1:
+        print("Пока один запуск TMDb candidate_pool поддерживает одну страну. Выберите один номер.")
         return
+    country = country_codes[0]
 
     print("\nРежим:")
-    print("1 >> Лучшие по качеству")
-    print("2 >> Скрытые находки")
+    print("1 >> Поиск по популярным")
+    print("2 >> Поиск по недооценённым")
     mode_answer = input("Выбор [1] >> ").strip()
     if mode_answer in ("", "1"):
         mode = "quality"
