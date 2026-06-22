@@ -15,6 +15,7 @@ from candidates import country_schema
 from candidates import genre_schema
 from candidates import genres as candidate_genres
 from candidates.schema import (
+    coerce_candidate_number,
     compute_completeness as schema_compute_completeness,
     is_ready_for_predict as schema_is_ready_for_predict,
     normalize_candidate_record,
@@ -216,15 +217,10 @@ def titles_are_similar(left_title: str, right_title: str) -> bool:
 
 
 def _to_optional_number(value) -> float | None:
-    if value is None:
+    coerced = coerce_candidate_number(value)
+    if coerced is None:
         return None
-    text = str(value).strip()
-    if text == "":
-        return None
-    try:
-        return float(text)
-    except (TypeError, ValueError):
-        return None
+    return float(coerced)
 
 
 def _sort_number(value) -> float:
@@ -734,20 +730,20 @@ def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude
 
 
 def _matches_min_value(candidate: dict, field_name: str, min_value) -> bool:
-    normalized_min = _to_optional_number(min_value)
+    normalized_min = coerce_candidate_number(min_value)
     if normalized_min is None:
         return True
-    current = _to_optional_number(candidate.get(field_name))
+    current = coerce_candidate_number(candidate.get(field_name))
     if current is None:
         return False
     return current >= normalized_min
 
 
 def _matches_max_value(candidate: dict, field_name: str, max_value) -> bool:
-    normalized_max = _to_optional_number(max_value)
+    normalized_max = coerce_candidate_number(max_value)
     if normalized_max is None:
         return True
-    current = _to_optional_number(candidate.get(field_name))
+    current = coerce_candidate_number(candidate.get(field_name))
     if current is None:
         return False
     return current <= normalized_max

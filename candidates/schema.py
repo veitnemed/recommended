@@ -43,6 +43,43 @@ def _has_value(value: Any) -> bool:
     return value is not None and str(value).strip() != ""
 
 
+def coerce_candidate_number(value: Any) -> int | float | None:
+    """Safely coerces candidate numeric fields for runtime filters without raising."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value
+
+    text = str(value).strip()
+    if text == "":
+        return None
+
+    lowered = text.casefold()
+    if lowered in {"unknown", "n/a", "na", "-"}:
+        return None
+    if "/" in text:
+        return None
+
+    normalized = text
+    if "," in normalized and "." not in normalized:
+        left, right = normalized.split(",", 1)
+        if right.isdigit() and len(right) <= 2:
+            normalized = f"{left}.{right}"
+        else:
+            normalized = normalized.replace(",", "")
+
+    try:
+        if "." in normalized:
+            return float(normalized)
+        return int(normalized)
+    except (TypeError, ValueError):
+        return None
+
+
 def _effective_kp_status(candidate: dict) -> str:
     has_kp_data = _has_value(candidate.get("kp_score")) and _has_value(candidate.get("kp_votes"))
     if has_kp_data:

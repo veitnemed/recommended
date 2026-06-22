@@ -1948,9 +1948,28 @@ def test_prediction_filter_rejects_invalid_numeric_strings() -> None:
         "only_complete": False,
     }
 
-    for value in ("N/A", "", "seven"):
+    for value in ("unknown", "N/A", "", "seven", "7.5/10"):
         filtered = candidate_pool.filter_saved_candidates_for_prediction([_candidate(value)], filters)
         assert_check(f"Invalid numeric '{value}' не проходит и не падает", len(filtered) == 0)
+
+
+def test_coerce_candidate_number_handles_runtime_values() -> None:
+    """Regression: shared numeric coercion for candidate runtime filters."""
+    print("\n20c.2b) Проверяем coerce_candidate_number")
+
+    assert_check("7.5 -> 7.5", candidate_schema.coerce_candidate_number(7.5) == 7.5)
+    assert_check("50000 -> 50000", candidate_schema.coerce_candidate_number(50000) == 50000)
+    assert_check('"7.5" -> 7.5', candidate_schema.coerce_candidate_number("7.5") == 7.5)
+    assert_check('"50000" -> 50000', candidate_schema.coerce_candidate_number("50000") == 50000)
+    assert_check('" 2021 " -> 2021', candidate_schema.coerce_candidate_number(" 2021 ") == 2021)
+    assert_check('"7,5" -> 7.5', candidate_schema.coerce_candidate_number("7,5") == 7.5)
+    assert_check("None -> None", candidate_schema.coerce_candidate_number(None) is None)
+    assert_check('"" -> None', candidate_schema.coerce_candidate_number("") is None)
+    assert_check('"unknown" -> None', candidate_schema.coerce_candidate_number("unknown") is None)
+    assert_check('"N/A" -> None', candidate_schema.coerce_candidate_number("N/A") is None)
+    assert_check('"7.5/10" -> None', candidate_schema.coerce_candidate_number("7.5/10") is None)
+    assert_check("True -> None", candidate_schema.coerce_candidate_number(True) is None)
+    assert_check("False -> None", candidate_schema.coerce_candidate_number(False) is None)
 
 
 def test_prediction_filter_does_not_mutate_input_candidates() -> None:
@@ -4746,6 +4765,7 @@ def run_tests() -> None:
         test_prediction_numeric_string_filters_are_safe()
         test_prediction_filter_accepts_numeric_strings()
         test_prediction_filter_rejects_invalid_numeric_strings()
+        test_coerce_candidate_number_handles_runtime_values()
         test_prediction_filter_does_not_mutate_input_candidates()
         test_top_prediction_title_identity_dedupe()
         test_contributions_readiness_gate()
