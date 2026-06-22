@@ -215,13 +215,29 @@ def titles_are_similar(left_title: str, right_title: str) -> bool:
     return False
 
 
+def _to_optional_number(value) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text == "":
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sort_number(value) -> float:
+    return _to_optional_number(value) or 0.0
+
+
 def candidate_sort_score(candidate: dict) -> tuple:
     """Возвращает ключ качества кандидата для выбора лучшего дубля."""
     return (
-        candidate.get("kp_score") or 0,
-        candidate.get("kp_votes") or 0,
-        candidate.get("imdb_score") or 0,
-        candidate.get("imdb_votes") or 0,
+        _sort_number(candidate.get("kp_score")),
+        _sort_number(candidate.get("kp_votes")),
+        _sort_number(candidate.get("imdb_score")),
+        _sort_number(candidate.get("imdb_votes")),
     )
 
 
@@ -490,8 +506,8 @@ def get_candidates_by_criteria(criteria_name: str) -> list:
     ]
     candidates.sort(
         key=lambda item: (
-            -(item.get("kp_score") or 0),
-            -(item.get("kp_votes") or 0),
+            -_sort_number(item.get("kp_score")),
+            -_sort_number(item.get("kp_votes")),
             str(item.get("title") or "")
         )
     )
@@ -504,8 +520,8 @@ def get_all_candidates() -> list:
     candidates = list(pool.values())
     candidates.sort(
         key=lambda item: (
-            -(item.get("kp_score") or 0),
-            -(item.get("kp_votes") or 0),
+            -_sort_number(item.get("kp_score")),
+            -_sort_number(item.get("kp_votes")),
             str(item.get("title") or "")
         )
     )
@@ -718,12 +734,23 @@ def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude
 
 
 def _matches_min_value(candidate: dict, field_name: str, min_value) -> bool:
-    if min_value is None:
+    normalized_min = _to_optional_number(min_value)
+    if normalized_min is None:
         return True
-    current = candidate.get(field_name)
-    if current is None or str(current).strip() == "":
+    current = _to_optional_number(candidate.get(field_name))
+    if current is None:
         return False
-    return current >= min_value
+    return current >= normalized_min
+
+
+def _matches_max_value(candidate: dict, field_name: str, max_value) -> bool:
+    normalized_max = _to_optional_number(max_value)
+    if normalized_max is None:
+        return True
+    current = _to_optional_number(candidate.get(field_name))
+    if current is None:
+        return False
+    return current <= normalized_max
 
 
 def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> list:
@@ -751,10 +778,9 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
         if _matches_optional_country(candidate, country) is False:
             continue
 
-        year = candidate.get("year")
-        if year_min is not None and (year is None or year < year_min):
+        if _matches_min_value(candidate, "year", year_min) is False:
             continue
-        if year_max is not None and (year is None or year > year_max):
+        if _matches_max_value(candidate, "year", year_max) is False:
             continue
 
         if _matches_optional_genres(candidate, include_genres, exclude_genres) is False:
@@ -808,12 +834,48 @@ def get_incomplete_candidates(pool: dict, criteria_name: str | None = None) -> l
     ]
 
 
+def _country_label_from_value(value) -> str:
+    text = str(value or "").strip()
+    if text == "":
+        return ""
+    iso2 = country_schema.country_value_to_iso2(text)
+    if iso2 is not None:
+        return country_schema.build_country_display([iso2]) or text
+    return text
+
+
+def _candidate_retry_country(candidate: dict) -> str:
+    normalized = normalize_candidate_record(candidate)
+    for code in normalized.get("country_codes") or []:
+        label = _country_label_from_value(code)
+        if label:
+            return label
+
+    for field_name in ("country_display", "countries", "country"):
+        values = normalized.get(field_name)
+        if isinstance(values, (list, tuple, set)):
+            for value in values:
+                label = _country_label_from_value(value)
+                if label:
+                    return label
+            continue
+        label = _country_label_from_value(values)
+        if label:
+            return label
+    return ""
+
+
 def _criteria_country(criteria_name: str | None) -> str:
     if criteria_name is None:
         return "Россия"
 
     criteria = load_candidate_criteria().get(criteria_name, {})
-    return criteria.get("country") or "Россия"
+    return _country_label_from_value(criteria.get("country")) or "Россия"
+
+
+def _retry_country(candidate: dict, criteria_name: str | None) -> str:
+    return _candidate_retry_country(candidate) or _criteria_country(criteria_name)
+
 
 
 def _mark_kp_retry_attempt(candidate: dict) -> None:
@@ -842,7 +904,7 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
         stats["attempted"] += 1
         _mark_kp_retry_attempt(candidate)
 
-        country = _criteria_country(candidate.get("criteria_name") or criteria_name)
+        country = _retry_country(candidate, candidate.get("criteria_name") or criteria_name)
         queries = kp_enrichment.candidate_kp_queries(candidate, include_alternative_title=True)
         if len(queries) == 0:
             candidate["kp_status"] = "not_found"

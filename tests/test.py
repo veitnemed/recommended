@@ -1814,9 +1814,189 @@ def test_canonical_runtime_filters_use_genre_keys_and_country_codes() -> None:
     assert_check("Genre options показывают display labels", set(genre_options) == {"Драма", "Криминал", "Комедия"})
 
 
+def test_prediction_numeric_string_filters_are_safe() -> None:
+    """Проверяет, что runtime numeric filters не падают на числах-строках из JSON."""
+    print("\n20c) Проверяем runtime numeric filters на строковых числах")
+
+    def _filter_candidates(candidates: list, **filters) -> list:
+        payload = {
+            "criteria_name": None,
+            "source": None,
+            "country": None,
+            "year_min": None,
+            "year_max": None,
+            "include_genres": [],
+            "exclude_genres": [],
+            "min_kp_score": None,
+            "min_kp_votes": None,
+            "min_imdb_score": None,
+            "min_imdb_votes": None,
+            "only_complete": False,
+        }
+        payload.update(filters)
+        return candidate_pool.filter_saved_candidates_for_prediction(candidates, payload)
+
+    string_number_candidate = {
+        "title": "String Number Candidate",
+        "year": "2021",
+        "kp_score": "7.5",
+        "kp_votes": "50000",
+        "imdb_score": "7.1",
+        "imdb_votes": "10000",
+        "genres": [],
+        "countries": [],
+    }
+    lower_score_candidate = dict(string_number_candidate, title="Lower KP", kp_score="6.9")
+    garbage_score_candidate = dict(string_number_candidate, title="Garbage KP", kp_score="unknown")
+    none_score_candidate = dict(string_number_candidate, title="None KP", kp_score=None)
+    empty_score_candidate = dict(string_number_candidate, title="Empty KP", kp_score="")
+    garbage_votes_candidate = dict(string_number_candidate, title="Garbage Votes", kp_votes="abc")
+
+    passed = _filter_candidates(
+        [string_number_candidate],
+        min_kp_score=7.0,
+        min_kp_votes=10000,
+        min_imdb_score=7.0,
+        year_min=2020,
+    )
+    assert_check("Строковые score/votes/year проходят numeric filters", len(passed) == 1)
+    assert_check("Строковое число ниже минимума отсекается", len(_filter_candidates([lower_score_candidate], min_kp_score=7.0)) == 0)
+    assert_check("Нечисловой score не падает и отсекается", len(_filter_candidates([garbage_score_candidate], min_kp_score=7.0)) == 0)
+    assert_check("None score при активном min отсекается", len(_filter_candidates([none_score_candidate], min_kp_score=7.0)) == 0)
+    assert_check("Пустой score при активном min отсекается", len(_filter_candidates([empty_score_candidate], min_kp_score=7.0)) == 0)
+    assert_check("None score без min filter не отсекается сам по себе", len(_filter_candidates([none_score_candidate])) == 1)
+    assert_check("Пустой score без min filter не отсекается сам по себе", len(_filter_candidates([empty_score_candidate])) == 1)
+    assert_check("Строковые votes проходят numeric min", len(_filter_candidates([string_number_candidate], min_kp_votes=10000)) == 1)
+    assert_check("Мусорные votes не падают и отсекаются", len(_filter_candidates([garbage_votes_candidate], min_kp_votes=10000)) == 0)
+
+    candidate_pool.save_candidate_pool({"string-number": string_number_candidate})
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    read_only_filtered = _filter_candidates(
+        candidate_pool.get_all_candidates(),
+        min_kp_score=7.0,
+        min_kp_votes=10000,
+        min_imdb_score=7.0,
+        year_min=2020,
+    )
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    assert_check("Numeric runtime filter не переписывает candidate_pool.json", before_mtime == after_mtime)
+    assert_check("Numeric runtime filter из JSON оставляет строкового кандидата", len(read_only_filtered) == 1)
+
+
+def test_prediction_filter_accepts_numeric_strings() -> None:
+    """Regression: numeric runtime filters accept numeric values saved as strings."""
+    print("\n20c.1) Проверяем numeric strings в runtime filters")
+
+    candidate = {
+        "title": "Numeric Strings",
+        "year": "2021",
+        "kp_score": "7.5",
+        "kp_votes": "100",
+        "imdb_score": "7.1",
+        "imdb_votes": "1000",
+        "genres": [],
+        "countries": [],
+    }
+    filtered = candidate_pool.filter_saved_candidates_for_prediction(
+        [candidate],
+        {
+            "criteria_name": None,
+            "source": None,
+            "country": None,
+            "year_min": 2020,
+            "year_max": None,
+            "include_genres": [],
+            "exclude_genres": [],
+            "min_kp_score": 7.0,
+            "min_kp_votes": 50,
+            "min_imdb_score": 7.0,
+            "min_imdb_votes": None,
+            "only_complete": False,
+        },
+    )
+    assert_check("Numeric strings проходят фильтр без TypeError", len(filtered) == 1)
+
+
+def test_prediction_filter_rejects_invalid_numeric_strings() -> None:
+    """Regression: invalid numeric strings fail active min filters without TypeError."""
+    print("\n20c.2) Проверяем invalid numeric strings в runtime filters")
+
+    def _candidate(kp_score) -> dict:
+        return {
+            "title": f"Invalid Numeric {kp_score}",
+            "year": "2021",
+            "kp_score": kp_score,
+            "kp_votes": "100",
+            "imdb_score": "7.1",
+            "imdb_votes": "1000",
+            "genres": [],
+            "countries": [],
+        }
+
+    filters = {
+        "criteria_name": None,
+        "source": None,
+        "country": None,
+        "year_min": None,
+        "year_max": None,
+        "include_genres": [],
+        "exclude_genres": [],
+        "min_kp_score": 7.0,
+        "min_kp_votes": None,
+        "min_imdb_score": None,
+        "min_imdb_votes": None,
+        "only_complete": False,
+    }
+
+    for value in ("N/A", "", "seven"):
+        filtered = candidate_pool.filter_saved_candidates_for_prediction([_candidate(value)], filters)
+        assert_check(f"Invalid numeric '{value}' не проходит и не падает", len(filtered) == 0)
+
+
+def test_prediction_filter_does_not_mutate_input_candidates() -> None:
+    """Regression: runtime filters normalize an in-memory copy, not the input dict."""
+    print("\n20c.3) Проверяем, что runtime filters не мутируют input candidates")
+
+    candidate = {
+        "title": "Immutable Runtime Candidate",
+        "year": 2021,
+        "kp_score": 7.5,
+        "kp_votes": 100,
+        "imdb_score": 7.1,
+        "imdb_votes": 1000,
+        "genres": ["Drama"],
+        "countries": ["KR", "South Korea"],
+    }
+    before = copy.deepcopy(candidate)
+    filtered = candidate_pool.filter_saved_candidates_for_prediction(
+        [candidate],
+        {
+            "criteria_name": None,
+            "source": None,
+            "country": "KR",
+            "year_min": None,
+            "year_max": None,
+            "include_genres": ["драма"],
+            "exclude_genres": [],
+            "min_kp_score": None,
+            "min_kp_votes": None,
+            "min_imdb_score": None,
+            "min_imdb_votes": None,
+            "only_complete": False,
+        },
+    )
+
+    assert_check("Runtime filter работает через normalized copy", len(filtered) == 1)
+    assert_check("Input candidate dict не изменился", candidate == before)
+    assert_check("genre_keys не добавлен в input candidate", "genre_keys" not in candidate)
+    assert_check("country_codes не добавлен в input candidate", "country_codes" not in candidate)
+    assert_check("genres_display не добавлен в input candidate", "genres_display" not in candidate)
+    assert_check("country_display не добавлен в input candidate", "country_display" not in candidate)
+
+
 def test_top_prediction_title_identity_dedupe() -> None:
     """Проверяет read-only dedupe top prediction по title_identity_key без изменения pool JSON."""
-    print("\n20c) Проверяем top prediction dedupe по title_identity_key")
+    print("\n20d) Проверяем top prediction dedupe по title_identity_key")
 
     def _candidate(**fields) -> dict:
         base = {
@@ -3243,6 +3423,48 @@ def test_retry_kp_enrichment_makes_candidate_complete() -> None:
     assert_check("После retry kp_status=done", candidate["kp_status"] == "done")
 
 
+def test_retry_kp_uses_candidate_country_when_criteria_missing() -> None:
+    """Regression: retry KP prefers candidate country over missing criteria fallback."""
+    print("\n20) Проверяем retry KP country fallback по candidate country")
+
+    candidate_pool.save_candidate_criteria({})
+    candidate_pool.save_candidate_pool({
+        "one": {
+            "title": "Гоблин",
+            "alternative_title": "",
+            "year": 2016,
+            "criteria_name": "missing criteria",
+            "country_codes": ["KR"],
+            "country_display": "Южная Корея",
+            "countries": ["KR", "South Korea"],
+            "kp_score": None,
+            "kp_votes": None,
+            "imdb_score": 7.3,
+            "imdb_votes": 4200,
+            "kp_status": "missing",
+        },
+    })
+    captured_countries = []
+
+    def fake_lookup(candidate, queries, country, **_kwargs):
+        captured_countries.append(country)
+        return {
+            "status": "not_found",
+            "movie": None,
+            "error": "not_found",
+            "reject_reason": None,
+            "query": None,
+            "attempts": 1,
+        }
+
+    with patch("candidates.kp_enrichment.lookup_kp_via_api", side_effect=fake_lookup):
+        stats = candidate_pool.retry_kp_enrichment_for_pool(limit=1)
+
+    assert_check("Retry попытался добрать KP", stats["attempted"] == 1)
+    assert_check("Retry вызвал KP lookup", captured_countries == ["Южная Корея"])
+    assert_check("Retry не fallback-ит в Россию при KR candidate", captured_countries[0] != "Россия")
+
+
 def test_candidate_schema_keeps_unknown_fields() -> None:
     """Проверяет, что schema-нормализация не удаляет неизвестные поля."""
     print("\n20) Проверяем сохранение unknown fields")
@@ -4521,6 +4743,10 @@ def run_tests() -> None:
         test_prediction_filters_apply_saved_criteria_defaults()
         test_genre_normalization_runtime_filters()
         test_canonical_runtime_filters_use_genre_keys_and_country_codes()
+        test_prediction_numeric_string_filters_are_safe()
+        test_prediction_filter_accepts_numeric_strings()
+        test_prediction_filter_rejects_invalid_numeric_strings()
+        test_prediction_filter_does_not_mutate_input_candidates()
         test_top_prediction_title_identity_dedupe()
         test_contributions_readiness_gate()
         test_candidate_service_read_only_facade()
@@ -4543,6 +4769,7 @@ def run_tests() -> None:
         test_kp_tmdb_build_debug_traces_rejection_details()
         test_kp_tmdb_build_debug_session_save()
         test_retry_kp_enrichment_makes_candidate_complete()
+        test_retry_kp_uses_candidate_country_when_criteria_missing()
         test_candidate_schema_keeps_unknown_fields()
         test_candidate_genre_schema_normalization()
         test_candidate_country_schema_normalization()
