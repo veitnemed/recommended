@@ -5134,6 +5134,7 @@ def run_tests() -> None:
         test_build_api_defaults_from_raw_movie()
         test_merge_defaults_prefers_api_and_keeps_sql()
         test_build_genre_defaults_ignores_unknown()
+        test_build_genre_defaults_maps_mystery_to_detective()
         test_manual_add_defaults_when_lookup_fails()
         test_add_defaults_rejects_sql_api_identity_mismatch()
         test_add_defaults_accepts_sql_when_imdb_id_matches()

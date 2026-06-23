@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 from config import constant
 from config import genre_tags
 from config import scheme
-from candidates.to_dataset import candidate_genre_keys_to_dataset_genres
+from candidates.to_dataset import candidate_genre_keys_to_dataset_genres, raw_genres_to_dataset_genres
 from apis import imdb_sql as sql_search
 from apis import kp_api as api
 
@@ -370,13 +370,7 @@ def extract_api_description(series: dict) -> str:
 
 def build_genre_defaults(genres: list) -> dict:
     """Собирает значения genre по списку жанров."""
-    genre_defaults = {feature: 0 for feature in constant.GENRE}
-    known_genres, _ = split_known_genres(genres)
-    for genre_name in known_genres:
-        feature = genre_tags.genre_to_feature_name(genre_name)
-        if feature in genre_defaults:
-            genre_defaults[feature] = 1
-    return genre_defaults
+    return dict(raw_genres_to_dataset_genres(genres)["dataset_genre"])
 
 
 def build_empty_add_defaults(input_title: str) -> dict:
