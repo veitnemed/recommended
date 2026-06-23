@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config import constant
+from config import scheme
 from common import format_score
 from model import model
 from model import linear_regression_train
@@ -37,6 +38,7 @@ from candidates import kp_enrichment
 from candidates import kp_tmdb_build_debug
 from candidates import tmdb_country_options
 from candidates import tmdb_genre_options
+from candidates import to_dataset as candidate_to_dataset
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
 from scripts.dublecate import instrumenty_povtorov as pool_duplicate_tools
@@ -3580,6 +3582,154 @@ def test_candidate_genre_schema_normalization() -> None:
     )
 
 
+def test_candidate_genre_keys_to_dataset_genres_maps_supported_keys() -> None:
+    """Maps supported pool genre keys into the current dataset genre vector."""
+    print("\n20a.1) Проверяем candidate genre_keys -> dataset genres")
+
+    result = candidate_to_dataset.candidate_genre_keys_to_dataset_genres(
+        ["drama", "crime", "comedy"]
+    )
+    dataset_genre = result["dataset_genre"]
+
+    assert_check("status ok для supported keys", result["status"] == "ok")
+    assert_check("has_drama = 1", dataset_genre["has_drama"] == 1)
+    assert_check("has_crime = 1", dataset_genre["has_crime"] == 1)
+    assert_check("has_comedy = 1", dataset_genre["has_comedy"] == 1)
+    assert_check(
+        "полный набор constant.GENRE",
+        set(dataset_genre.keys()) == set(constant.GENRE),
+    )
+    assert_check(
+        "остальные genre features остаются 0",
+        all(
+            dataset_genre[feature] == 0
+            for feature in constant.GENRE
+            if feature not in {"has_drama", "has_crime", "has_comedy"}
+        ),
+    )
+    assert_check(
+        "mapped_genre_keys сохраняет вход",
+        result["mapped_genre_keys"] == ["drama", "crime", "comedy"],
+    )
+    assert_check("unmapped_genre_keys пуст", result["unmapped_genre_keys"] == [])
+
+
+def test_candidate_genre_keys_to_dataset_genres_maps_mystery_to_detective() -> None:
+    """Maps pool mystery key to has_detective, not has_mystery."""
+    print("\n20a.2) Проверяем mystery -> has_detective")
+
+    result = candidate_to_dataset.candidate_genre_keys_to_dataset_genres(["mystery"])
+    dataset_genre = result["dataset_genre"]
+
+    assert_check("status ok для mystery", result["status"] == "ok")
+    assert_check("mystery -> has_detective", dataset_genre["has_detective"] == 1)
+    assert_check(
+        "has_mystery не создаётся",
+        "has_mystery" not in dataset_genre,
+    )
+    assert_check("mapped_genre_keys == ['mystery']", result["mapped_genre_keys"] == ["mystery"])
+
+
+def test_candidate_genre_keys_to_dataset_genres_reports_unmapped() -> None:
+    """Reports unmapped pool genre keys without failing."""
+    print("\n20a.3) Проверяем unmapped genre keys")
+
+    result = candidate_to_dataset.candidate_genre_keys_to_dataset_genres(["drama", "history"])
+    dataset_genre = result["dataset_genre"]
+
+    assert_check("status partial", result["status"] == "partial")
+    assert_check("drama mapped", dataset_genre["has_drama"] == 1)
+    assert_check("history unmapped", result["unmapped_genre_keys"] == ["history"])
+    assert_check("mapped_genre_keys == ['drama']", result["mapped_genre_keys"] == ["drama"])
+
+
+def test_candidate_genre_keys_to_dataset_genres_missing() -> None:
+    """Returns missing status for empty or fully unmapped input."""
+    print("\n20a.4) Проверяем missing status")
+
+    for genre_keys in ([], None, ["history"], ["totally_unknown_key"]):
+        result = candidate_to_dataset.candidate_genre_keys_to_dataset_genres(genre_keys)
+        assert_check(
+            f"missing status for {genre_keys!r}",
+            result["status"] == "missing",
+        )
+        assert_check(
+            f"all genre values are 0 for {genre_keys!r}",
+            all(value == 0 for value in result["dataset_genre"].values()),
+        )
+        assert_check(
+            f"полный набор constant.GENRE for {genre_keys!r}",
+            set(result["dataset_genre"].keys()) == set(constant.GENRE),
+        )
+
+
+def test_candidate_transfer_payload_uses_genre_keys_mapper() -> None:
+    """Candidate transfer defaults use pool genre_keys mapper for has_* features."""
+    print("\n20a.5) Проверяем build_candidate_transfer_payload + genre_keys mapper")
+
+    candidate = {
+        "title": "Mapped Transfer",
+        "year": 2021,
+        "kp_score": 7.5,
+        "kp_votes": 100,
+        "imdb_score": 7.1,
+        "imdb_votes": 1000,
+        "genres": ["Mystery"],
+        "genre_keys": ["mystery", "drama"],
+    }
+    payload = title_resolve.build_candidate_transfer_payload(candidate)
+    genre_defaults = payload["defaults"][scheme.GENRE]
+
+    assert_check("mystery -> has_detective", genre_defaults["has_detective"] == 1)
+    assert_check("drama -> has_drama", genre_defaults["has_drama"] == 1)
+    assert_check("has_mystery не создаётся", "has_mystery" not in genre_defaults)
+    assert_check(
+        "полный набор constant.GENRE",
+        set(genre_defaults.keys()) == set(constant.GENRE),
+    )
+
+
+def test_candidate_transfer_payload_falls_back_to_raw_genres_without_genre_keys() -> None:
+    """Candidate transfer keeps raw genres fallback when genre_keys are absent."""
+    print("\n20a.6) Проверяем fallback на raw genres без genre_keys")
+
+    candidate = {
+        "title": "Legacy Transfer",
+        "year": 2021,
+        "kp_score": 7.5,
+        "kp_votes": 100,
+        "imdb_score": 7.1,
+        "imdb_votes": 1000,
+        "genres": ["драма", "криминал"],
+    }
+    payload = title_resolve.build_candidate_transfer_payload(candidate)
+    genre_defaults = payload["defaults"][scheme.GENRE]
+
+    assert_check("драма -> has_drama", genre_defaults["has_drama"] == 1)
+    assert_check("криминал -> has_crime", genre_defaults["has_crime"] == 1)
+    assert_check("has_mystery не создаётся", "has_mystery" not in genre_defaults)
+
+
+def test_candidate_transfer_payload_does_not_mutate_candidate() -> None:
+    """Candidate transfer payload builder does not mutate the input candidate."""
+    print("\n20a.7) Проверяем, что transfer payload не мутирует candidate")
+
+    candidate = {
+        "title": "Immutable Transfer",
+        "year": 2021,
+        "kp_score": 7.5,
+        "kp_votes": 100,
+        "imdb_score": 7.1,
+        "imdb_votes": 1000,
+        "genres": ["Mystery"],
+        "genre_keys": ["mystery", "drama"],
+    }
+    before = copy.deepcopy(candidate)
+    title_resolve.build_candidate_transfer_payload(candidate)
+
+    assert_check("candidate dict не изменился", candidate == before)
+
+
 def test_candidate_country_schema_normalization() -> None:
     """Проверяет alias -> country_codes -> country_display без мутации raw countries."""
     print("\n20b) Проверяем candidate country_schema normalization")
@@ -4792,6 +4942,13 @@ def run_tests() -> None:
         test_retry_kp_uses_candidate_country_when_criteria_missing()
         test_candidate_schema_keeps_unknown_fields()
         test_candidate_genre_schema_normalization()
+        test_candidate_genre_keys_to_dataset_genres_maps_supported_keys()
+        test_candidate_genre_keys_to_dataset_genres_maps_mystery_to_detective()
+        test_candidate_genre_keys_to_dataset_genres_reports_unmapped()
+        test_candidate_genre_keys_to_dataset_genres_missing()
+        test_candidate_transfer_payload_uses_genre_keys_mapper()
+        test_candidate_transfer_payload_falls_back_to_raw_genres_without_genre_keys()
+        test_candidate_transfer_payload_does_not_mutate_candidate()
         test_candidate_country_schema_normalization()
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()

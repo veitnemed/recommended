@@ -5,6 +5,7 @@ from difflib import SequenceMatcher
 from config import constant
 from config import genre_tags
 from config import scheme
+from candidates.to_dataset import candidate_genre_keys_to_dataset_genres
 from apis import imdb_sql as sql_search
 from apis import kp_api as api
 
@@ -454,6 +455,16 @@ def build_api_defaults(series: dict, genres: list | None = None) -> dict:
     }
 
 
+def build_candidate_transfer_genre_defaults(candidate: dict) -> dict:
+    """Собирает genre defaults для переноса кандидата из pool genre_keys или raw genres."""
+    genre_keys = candidate.get("genre_keys")
+    if isinstance(genre_keys, list) and len(genre_keys) > 0:
+        genre_result = candidate_genre_keys_to_dataset_genres(genre_keys)
+        if genre_result["status"] != "missing":
+            return dict(genre_result["dataset_genre"])
+    return build_genre_defaults(extract_api_genres(candidate))
+
+
 def build_candidate_meta_payload(candidate: dict) -> dict:
     """Собирает дополнительный meta-payload для переноса кандидата в dataset."""
     payload = {}
@@ -470,6 +481,7 @@ def build_candidate_meta_payload(candidate: dict) -> dict:
 def build_candidate_transfer_payload(candidate: dict) -> dict:
     """Собирает defaults и meta для переноса кандидата из общего пула в dataset."""
     defaults = build_api_defaults(candidate)
+    defaults[scheme.GENRE] = build_candidate_transfer_genre_defaults(candidate)
     meta_payload = build_candidate_meta_payload(candidate)
     return {
         "defaults": defaults,
