@@ -96,8 +96,8 @@ def is_correct_select_menu(max_value: int, n: int) -> bool:
     try:
         n_int = int(n)
         return 0 <= n_int <= max_value
-    except:
-        return True
+    except (TypeError, ValueError):
+        return False
 
 
 def is_correct_noise_delta(value: str) -> bool:

@@ -82,8 +82,9 @@ def show_candidate_pool_management_menu():
     """Печатает подменю управления сохранёнными пулами."""
     show_menu_title('УПРАВЛЕНИЕ ПУЛЛАМИ')
     print(' 1 >> Удалить пулл')
-    print(' 2 >> Фильтрация / редактирование критериев')
+    print(' 2 >> Defaults фильтров top prediction')
     print(' 3 >> Импортировать TMDb result в общий пул')
+    print(' 4 >> Собрать пулл через KP API (legacy)')
     print(' 0 >> Назад\n')
 
 
@@ -146,9 +147,7 @@ def show_extra_menu(movies_counter: int, error: int):
     show_menu_title('ДОПОЛНИТЕЛЬНО')
     print(' 1 >> Просмотр API признаков')
     print(' 2 >> Показать все жанры датасета')
-    print(' 3 >> Показать влияние голосов')
-    print(' 4 >> Пересчитать raw оценки')
-    print(' 5 >> Поиск в SQL по названию')
+    print(' 3 >> Поиск в SQL по названию')
     print(' 0 >> Главное меню\n')
 
 

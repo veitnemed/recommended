@@ -112,8 +112,8 @@ def _cleanup_candidate_pool(pool_candidate=None) -> None:
         from candidates import candidate_pool
 
         candidate_pool.save_candidate_pool(candidate_pool.load_candidate_pool())
-    except Exception:
-        pass
+    except Exception as error:
+        print(f"Предупреждение: не удалось обновить candidate pool после добавления записи: {error}")
 
 
 def add_dataset_record(

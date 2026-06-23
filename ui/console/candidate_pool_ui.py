@@ -5,6 +5,7 @@ from datetime import datetime
 from config import constant
 from common import valid
 from candidates import candidate_pool
+from candidates import service as candidate_service
 
 
 def format_optional_default(value) -> str:
@@ -61,23 +62,31 @@ def prompt_optional_score(label: str, default=None) -> float | None:
 
 def choose_genres_by_numbers(
     current_genres: list | None = None,
+    criteria_name: str | None = None,
     prompt_title: str = "Жанры для top prediction (по сохранённым данным pool): выберите по номерам через пробел.",
     prompt_hint: str = "Это фильтр по уже сохранённым кандидатам для top prediction; он не запускает TMDb Discover.",
     input_label: str = "Номера жанров",
 ) -> list:
-    """Дает выбрать жанры по номерам из списка."""
+    """Дает выбрать жанры по номерам из списка pool (fallback — общий каталог)."""
     if current_genres is None:
         current_genres = []
 
-    genres = candidate_pool.get_available_genres()
+    genres = candidate_service.get_prediction_genre_options_view(criteria_name)["genres"]
+    used_catalog_fallback = False
+    if len(genres) == 0:
+        genres = candidate_pool.get_available_genres()
+        used_catalog_fallback = len(genres) > 0
+
     if len(genres) == 0:
         print("Список жанров пока пуст.")
         return current_genres
 
     print(prompt_title)
     print(f"{prompt_hint}\n")
+    if used_catalog_fallback:
+        print("(в pool жанров пока нет — показан общий каталог genre_tags)\n")
     for idx, genre_name in enumerate(genres, start=1):
-        print(f"{idx}. {genre_name[:1].upper() + genre_name[1:]}")
+        print(f"{idx}. {genre_name}")
 
     current_label = ", ".join(current_genres) if len(current_genres) > 0 else "не важно"
     while True:
@@ -191,10 +200,11 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
     min_year = prompt_optional_year("Минимальный год", current.get("min_year"))
     max_year = prompt_optional_year("Максимальный год", current.get("max_year"))
     genres_default = current.get("genres", [])
-    genres = choose_genres_by_numbers(genres_default)
+    genres = choose_genres_by_numbers(genres_default, criteria_name=criteria_name)
     excluded_genres_default = current.get("excluded_genres", [])
     excluded_genres = choose_genres_by_numbers(
         excluded_genres_default,
+        criteria_name=criteria_name,
         prompt_title="Жанры для top prediction (по сохранённым данным pool): выберите исключаемые жанры.",
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров для исключения",
@@ -222,12 +232,14 @@ def update_criteria_filters(criteria_name: str, current: dict) -> dict:
     min_kp = prompt_optional_score("Минимальный рейтинг KP", current.get("min_kp"))
     genres = choose_genres_by_numbers(
         current.get("genres", []),
+        criteria_name=criteria_name,
         prompt_title="Жанры для top prediction (по сохранённым данным pool): выберите обязательные жанры.",
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров",
     )
     excluded_genres = choose_genres_by_numbers(
         current.get("excluded_genres", []),
+        criteria_name=criteria_name,
         prompt_title="Жанры для top prediction (по сохранённым данным pool): выберите исключаемые жанры.",
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров для исключения",

@@ -170,6 +170,9 @@ def run_noise_sensitivity(data, weights) -> None:
         delta=delta,
         runs=runs,
         fit_func=_fit_with_ridge_benchmark,
+        progress_callback=lambda run_index, total_runs, current_delta: print(
+            f"  Прогон {run_index}/{total_runs} (±{current_delta:.2f})"
+        ),
     )
 
     print("\nПРОВЕРКА УСТОЙЧИВОСТИ К ШУМУ")

@@ -87,6 +87,24 @@ def _normalize_raw_genre_list(raw_genres: Any) -> list[str]:
     return normalized
 
 
+def candidate_genre_features_for_predict(candidate: dict) -> dict[str, int]:
+    """Builds dataset-style genre vector for model predict from a pool candidate."""
+    from candidates.schema import normalize_candidate_record
+
+    normalized = normalize_candidate_record(candidate)
+    genre_keys = normalized.get("genre_keys") or []
+    if len(genre_keys) > 0:
+        return candidate_genre_keys_to_dataset_genres(genre_keys)["dataset_genre"]
+
+    raw_values: list[str] = []
+    for field_name in ("imdb_genres", "genres_tmdb", "genres"):
+        raw_values.extend(_normalize_raw_genre_list(normalized.get(field_name)))
+    if len(raw_values) > 0:
+        return raw_genres_to_dataset_genres(raw_values)["dataset_genre"]
+
+    return {feature: 0 for feature in constant.GENRE}
+
+
 def raw_genres_to_dataset_genres(raw_genres: Any) -> dict[str, Any]:
     """Translates EN/RU raw genre labels into the current dataset genre vector."""
     raw_list = _normalize_raw_genre_list(raw_genres)

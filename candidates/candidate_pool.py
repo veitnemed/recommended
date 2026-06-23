@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 from config import constant
 from config import genre_tags
 from common import format_score
+from candidates import to_dataset as candidate_to_dataset
 from apis import kp_api as api
 from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
 from candidates import country_schema
@@ -976,20 +977,16 @@ def remove_candidate_from_pool(target_candidate: dict) -> int:
 
 def build_candidate_features(candidate: dict) -> dict:
     """Собирает признаки модели для кандидата из пула без вайб-тегов."""
-    year = int(candidate.get("year") or constant.NOW_YEAR)
+    normalized = normalize_candidate_record(candidate)
+    year = int(normalized.get("year") or constant.NOW_YEAR)
     raw_scores = {
-        "kp_score": float(candidate.get("kp_score") or 0),
-        "kp_votes": int(candidate.get("kp_votes") or 0),
-        "imdb_score": float(candidate.get("imdb_score") or 0),
-        "imdb_votes": int(candidate.get("imdb_votes") or 0),
+        "kp_score": float(normalized.get("kp_score") or 0),
+        "kp_votes": int(normalized.get("kp_votes") or 0),
+        "imdb_score": float(normalized.get("imdb_score") or 0),
+        "imdb_votes": int(normalized.get("imdb_votes") or 0),
     }
     main_info = {"year": year}
-
-    genre_features = {feature: 0 for feature in constant.GENRE}
-    for genre_name in candidate.get("genres", []):
-        feature = genre_tags.genre_to_feature_name(genre_name)
-        if feature in genre_features:
-            genre_features[feature] = 1
+    genre_features = candidate_to_dataset.candidate_genre_features_for_predict(normalized)
 
     features = {constant.BIAS_FEATURE: 1.0}
     features.update(format_score.raw_to_struct(raw_scores, main_info))
@@ -1056,7 +1053,7 @@ def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
     scored_candidates = []
     for candidate in candidates:
         normalized_candidate = normalize_candidate_record(candidate)
-        features = build_candidate_features(candidate)
+        features = build_candidate_features(normalized_candidate)
         predict = model.predict_score(features, prediction_weights)
         row = dict(normalized_candidate)
         row.update({

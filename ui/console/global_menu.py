@@ -168,7 +168,7 @@ def open_extra_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_extra_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
         if command == "0":
             return
         if command == "1":
@@ -176,11 +176,6 @@ def open_extra_menu():
         elif command == "2":
             interface_funcs.show_dataset_genres()
         elif command == "3":
-            interface_funcs.votes_impact()
-        elif command == "4":
-            updated_count = storage_movie.rework_formated_scores()
-            print(f'Пересчитано записей: {updated_count}')
-        elif command == "5":
             interface_funcs.search_sql_title_by_name()
         ui.press_enter()
 
@@ -218,7 +213,7 @@ def open_candidate_pool_management_menu():
         ui.clean_terminal()
         ui.show_candidate_pool_management_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
         if command == "0":
             return
         if command == "1":
@@ -227,6 +222,8 @@ def open_candidate_pool_management_menu():
             interface_funcs.edit_candidate_pool_filters()
         elif command == "3":
             interface_funcs.import_tmdb_result_to_common_pool_flow()
+        elif command == "4":
+            interface_funcs.collect_candidate_pool()
 
         ui.press_enter()
 

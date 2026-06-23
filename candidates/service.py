@@ -361,3 +361,48 @@ def get_suspicious_duplicates_view() -> dict:
         "count": len(pairs),
         "is_empty": len(pairs) == 0,
     }
+
+
+def get_criteria_catalog_view() -> dict:
+    """Returns saved criteria names, labels and payloads for UI pickers."""
+    all_criteria = candidate_pool.load_candidate_criteria()
+    items = []
+    for name in sorted(all_criteria.keys()):
+        criteria = all_criteria[name]
+        items.append({
+            "criteria_name": name,
+            "criteria": criteria,
+            "label": candidate_pool.build_criteria_label(name, criteria),
+        })
+    return {
+        "items": items,
+        "by_name": all_criteria,
+        "is_empty": len(items) == 0,
+    }
+
+
+def collect_candidates_legacy(criteria_name: str, criteria: dict) -> dict:
+    """Collects candidates via legacy KP Discover write-path."""
+    return candidate_pool.collect_candidates(criteria_name, criteria)
+
+
+def rank_top_prediction_candidates(candidates: list, weights: dict) -> dict:
+    """Ranks and dedupes candidates for top prediction UI."""
+    scored_candidates = candidate_pool.rank_candidates_by_predict(candidates, weights)
+    before_dedupe_count = len(scored_candidates)
+    scored_candidates = candidate_pool.dedupe_ranked_predictions_by_title_identity(scored_candidates)
+    return {
+        "candidates": scored_candidates,
+        "before_dedupe_count": before_dedupe_count,
+        "hidden_duplicates": before_dedupe_count - len(scored_candidates),
+    }
+
+
+def build_contribution_reports(candidates: list, weights: dict) -> list:
+    """Builds model contribution reports for ready pool candidates."""
+    return candidate_pool.build_contribution_reports_for_ready_candidates(candidates, weights)
+
+
+def format_candidate_description(candidate: dict, limit: int = 200) -> str:
+    """Returns truncated candidate description for UI cards."""
+    return candidate_pool.format_candidate_description(candidate, limit=limit)

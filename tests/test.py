@@ -21,6 +21,7 @@ from common import format_score
 from model import model
 from model import linear_regression_train
 from model import noise_experiment
+from model import train_report
 from storage import data as storage_data
 from storage import files as storage_files
 from storage import normalize as storage_normalize
@@ -309,6 +310,9 @@ def test_validation() -> None:
     assert_check("Год 1999 не проходит", valid.is_correct_year("1999") is False)
     assert_check("100 голосов проходит", valid.is_correct_votes("100"))
     assert_check("-1 голосов не проходит", valid.is_correct_votes("-1") is False)
+    assert_check("Нечисловой пункт меню не проходит", valid.is_correct_select_menu(6, "abc") is False)
+    assert_check("Пункт меню 0 проходит", valid.is_correct_select_menu(6, "0"))
+    assert_check("Пункт меню 7 не проходит при max=6", valid.is_correct_select_menu(6, "7") is False)
 
 
 def test_title_punctuation_validation() -> None:
@@ -601,6 +605,98 @@ def test_noise_experiment_uses_loo_metrics() -> None:
     assert_check("Benchmark возвращает средний LOO на шуме", "avg_noisy_loo_mae" in result)
     assert_check("Benchmark возвращает LOO на исходных данных после шума", "avg_original_loo_mae_after_noise_training" in result)
     assert_check("Вернулось 3 прогона benchmark", len(result["trials"]) == 3)
+
+    progress_events = []
+    grid = noise_experiment.run_noise_sensitivity_grid(
+        data=data,
+        weights=constant.DEFAULT_WEIGHTS.copy(),
+        deltas=(0.25, 0.5),
+        runs=2,
+        seed=7,
+        progress_callback=lambda *args: progress_events.append(args),
+    )
+    assert_check("Noise grid возвращает 2 delta", len(grid["results_by_delta"]) == 2)
+    assert_check("Noise grid сохраняет runs", grid["runs"] == 2)
+    assert_check("Noise grid пишет progress events", len(progress_events) > 0)
+
+
+def test_biggest_error_cards_in_report() -> None:
+    """Проверяет карточки «САМЫЕ БОЛЬШИЕ ОШИБКИ» и fallback описаний."""
+    print("\n8a) Проверяем карточки ошибок в train_report")
+
+    long_text = "Описание " + ("очень длинное " * 80)
+    assert_check(
+        "Описание режется до 500 символов",
+        len(train_report._truncate_description(long_text)) <= 500
+        and train_report._truncate_description(long_text).endswith("..."),
+    )
+
+    meta_description = train_report.resolve_movie_description(
+        title="Test Show",
+        year=2024,
+        meta_obj={"description": "Meta description text"},
+        pool_by_identity={},
+    )
+    assert_check("Описание берётся из meta", meta_description == "Meta description text")
+
+    pool_candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "overview": "Pool overview text",
+    }
+    from candidates import keys as candidate_keys
+
+    pool_by_identity = {candidate_keys.title_identity_key(pool_candidate): pool_candidate}
+    pool_description = train_report.resolve_movie_description(
+        title="Pool Show",
+        year=2020,
+        meta_obj={},
+        pool_by_identity=pool_by_identity,
+    )
+    assert_check("Описание берётся из pool", pool_description == "Pool overview text")
+
+    def fake_tmdb_cache(_tmdb_id):
+        return "TMDb cached overview"
+
+    tmdb_description = train_report.resolve_movie_description(
+        title="Cached Show",
+        year=2019,
+        meta_obj={"tmdb_id": 12345},
+        pool_by_identity={},
+        tmdb_cache_reader=fake_tmdb_cache,
+    )
+    assert_check("Описание берётся из TMDb cache", tmdb_description == "TMDb cached overview")
+
+    missing_description = train_report.resolve_movie_description(
+        title="No Info",
+        year=2018,
+        meta_obj={},
+        pool_by_identity={},
+        tmdb_cache_reader=lambda _tmdb_id: None,
+    )
+    assert_check("Без источников — нет описания", missing_description == "нет описания")
+
+    error_row = {
+        "title": "Card Show",
+        "user_score": 8.5,
+        "prediction": 6.2,
+        "error": -2.3,
+        "top_impacts": [(1.45, 1.45, "kp_score"), (0.82, 0.82, "has_drama")],
+    }
+    card_lines = train_report.format_biggest_error_card_lines(error_row, "Short description")
+    card_text = "\n".join(card_lines)
+    assert_check("Карточка содержит user_score", "Card Show (8.50)" in card_text)
+    assert_check("Карточка содержит predict и ошибку", "Оценка: 6.20 (ошибка: -2.30)" in card_text)
+    assert_check("Карточка содержит вклады", "Вклады:" in card_text and "kp_score" in card_text)
+    assert_check("Карточка содержит описание", "Short description" in card_text)
+
+    data = {
+        "A": make_movie("Alpha", user_score=9.0, raw_score=6.0),
+        "B": make_movie("Beta", user_score=5.0, raw_score=7.5),
+    }
+    error_section = "\n".join(train_report.build_error_lines(data, constant.DEFAULT_WEIGHTS))
+    assert_check("Раздел содержит блок САМЫЕ БОЛЬШИЕ ОШИБКИ", "САМЫЕ БОЛЬШИЕ ОШИБКИ" in error_section)
+    assert_check("Раздел сохраняет список всех записей", "Все записи по убыванию |error|" in error_section)
 
 
 def test_backup_restore() -> None:
@@ -2346,6 +2442,19 @@ def test_candidate_service_top_prediction_view() -> None:
         before_mtime == after_mtime,
     )
 
+    ranking_view = candidate_service.rank_top_prediction_candidates(
+        filter_view["ready_candidates"],
+        storage_data.load_weights(),
+    )
+    assert_check(
+        "rank_top_prediction_candidates возвращает scored candidates",
+        len(ranking_view["candidates"]) == 1,
+    )
+    assert_check(
+        "rank_top_prediction_candidates содержит predict",
+        ranking_view["candidates"][0].get("predict") is not None,
+    )
+
 
 def test_top_prediction_ui_read_only_helpers() -> None:
     """Проверяет read-only helpers для top prediction UI."""
@@ -3045,6 +3154,27 @@ def test_candidate_service_polish_flows() -> None:
         "candidate_service.get_suspicious_duplicates_view" in duplicates_source,
     )
 
+    top_prediction_source = inspect.getsource(interface_funcs.show_global_candidate_top)
+    contributions_source = inspect.getsource(interface_funcs.show_candidate_contributions)
+    collect_legacy_source = inspect.getsource(interface_funcs.collect_candidate_pool)
+
+    assert_check(
+        "show_global_candidate_top использует rank_top_prediction_candidates",
+        "candidate_service.rank_top_prediction_candidates" in top_prediction_source,
+    )
+    assert_check(
+        "show_candidate_contributions использует build_contribution_reports",
+        "candidate_service.build_contribution_reports" in contributions_source,
+    )
+    assert_check(
+        "collect_candidate_pool использует collect_candidates_legacy",
+        "candidate_service.collect_candidates_legacy" in collect_legacy_source,
+    )
+    assert_check(
+        "interface_funcs не импортирует candidate_pool напрямую",
+        "from candidates import candidate_pool" not in inspect.getsource(interface_funcs),
+    )
+
     candidate_pool.save_named_criteria("legacy", {"country": "Россия"})
     candidate_pool.save_candidate_pool({
         "legacy|Polish Service One|2020": {
@@ -3606,6 +3736,28 @@ def test_candidate_genre_schema_normalization() -> None:
         "imdb_genres имеет приоритет над tmdb/legacy",
         priority_case["genre_keys"] == ["crime", "drama", "comedy"],
     )
+
+
+def test_build_candidate_features_uses_genre_keys() -> None:
+    """build_candidate_features использует genre_keys/imdb_genres, а не пустой genres."""
+    print("\n20a.0) Проверяем build_candidate_features через genre_keys")
+
+    candidate = {
+        "title": "Genre Keys Only",
+        "year": 2020,
+        "kp_score": 8.0,
+        "kp_votes": 10000,
+        "imdb_score": 8.0,
+        "imdb_votes": 10000,
+        "imdb_genres": ["Crime", "Drama"],
+        "genres": [],
+    }
+    features = candidate_pool.build_candidate_features(candidate)
+
+    assert_check("has_crime from imdb_genres/genre_keys", features.get("has_crime", 0) > 0)
+    assert_check("has_drama from imdb_genres/genre_keys", features.get("has_drama", 0) > 0)
+    assert_check("has_action stays 0", features.get("has_action", 0) == 0)
+    assert_check("bias присутствует", features.get(constant.BIAS_FEATURE, 0) == 1.0)
 
 
 def test_candidate_genre_keys_to_dataset_genres_maps_supported_keys() -> None:
@@ -5139,6 +5291,7 @@ def run_tests() -> None:
         test_tag_compatibility()
         test_training()
         test_noise_experiment_uses_loo_metrics()
+        test_biggest_error_cards_in_report()
         test_backup_restore()
         test_api_fallback_to_secondary_token()
         test_sql_title_search()
@@ -5203,6 +5356,7 @@ def run_tests() -> None:
         test_retry_kp_uses_candidate_country_when_criteria_missing()
         test_candidate_schema_keeps_unknown_fields()
         test_candidate_genre_schema_normalization()
+        test_build_candidate_features_uses_genre_keys()
         test_candidate_genre_keys_to_dataset_genres_maps_supported_keys()
         test_candidate_genre_keys_to_dataset_genres_maps_mystery_to_detective()
         test_candidate_genre_keys_to_dataset_genres_reports_unmapped()

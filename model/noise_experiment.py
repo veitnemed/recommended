@@ -84,6 +84,7 @@ def run_noise_experiment(
         fit_func=None,
         score_func=None,
         seed: int = None,
+        progress_callback=None,
         **fit_kwargs
 ) -> dict:
     """Check how training on noisy ratings affects the model's taste fit."""
@@ -102,10 +103,13 @@ def run_noise_experiment(
 
     rng = random.Random(seed)
     original_loo_mae_before = score_func(data, weights)
-    trials = [
-        run_noise_trial(data, weights, delta, fit_func, rng, score_func, **fit_kwargs)
-        for _ in range(runs)
-    ]
+    trials = []
+    for run_index in range(runs):
+        if progress_callback is not None:
+            progress_callback(run_index + 1, runs, delta)
+        trials.append(
+            run_noise_trial(data, weights, delta, fit_func, rng, score_func, **fit_kwargs)
+        )
     summary = summarize_trials(trials)
 
     return {
@@ -117,4 +121,47 @@ def run_noise_experiment(
         "min_original_loo_mae_after_noise_training": summary["min_original_loo_mae"],
         "max_original_loo_mae_after_noise_training": summary["max_original_loo_mae"],
         "trials": trials,
+    }
+
+
+def run_noise_sensitivity_grid(
+        data: dict,
+        weights: dict,
+        deltas: list[float] | tuple[float, ...],
+        runs: int,
+        seed: int = 42,
+        progress_callback=None,
+) -> dict:
+    """Runs noise experiment for each delta and returns aggregated grid results."""
+    delta_list = list(deltas)
+    if len(delta_list) == 0:
+        raise ValueError("Список delta для noise grid пуст")
+
+    original_loo_mae_before = calculate_benchmark_loo_mae(data, weights)
+    results_by_delta = []
+
+    for delta_index, delta in enumerate(delta_list, start=1):
+        if progress_callback is not None:
+            progress_callback("delta", delta_index, len(delta_list), delta, 0, runs)
+
+        def trial_progress(run_index: int, total_runs: int, current_delta: float = delta) -> None:
+            if progress_callback is not None:
+                progress_callback("trial", delta_index, len(delta_list), current_delta, run_index, total_runs)
+
+        result = run_noise_experiment(
+            data=data,
+            weights=weights,
+            delta=delta,
+            runs=runs,
+            seed=seed + delta_index,
+            progress_callback=trial_progress,
+        )
+        results_by_delta.append(result)
+
+    return {
+        "deltas": delta_list,
+        "runs": runs,
+        "seed": seed,
+        "original_loo_mae_before": original_loo_mae_before,
+        "results_by_delta": results_by_delta,
     }

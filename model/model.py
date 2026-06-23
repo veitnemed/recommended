@@ -48,8 +48,7 @@ def predict_score(features: dict, weights=constant.DEFAULT_WEIGHTS) -> float:
     """Считает прогноз оценки по признакам и весам."""
     score = 0
     for key, value in weights.items():
-        
-        score += features[key] * value
+        score += features.get(key, 0) * value
     return score
 
 
@@ -354,7 +353,7 @@ def print_full_error_group(title: str, rows: list) -> None:
 
         impacts = []
         for feature, value in row["features"].items():
-            impact = value * row["weights"][feature]
+            impact = value * row["weights"].get(feature, 0)
             impacts.append((abs(impact), impact, feature))
 
         for _, impact, feature in sorted(impacts, reverse=True)[:4]:

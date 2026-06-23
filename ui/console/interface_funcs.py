@@ -8,7 +8,6 @@ from pathlib import Path
 
 from config import constant
 from common import format_score as format
-from candidates import candidate_pool
 from candidates import country_schema
 from candidates import genre_schema
 from candidates import service as candidate_service
@@ -538,15 +537,6 @@ def mark_candidate_as_watched() -> None:
     print(result.message)
 
 
-def show_mean_error(data, weights):
-    """Показывает средние ошибки модели."""
-    ui.clean_terminal()
-    abs_error = model.mean_absolute_error(data, weights)
-    error = model.mean_error(data, weights)
-    print(f'\nСредняя ошибка модели: {round(abs_error, 2)}')
-    print(f'\nСреднее линейное отклонение: {round(error, 2)}')
-
-
 def show_weights_model(weights):
     """Показывает веса модели."""
     ui.clean_terminal()
@@ -567,8 +557,16 @@ def votes_impact():
     for title, obj in data.items():
         raw_scores = obj.get("raw_scores", obj.get("raw"))
         main_info = obj.get("main_info", {})
+        if isinstance(raw_scores, dict) is False:
+            print(f"{title}: нет raw_scores, пропуск\n")
+            continue
         year = main_info.get("year", raw_scores.get("year"))
-        kp_votes, imdb_votes = raw_scores["kp_votes"], raw_scores["imdb_votes"]
+        try:
+            kp_votes = int(raw_scores.get("kp_votes") or 0)
+            imdb_votes = int(raw_scores.get("imdb_votes") or 0)
+        except (TypeError, ValueError):
+            print(f"{title}: некорректные votes, пропуск\n")
+            continue
         kp = format.popularity_kp(kp_votes, year)
         imdb = format.popularity_score(imdb_votes, year)
         print(f'{title} ({year})\n')
@@ -737,7 +735,7 @@ def collect_candidate_pool() -> None:
 
     criteria_name, criteria = selected
     print(f"\nЗапуск подбора по критериям: {criteria_name}")
-    result = candidate_pool.collect_candidates(criteria_name, criteria)
+    result = candidate_service.collect_candidates_legacy(criteria_name, criteria)
 
     print("\nСбор пула кандидатов завершён.")
     print(f"Набор критериев: {result['criteria_name']}")
@@ -1368,21 +1366,21 @@ def import_tmdb_result_to_common_pool_flow() -> None:
 
 
 def edit_candidate_pool_filters() -> None:
-    """Редактирует фильтры сохраненного набора критериев пула."""
+    """Обновляет saved defaults фильтров top prediction для набора criteria."""
     ui.clean_terminal()
     selected = candidate_pool_ui.choose_existing_criteria()
     if selected is None:
         return
 
     criteria_name, criteria = selected
-    print(f"\nФильтрация для пула: {criteria_name}")
-    print("Жанры для top prediction (по сохранённым данным pool). Это не запускает новый TMDb Discover.")
+    print(f"\nDefaults фильтров top prediction: {criteria_name}")
+    print("Жанры берутся из сохранённых кандидатов pool. Это не запускает TMDb Discover.")
     print(f"Текущий KP: {criteria.get('min_kp', 'не важно')}")
     print(f"Текущие жанры (saved pool): {', '.join(criteria.get('genres', [])) or 'не важно'}")
     print(f"Исключить жанры (saved pool): {', '.join(criteria.get('excluded_genres', [])) or 'не важно'}\n")
 
     updated = candidate_pool_ui.update_criteria_filters(criteria_name, criteria)
-    print("\nФильтрация обновлена в candidate_criteria.json.")
+    print("\nDefaults обновлены в candidate_criteria.json.")
     print("Filters сохраняются как defaults для top prediction по уже сохранённым кандидатам (Enter = default).")
     print("Ручной ввод в top prediction действует только на текущий запуск.")
     print("Filters не пересобирают pool, не делают новый TMDb-запрос и не удаляют кандидатов из candidate_pool.json.")
@@ -1465,7 +1463,7 @@ def show_global_candidate_top() -> None:
         print("\nНеполные кандидаты не участвовали в обычном предикте.")
         print("Причина: нет части KP/IMDb данных или is_complete=false.")
         print("Чтобы попробовать добрать KP-данные, запусти:")
-        print("10 >> Добрать KP для неполных кандидатов")
+        print("Пулл кандидатов -> 6 >> Диагностика -> 2 >> Добрать KP для неполных кандидатов")
         print("\nНеполные кандидаты:\n")
         _print_incomplete_candidates_preview(incomplete_candidates, limit=5)
 
@@ -1481,10 +1479,9 @@ def show_global_candidate_top() -> None:
     top_n = min(int(top_n_value), len(ready_candidates))
 
     weights = storage_data.load_weights()
-    scored_candidates = candidate_pool.rank_candidates_by_predict(ready_candidates, weights)
-    before_dedupe_count = len(scored_candidates)
-    scored_candidates = candidate_pool.dedupe_ranked_predictions_by_title_identity(scored_candidates)
-    hidden_duplicates = before_dedupe_count - len(scored_candidates)
+    ranking_view = candidate_service.rank_top_prediction_candidates(ready_candidates, weights)
+    scored_candidates = ranking_view["candidates"]
+    hidden_duplicates = ranking_view["hidden_duplicates"]
     if hidden_duplicates > 0:
         print(f"Дублей скрыто: {hidden_duplicates}")
     top_n = min(top_n, len(scored_candidates))
@@ -1549,7 +1546,7 @@ def _print_prediction_candidate_card(index: int, candidate: dict) -> None:
     year = candidate.get("year") or "?"
     countries = country_schema.candidate_country_for_display(candidate)
     genres = genre_schema.candidate_genres_for_display(candidate)
-    description = candidate_pool.format_candidate_description(candidate, limit=200)
+    description = candidate_service.format_candidate_description(candidate, limit=200)
     predict = candidate.get("predict_score", candidate.get("predict"))
     try:
         predict_label = f"{float(predict):.2f}"
@@ -1677,16 +1674,16 @@ def _input_optional_prediction_csv_list(label: str, default: list) -> list[str]:
 
 
 def _choose_prediction_criteria_name() -> str | None:
-    all_criteria = candidate_pool.load_candidate_criteria()
-    criteria_names = sorted(all_criteria.keys())
-    if len(criteria_names) == 0:
+    catalog = candidate_service.get_criteria_catalog_view()
+    if catalog["is_empty"]:
         return None
 
     print("\nВыбрать набор criteria_name?")
     print(" 0 >> Все")
-    for idx, name in enumerate(criteria_names, start=1):
-        print(f" {idx} >> {candidate_pool.build_criteria_label(name, all_criteria[name])}")
+    for idx, item in enumerate(catalog["items"], start=1):
+        print(f" {idx} >> {item['label']}")
 
+    criteria_names = [item["criteria_name"] for item in catalog["items"]]
     selected = request.loop_input(
         text="\nВыбор [0] >> ",
         funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(criteria_names))]
@@ -1802,7 +1799,7 @@ def show_candidate_contributions() -> None:
         if skipped_incomplete > 0:
             print(f"В pool есть {skipped_incomplete} неполных кандидатов.")
             print("Чтобы попробовать добрать KP-данные, запусти:")
-            print("10 >> Добрать KP для неполных кандидатов")
+            print("Пулл кандидатов -> 6 >> Диагностика -> 2 >> Добрать KP для неполных кандидатов")
         return
 
     if skipped_incomplete > 0:
@@ -1822,7 +1819,7 @@ def show_candidate_contributions() -> None:
     contribution_limit = max(1, min(contribution_limit, 30))
 
     weights = storage_data.load_weights()
-    reports = candidate_pool.build_contribution_reports_for_ready_candidates(ready_candidates, weights)
+    reports = candidate_service.build_contribution_reports(ready_candidates, weights)
     reports.sort(key=lambda row: row["predict"], reverse=True)
 
     print("\nВклады для кандидатов")
