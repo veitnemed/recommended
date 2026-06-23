@@ -3730,6 +3730,126 @@ def test_candidate_transfer_payload_does_not_mutate_candidate() -> None:
     assert_check("candidate dict не изменился", candidate == before)
 
 
+def test_candidate_genre_transfer_preview_maps_genre_keys() -> None:
+    """Preview maps pool genre_keys to active has_* features."""
+    print("\n20a.8) Проверяем genre transfer preview для mapped genre_keys")
+
+    preview = title_resolve.build_candidate_genre_transfer_preview({
+        "genre_keys": ["mystery", "drama"],
+        "genres": ["Mystery"],
+    })
+
+    assert_check("mapper_status ok", preview["mapper_status"] == "ok")
+    assert_check("used_fallback False", preview["used_fallback"] is False)
+    assert_check("has_detective active", "has_detective" in preview["active_has_features"])
+    assert_check("has_drama active", "has_drama" in preview["active_has_features"])
+    assert_check("has_mystery не создаётся", "has_mystery" not in preview["dataset_genre"])
+    assert_check(
+        "preview совпадает с transfer defaults",
+        preview["dataset_genre"]
+        == title_resolve.build_candidate_transfer_genre_defaults({
+            "genre_keys": ["mystery", "drama"],
+            "genres": ["Mystery"],
+        }),
+    )
+
+
+def test_candidate_genre_transfer_preview_reports_partial_unmapped() -> None:
+    """Preview reports unmapped pool genre keys for partial mapper status."""
+    print("\n20a.9) Проверяем partial/unmapped в genre transfer preview")
+
+    preview = title_resolve.build_candidate_genre_transfer_preview({
+        "genre_keys": ["drama", "history"],
+    })
+
+    assert_check("mapper_status partial", preview["mapper_status"] == "partial")
+    assert_check("drama mapped", preview["mapped_genre_keys"] == ["drama"])
+    assert_check("history unmapped", preview["unmapped_genre_keys"] == ["history"])
+    assert_check("has_drama active", preview["dataset_genre"]["has_drama"] == 1)
+
+
+def test_candidate_genre_transfer_preview_falls_back_to_raw_genres() -> None:
+    """Preview uses raw genres fallback when genre_keys are absent."""
+    print("\n20a.10) Проверяем fallback preview без genre_keys")
+
+    preview = title_resolve.build_candidate_genre_transfer_preview({
+        "genres": ["драма", "криминал"],
+    })
+
+    assert_check("mapper_status missing", preview["mapper_status"] == "missing")
+    assert_check("used_fallback True", preview["used_fallback"] is True)
+    assert_check("has_drama active", preview["dataset_genre"]["has_drama"] == 1)
+    assert_check("has_crime active", preview["dataset_genre"]["has_crime"] == 1)
+    assert_check("raw_genres сохранены", preview["raw_genres"] == ["драма", "криминал"])
+
+
+def test_candidate_genre_transfer_preview_warns_when_all_zero_with_raw_signals() -> None:
+    """Preview warns when raw genres exist but no has_* defaults were resolved."""
+    print("\n20a.11) Проверяем warn_all_genres_zero в genre transfer preview")
+
+    preview = title_resolve.build_candidate_genre_transfer_preview({
+        "genres": ["TotallyUnknownGenreXYZ"],
+    })
+
+    assert_check("has_raw_genre_signals True", preview["has_raw_genre_signals"] is True)
+    assert_check("warn_all_genres_zero True", preview["warn_all_genres_zero"] is True)
+    assert_check("active_has_features пуст", preview["active_has_features"] == [])
+
+
+def test_candidate_genre_transfer_preview_does_not_mutate_candidate() -> None:
+    """Genre transfer preview is read-only for the input candidate."""
+    print("\n20a.12) Проверяем, что genre transfer preview не мутирует candidate")
+
+    candidate = {
+        "title": "Preview Immutable",
+        "genres": ["Mystery"],
+        "genre_keys": ["mystery", "drama"],
+        "imdb_genres": ["Crime"],
+    }
+    before = copy.deepcopy(candidate)
+    title_resolve.build_candidate_genre_transfer_preview(candidate)
+
+    assert_check("candidate dict не изменился", candidate == before)
+
+
+def test_mark_candidate_as_watched_prints_genre_transfer_preview() -> None:
+    """mark_candidate_as_watched shows genre preview before the add form."""
+    print("\n20a.13) Проверяем genre preview в mark_candidate_as_watched")
+
+    mark_watched_source = inspect.getsource(interface_funcs.mark_candidate_as_watched)
+    helper_source = inspect.getsource(interface_funcs.print_candidate_genre_transfer_preview)
+
+    assert_check(
+        "mark_candidate_as_watched вызывает build_candidate_genre_transfer_preview",
+        "build_candidate_genre_transfer_preview" in mark_watched_source,
+    )
+    assert_check(
+        "mark_candidate_as_watched вызывает print_candidate_genre_transfer_preview",
+        "print_candidate_genre_transfer_preview" in mark_watched_source,
+    )
+    assert_check(
+        "preview печатается до request_all_scores",
+        mark_watched_source.index("print_candidate_genre_transfer_preview")
+        < mark_watched_source.index("request_all_scores"),
+    )
+    assert_check(
+        "helper показывает pool genre_keys",
+        "Pool genre_keys" in helper_source,
+    )
+    assert_check(
+        "helper показывает fallback",
+        "fallback по raw genres" in helper_source,
+    )
+    assert_check(
+        "helper показывает partial unmapped",
+        "Не удалось сопоставить" in helper_source,
+    )
+    assert_check(
+        "helper показывает all-zero warning",
+        "warn_all_genres_zero" in helper_source or "raw-жанры" in helper_source,
+    )
+
+
 def test_candidate_country_schema_normalization() -> None:
     """Проверяет alias -> country_codes -> country_display без мутации raw countries."""
     print("\n20b) Проверяем candidate country_schema normalization")
@@ -4949,6 +5069,12 @@ def run_tests() -> None:
         test_candidate_transfer_payload_uses_genre_keys_mapper()
         test_candidate_transfer_payload_falls_back_to_raw_genres_without_genre_keys()
         test_candidate_transfer_payload_does_not_mutate_candidate()
+        test_candidate_genre_transfer_preview_maps_genre_keys()
+        test_candidate_genre_transfer_preview_reports_partial_unmapped()
+        test_candidate_genre_transfer_preview_falls_back_to_raw_genres()
+        test_candidate_genre_transfer_preview_warns_when_all_zero_with_raw_signals()
+        test_candidate_genre_transfer_preview_does_not_mutate_candidate()
+        test_mark_candidate_as_watched_prints_genre_transfer_preview()
         test_candidate_country_schema_normalization()
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()

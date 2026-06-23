@@ -453,6 +453,37 @@ def request_object() -> None:
     print(result.message)
 
 
+def print_candidate_genre_transfer_preview(preview: dict) -> None:
+    """Печатает read-only preview жанров перед переносом candidate -> dataset."""
+    print("Жанры для переноса в dataset:")
+
+    genre_keys = preview.get("genre_keys") or []
+    if len(genre_keys) > 0:
+        print(f"  Pool genre_keys: {', '.join(genre_keys)}")
+    else:
+        print("  Pool genre_keys: нет")
+
+    active_labels = preview.get("active_has_labels") or []
+    if len(active_labels) > 0:
+        print(f"  Будут выставлены: {', '.join(active_labels)}")
+    else:
+        print("  Активные жанры dataset: нет")
+
+    if preview.get("used_fallback"):
+        print("  Источник: fallback по raw genres")
+
+    if preview.get("mapper_status") == "partial":
+        unmapped_keys = preview.get("unmapped_genre_keys") or []
+        if len(unmapped_keys) > 0:
+            print(f"  Не удалось сопоставить: {', '.join(unmapped_keys)}")
+
+    if preview.get("warn_all_genres_zero"):
+        print("  Внимание: у кандидата есть raw-жанры, но ни один не попал в has_* dataset.")
+        print("  Проверь жанры вручную в форме.")
+
+    print("")
+
+
 def mark_candidate_as_watched() -> None:
     """Переносит кандидата из пула в основной датасет через обычный сценарий добавления."""
     ui.clean_terminal()
@@ -494,6 +525,9 @@ def mark_candidate_as_watched() -> None:
     if candidate_service.is_pool_candidate_incomplete(candidate):
         print("Кандидат неполный: нет KP/IMDb данных.")
         print("Можно продолжить вручную, но проверь raw_scores.\n")
+    print_candidate_genre_transfer_preview(
+        title_resolve.build_candidate_genre_transfer_preview(candidate)
+    )
     movie_request = request.request_all_scores(defaults)
     result = storage_movie.add_movie(
         movie_request,
