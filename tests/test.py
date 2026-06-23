@@ -3783,6 +3783,42 @@ def test_candidate_genre_transfer_preview_falls_back_to_raw_genres() -> None:
     assert_check("raw_genres сохранены", preview["raw_genres"] == ["драма", "криминал"])
 
 
+def test_candidate_transfer_payload_falls_back_to_imdb_genres() -> None:
+    """Fallback transfer defaults use imdb_genres when common genres field is empty."""
+    print("\n20a.10b) Проверяем fallback transfer defaults через imdb_genres")
+
+    candidate = {
+        "title": "IMDb Fallback Transfer",
+        "year": 2021,
+        "genres": [],
+        "imdb_genres": ["Crime", "Drama"],
+    }
+    payload = title_resolve.build_candidate_transfer_payload(candidate)
+    genre_defaults = payload["defaults"][scheme.GENRE]
+
+    assert_check("Crime -> has_crime", genre_defaults["has_crime"] == 1)
+    assert_check("Drama -> has_drama", genre_defaults["has_drama"] == 1)
+
+
+def test_candidate_genre_transfer_preview_falls_back_to_imdb_genres() -> None:
+    """Preview fallback uses imdb_genres when genre_keys and genres are empty."""
+    print("\n20a.10c) Проверяем preview fallback через imdb_genres")
+
+    preview = title_resolve.build_candidate_genre_transfer_preview({
+        "genres": [],
+        "imdb_genres": ["Crime"],
+        "genres_tmdb": ["Drama"],
+    })
+
+    assert_check("used_fallback True", preview["used_fallback"] is True)
+    assert_check("has_crime active", preview["dataset_genre"]["has_crime"] == 1)
+    assert_check("has_drama active", preview["dataset_genre"]["has_drama"] == 1)
+    assert_check(
+        "raw_genres включает imdb и tmdb",
+        preview["raw_genres"] == ["Crime", "Drama"],
+    )
+
+
 def test_candidate_genre_transfer_preview_warns_when_all_zero_with_raw_signals() -> None:
     """Preview warns when raw genres exist but no has_* defaults were resolved."""
     print("\n20a.11) Проверяем warn_all_genres_zero в genre transfer preview")
@@ -5072,6 +5108,8 @@ def run_tests() -> None:
         test_candidate_genre_transfer_preview_maps_genre_keys()
         test_candidate_genre_transfer_preview_reports_partial_unmapped()
         test_candidate_genre_transfer_preview_falls_back_to_raw_genres()
+        test_candidate_transfer_payload_falls_back_to_imdb_genres()
+        test_candidate_genre_transfer_preview_falls_back_to_imdb_genres()
         test_candidate_genre_transfer_preview_warns_when_all_zero_with_raw_signals()
         test_candidate_genre_transfer_preview_does_not_mutate_candidate()
         test_mark_candidate_as_watched_prints_genre_transfer_preview()
