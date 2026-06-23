@@ -1,0 +1,366 @@
+{
+    "created_at": "2026-06-23T03:59:27",
+    "method": "linear_distribution",
+    "min_score": 4.08,
+    "max_score": 8.3,
+    "count": 51,
+    "items": [
+        {
+            "position": 1,
+            "title": "Открытый брак",
+            "old_score": 4.08,
+            "proposed_score": 4.08,
+            "delta": 0.0
+        },
+        {
+            "position": 2,
+            "title": "Обоюдное согласие",
+            "old_score": 4.15,
+            "proposed_score": 4.1644,
+            "delta": 0.0144
+        },
+        {
+            "position": 3,
+            "title": "Против всех",
+            "old_score": 4.5,
+            "proposed_score": 4.2488,
+            "delta": -0.2512
+        },
+        {
+            "position": 4,
+            "title": "Санкционер",
+            "old_score": 5.0,
+            "proposed_score": 4.3332,
+            "delta": -0.6668
+        },
+        {
+            "position": 5,
+            "title": "Индентификация",
+            "old_score": 5.5,
+            "proposed_score": 4.4176,
+            "delta": -1.0824
+        },
+        {
+            "position": 6,
+            "title": "Химичка",
+            "old_score": 5.8,
+            "proposed_score": 4.502,
+            "delta": -1.298
+        },
+        {
+            "position": 7,
+            "title": "Почка",
+            "old_score": 5.92,
+            "proposed_score": 4.5864,
+            "delta": -1.3336
+        },
+        {
+            "position": 8,
+            "title": "Камбэк",
+            "old_score": 6.0,
+            "proposed_score": 4.6708,
+            "delta": -1.3292
+        },
+        {
+            "position": 9,
+            "title": "Урок",
+            "old_score": 6.07,
+            "proposed_score": 4.7552,
+            "delta": -1.3148
+        },
+        {
+            "position": 10,
+            "title": "Калимба",
+            "old_score": 6.15,
+            "proposed_score": 4.8396,
+            "delta": -1.3104
+        },
+        {
+            "position": 11,
+            "title": "Псих",
+            "old_score": 6.2,
+            "proposed_score": 4.924,
+            "delta": -1.276
+        },
+        {
+            "position": 12,
+            "title": "Полёт",
+            "old_score": 6.46,
+            "proposed_score": 5.0084,
+            "delta": -1.4516
+        },
+        {
+            "position": 13,
+            "title": "The Телки",
+            "old_score": 6.5,
+            "proposed_score": 5.0928,
+            "delta": -1.4072
+        },
+        {
+            "position": 14,
+            "title": "Бар «Один звонок»",
+            "old_score": 6.5,
+            "proposed_score": 5.1772,
+            "delta": -1.3228
+        },
+        {
+            "position": 15,
+            "title": "Виноделы",
+            "old_score": 6.5,
+            "proposed_score": 5.2616,
+            "delta": -1.2384
+        },
+        {
+            "position": 16,
+            "title": "Ивановы-Ивановы",
+            "old_score": 6.5,
+            "proposed_score": 5.346,
+            "delta": -1.154
+        },
+        {
+            "position": 17,
+            "title": "Отпечатки",
+            "old_score": 6.5,
+            "proposed_score": 5.4304,
+            "delta": -1.0696
+        },
+        {
+            "position": 18,
+            "title": "Химмера",
+            "old_score": 6.5,
+            "proposed_score": 5.5148,
+            "delta": -0.9852
+        },
+        {
+            "position": 19,
+            "title": "Я знаю кто тебя убил",
+            "old_score": 6.5,
+            "proposed_score": 5.5992,
+            "delta": -0.9008
+        },
+        {
+            "position": 20,
+            "title": "Обнальщик",
+            "old_score": 6.53,
+            "proposed_score": 5.6836,
+            "delta": -0.8464
+        },
+        {
+            "position": 21,
+            "title": "Между нами химия",
+            "old_score": 6.6,
+            "proposed_score": 5.768,
+            "delta": -0.832
+        },
+        {
+            "position": 22,
+            "title": "Жить жизнь",
+            "old_score": 6.7,
+            "proposed_score": 5.8524,
+            "delta": -0.8476
+        },
+        {
+            "position": 23,
+            "title": "Фарма",
+            "old_score": 6.7,
+            "proposed_score": 5.9368,
+            "delta": -0.7632
+        },
+        {
+            "position": 24,
+            "title": "Золотое Дно",
+            "old_score": 6.76,
+            "proposed_score": 6.0212,
+            "delta": -0.7388
+        },
+        {
+            "position": 25,
+            "title": "Нам Покер",
+            "old_score": 6.84,
+            "proposed_score": 6.1056,
+            "delta": -0.7344
+        },
+        {
+            "position": 26,
+            "title": "Хирург",
+            "old_score": 6.92,
+            "proposed_score": 6.19,
+            "delta": -0.73
+        },
+        {
+            "position": 27,
+            "title": "Плейлист волонтёра",
+            "old_score": 6.99,
+            "proposed_score": 6.2744,
+            "delta": -0.7156
+        },
+        {
+            "position": 28,
+            "title": "Эпидемия",
+            "old_score": 7.07,
+            "proposed_score": 6.3588,
+            "delta": -0.7112
+        },
+        {
+            "position": 29,
+            "title": "Haappy End",
+            "old_score": 7.15,
+            "proposed_score": 6.4432,
+            "delta": -0.7068
+        },
+        {
+            "position": 30,
+            "title": "Колл-центр",
+            "old_score": 7.2,
+            "proposed_score": 6.5276,
+            "delta": -0.6724
+        },
+        {
+            "position": 31,
+            "title": "Нулевой пациент",
+            "old_score": 7.2,
+            "proposed_score": 6.612,
+            "delta": -0.588
+        },
+        {
+            "position": 32,
+            "title": "Лихие",
+            "old_score": 7.23,
+            "proposed_score": 6.6964,
+            "delta": -0.5336
+        },
+        {
+            "position": 33,
+            "title": "Жизнь по вызову",
+            "old_score": 7.3,
+            "proposed_score": 6.7808,
+            "delta": -0.5192
+        },
+        {
+            "position": 34,
+            "title": "Трасса",
+            "old_score": 7.3,
+            "proposed_score": 6.8652,
+            "delta": -0.4348
+        },
+        {
+            "position": 35,
+            "title": "Престиж",
+            "old_score": 7.38,
+            "proposed_score": 6.9496,
+            "delta": -0.4304
+        },
+        {
+            "position": 36,
+            "title": "Оффлайн",
+            "old_score": 7.46,
+            "proposed_score": 7.034,
+            "delta": -0.426
+        },
+        {
+            "position": 37,
+            "title": "Кухня",
+            "old_score": 7.5,
+            "proposed_score": 7.1184,
+            "delta": -0.3816
+        },
+        {
+            "position": 38,
+            "title": "Физрук",
+            "old_score": 7.5,
+            "proposed_score": 7.2028,
+            "delta": -0.2972
+        },
+        {
+            "position": 39,
+            "title": "Резервация",
+            "old_score": 7.53,
+            "proposed_score": 7.2872,
+            "delta": -0.2428
+        },
+        {
+            "position": 40,
+            "title": "Фишшер",
+            "old_score": 7.61,
+            "proposed_score": 7.3716,
+            "delta": -0.2384
+        },
+        {
+            "position": 41,
+            "title": "Фишер",
+            "old_score": 7.69,
+            "proposed_score": 7.456,
+            "delta": -0.234
+        },
+        {
+            "position": 42,
+            "title": "Бывшие",
+            "old_score": 7.76,
+            "proposed_score": 7.5404,
+            "delta": -0.2196
+        },
+        {
+            "position": 43,
+            "title": "Закон каменных джунглей",
+            "old_score": 7.8,
+            "proposed_score": 7.6248,
+            "delta": -0.1752
+        },
+        {
+            "position": 44,
+            "title": "Мажор",
+            "old_score": 7.8,
+            "proposed_score": 7.7092,
+            "delta": -0.0908
+        },
+        {
+            "position": 45,
+            "title": "Хрустальный",
+            "old_score": 7.84,
+            "proposed_score": 7.7936,
+            "delta": -0.0464
+        },
+        {
+            "position": 46,
+            "title": "Слово пацана. Кровь на асфалте",
+            "old_score": 7.92,
+            "proposed_score": 7.878,
+            "delta": -0.042
+        },
+        {
+            "position": 47,
+            "title": "Игра на выживание",
+            "old_score": 7.99,
+            "proposed_score": 7.9624,
+            "delta": -0.0276
+        },
+        {
+            "position": 48,
+            "title": "Триггер",
+            "old_score": 8.07,
+            "proposed_score": 8.0468,
+            "delta": -0.0232
+        },
+        {
+            "position": 49,
+            "title": "Чернобыль зона отчуждения",
+            "old_score": 8.15,
+            "proposed_score": 8.1312,
+            "delta": -0.0188
+        },
+        {
+            "position": 50,
+            "title": "Чужие деньги",
+            "old_score": 8.22,
+            "proposed_score": 8.2156,
+            "delta": -0.0044
+        },
+        {
+            "position": 51,
+            "title": "Аутсорс",
+            "old_score": 8.3,
+            "proposed_score": 8.3,
+            "delta": 0.0
+        }
+    ]
+}

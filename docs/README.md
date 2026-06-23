@@ -13,6 +13,9 @@
 - поддерживать vibe-теги и жанровую разметку;
 - выгружать и загружать dataset через Excel;
 - обучать линейную модель и считать `MAE`, `KP_MAE`, `LOO MAE`;
+- хранить сохранённый `LOO MAE` в `config/model_metrics.json` и показывать его в главном меню;
+- уточнять порядок личных оценок через попарное сравнение;
+- создавать draft линейного распределения оценок без изменения dataset и применять его после LOO-preview;
 - собирать старый общий candidate pool;
 - собирать TMDb candidate pool v1 с ранними TMDb-фильтрами;
 - импортировать TMDb result в общий пул;
@@ -53,7 +56,23 @@ py main.py
 - показать мои оценки;
 - данные о dataset;
 - backup;
-- переименовать запись.
+- переименовать запись;
+- уточнить порядок оценок.
+
+### Уточнение оценок
+
+Пункт `Уточнить порядок оценок` запускает попарное сравнение записей с `user_score`. UI предлагает несколько сравнений, строит новый порядок и перед применением показывает preview изменений.
+
+Перед применением всегда сохраняется snapshot в `config/rating_comparison_last_snapshot.json`. Если пользователь подтверждает изменения, оценки обновляются через `dataset.dataset_records.update_dataset_record(..., source_name="rating_comparison")`.
+
+После `Показать мои оценки` доступно меню действий:
+
+- `Линейное распределение оценок` - создаёт draft в `data/rating_order_drafts/rating_order_draft_YYYY-MM-DD_HH-MM-SS.json` и не меняет dataset;
+- `Изменить оценку user_score` - обновляет одну оценку через safe update-service;
+- `Изменить название` - запускает отдельный rename-flow;
+- `Применить draft распределения оценок` - проверяет draft, считает LOO MAE до/после на копии dataset, создаёт backup и только после подтверждения применяет `proposed_score`.
+
+Применение draft меняет только `main_info.user_score` в dataset. Веса и `config/model_metrics.json` не обновляются автоматически; после удачного применения нужно отдельно запустить LOO обучение.
 
 ## Раздел `Пулл кандидатов`
 
@@ -67,17 +86,18 @@ py main.py
 6. `Диагностика и обслуживание`
 0. `Главное меню`
 
-Пункт `Собрать новый пулл` сразу запускает основной сценарий:
+Пункт `Собрать новый пулл` сразу запускает основной TMDb-сценарий:
 
 `TMDb -> IMDb SQL -> KP API`
 
-Отдельного пользовательского выбора между legacy/test-run режимами больше нет.
+Legacy-сборка через KP API оставлена отдельным пунктом в управлении пулами. Отдельного выбора между legacy/test-run режимами в основном пункте `Собрать новый пулл` нет.
 
 ### Подменю `Управление пуллами`
 
 1. `Удалить пулл`
-2. `Фильтрация / редактирование критериев`
+2. `Defaults фильтров top prediction`
 3. `Импортировать TMDb result в общий пул`
+4. `Собрать пулл через KP API (legacy)`
 0. `Назад`
 
 ### Подменю `Диагностика и обслуживание`
@@ -265,6 +285,9 @@ python build_candidate_pool.py --country KR --pages 3 --details-limit 50 --mode 
 | Weights | `C:/DATA/movies-learn/weights.json` |
 | Criteria | `C:/DATA/movies-learn/candidate_criteria.json` |
 | Общий candidate pool | `C:/DATA/movies-learn/candidate_pool.json` |
+| Model metrics | `config/model_metrics.json` |
+| Rating comparison snapshot | `config/rating_comparison_last_snapshot.json` |
+| Rating order drafts | `data/rating_order_drafts/rating_order_draft_*.json` |
 | API log | `C:/DATA/movies-learn/api_requests.log` |
 | Meta | `C:/META/meta-movies-learn/meta_data.json` |
 | Backup | `C:/BACKUP/movies-learn/BACKUP/` |
@@ -277,3 +300,5 @@ python build_candidate_pool.py --country KR --pages 3 --details-limit 50 --mode 
 - TMDb import и перенос кандидата в dataset - разные шаги;
 - финальное сообщение об успешном добавлении печатает UI-слой, а не storage;
 - переименование записи остаётся отдельной операцией и не должно идти через Excel patch или обычный update.
+- rating comparison и draft распределения оценок меняют только `user_score` через `update_dataset_record()`;
+- создание draft не меняет dataset, а применение draft не меняет веса и сохранённый `LOO MAE`.

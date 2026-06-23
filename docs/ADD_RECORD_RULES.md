@@ -283,6 +283,73 @@ update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResul
 
 Переименование должно идти отдельным путём через `rename_movie_title()`.
 
+## Обновление оценок и порядка
+
+`user_score` можно менять несколькими UI-сценариями, но все они должны идти через общий update-service:
+
+- ручное изменение одной оценки из `Показать мои оценки`;
+- попарное уточнение порядка оценок (`rating_comparison`);
+- применение draft линейного распределения оценок.
+
+### Rating comparison
+
+Путь:
+
+```text
+global_menu.open_data_menu()
+-> rating_comparison.start_rating_comparison()
+-> rating_comparison.apply_rating_comparison_scores()
+-> update_dataset_record(title, {"main_info": {"user_score": new_score}}, source_name="rating_comparison")
+```
+
+Перед применением сохраняется preview snapshot:
+
+```text
+config/rating_comparison_last_snapshot.json
+```
+
+Если пользователь отменяет применение, snapshot остаётся как preview, а dataset не меняется.
+
+### Draft линейного распределения
+
+Создание draft:
+
+```text
+interface_funcs.show_all_movies()
+-> interface_funcs.open_scores_actions_menu()
+-> interface_funcs.create_linear_distribution_draft(rows)
+```
+
+Draft сохраняется в:
+
+```text
+data/rating_order_drafts/rating_order_draft_YYYY-MM-DD_HH-MM-SS.json
+```
+
+Создание draft не меняет dataset.
+
+Применение draft:
+
+```text
+interface_funcs.apply_rating_order_draft_flow()
+-> validate_rating_order_draft(draft, data)
+-> build_rating_order_draft_preview(...)
+-> storage_files.create_backup()
+-> update_dataset_record(title, {"main_info": {"user_score": proposed_score}}, source_name="rating_order_draft")
+```
+
+Валидация draft должна остановить применение, если:
+
+- `method` не равен `linear_distribution`;
+- отсутствуют `items`;
+- запись из draft отсутствует в текущем dataset;
+- текущий `user_score` отличается от `old_score` в draft;
+- `proposed_score` не проходит `valid.is_correct_score`.
+
+LOO-preview для draft считает `current_loo_mae` и `draft_loo_mae` на копии dataset. Этот preview не должен сохранять веса и не должен менять `config/model_metrics.json`.
+
+После применения draft пользователь запускает LOO обучение отдельно, если хочет обновить веса и сохранённый `LOO MAE`.
+
 ## Excel-правила
 
 Excel-поток сейчас служит для patch существующих записей, а не для создания новых.

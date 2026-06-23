@@ -152,6 +152,18 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 5. `Пулл кандидатов`
 6. `Выгрузить отчёт`
 
+### `Данные`
+
+1. `Открыть Excel`
+2. `Загрузить Excel`
+3. `Добавить запись`
+4. `Показать мои оценки`
+5. `Данные о датасете`
+6. `Бэкап`
+7. `Переименовать запись`
+8. `Уточнить порядок оценок`
+0. `Главное меню`
+
 ### `Пулл кандидатов`
 
 Главный экран:
@@ -164,15 +176,16 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 6. `Диагностика и обслуживание`
 0. `Главное меню`
 
-Пункт `Собрать новый пулл` сразу запускает основной сценарий:
+Пункт `Собрать новый пулл` сразу запускает основной TMDb-сценарий:
 
 - `TMDb -> IMDb SQL -> KP API`
 
 Подменю `Управление пуллами`:
 
 - `Удалить пулл`
-- `Фильтрация / редактирование критериев`
+- `Defaults фильтров top prediction`
 - `Импортировать TMDb result в общий пул`
+- `Собрать пулл через KP API (legacy)`
 
 Подменю `Диагностика и обслуживание`:
 
@@ -193,6 +206,25 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 6. `dataset.dataset_records.add_dataset_record()`
 
 UI печатает финальное сообщение сам. Service возвращает `AddRecordResult`.
+
+### 1a. Уточнение порядка оценок
+
+1. `ui.console.global_menu.open_data_menu()` запускает `rating_comparison.start_rating_comparison()` из пункта `Уточнить порядок оценок`.
+2. `rating_comparison.get_scored_records()` берёт записи с валидным `user_score`.
+3. `ask_rounds()` и `run_comparison_rounds()` проводят попарные сравнения и перестановки оценок.
+4. `save_rating_comparison_snapshot()` сохраняет preview в `config/rating_comparison_last_snapshot.json`.
+5. `apply_rating_comparison_scores()` применяет изменения через `update_dataset_record(..., source_name="rating_comparison")`.
+
+После применения пользователь отдельно запускает LOO обучение, если нужно обновить веса и сохранённый `LOO MAE`.
+
+### 1b. Draft линейного распределения оценок
+
+1. `interface_funcs.show_all_movies()` сортирует оценки и открывает `open_scores_actions_menu()`.
+2. `create_linear_distribution_draft(rows)` создаёт draft без изменения dataset.
+3. Draft сохраняется в `data/rating_order_drafts/rating_order_draft_YYYY-MM-DD_HH-MM-SS.json`.
+4. `apply_rating_order_draft_flow()` выбирает draft, валидирует `method`, `items` и совпадение `old_score` с текущим dataset.
+5. `build_rating_order_draft_preview()` считает `current_loo_mae` и `draft_loo_mae` на копии dataset без сохранения весов и metrics.
+6. После подтверждения создаётся backup, а изменения применяются через `update_dataset_record(..., source_name="rating_order_draft")`.
 
 ### 2. Перенос кандидата из пула в dataset
 
@@ -254,6 +286,7 @@ UI печатает финальное сообщение сам. Service воз
 
 - меню и маршрутизацию: `ui/console/ui.py`, `ui/console/global_menu.py`
 - prompts и UI-сценарии: `ui/console/interface_funcs.py`, `ui/console/request.py`, `ui/console/train_menu.py`
+- уточнение порядка оценок: `ui/console/rating_comparison.py`, draft-flow в `ui/console/interface_funcs.py`
 - console facade candidate pool: `candidates/service.py` (новые console flows добавлять сюда, не раздувать)
 - criteria input (forms): `ui/console/candidate_pool_ui.py`
 - правила сохранения записи: `dataset/storage_movie.py`, `dataset/dataset_records.py`
@@ -270,6 +303,9 @@ UI печатает финальное сообщение сам. Service воз
 - `C:/DATA/movies-learn/dataset.json` - dataset.
 - `C:/META/meta-movies-learn/meta_data.json` - meta.
 - `C:/DATA/movies-learn/weights.json` - веса модели.
+- `config/model_metrics.json` - сохранённый `LOO MAE` для главного меню и сравнения новых весов.
+- `config/rating_comparison_last_snapshot.json` - последний snapshot попарного уточнения оценок.
+- `data/rating_order_drafts/rating_order_draft_*.json` - draft-файлы линейного распределения `user_score`.
 - `C:/DATA/movies-learn/candidate_pool.json` - общий candidate pool.
 - `C:/DATA/movies-learn/candidate_criteria.json` - сохранённые criteria (filters + TMDb metadata).
 - `data/candidate_pool/*.json|*.csv` - TMDb candidate pool result.
@@ -288,3 +324,5 @@ py main.py
 Актуально для TMDb flow: после обычного build и сохранения snapshot UI сразу предлагает auto-import этого result в общий candidate pool. Для `test-run` auto-import не предлагается, а ручной import остаётся доступен через меню управления пулами.
 
 Для меню `candidate_pool` полезно отдельно проверять: возврат по `0` из подменю, TMDb flow, import TMDb result, top prediction с runtime-фильтрами, retry KP с preview, перенос кандидата в dataset через форму.
+
+Для rating-flow полезно проверять: `Уточнить порядок оценок`, создание draft из `Показать мои оценки`, отмену применения draft, stale-draft защиту и то, что draft не меняет `weights` / `model_metrics`.
