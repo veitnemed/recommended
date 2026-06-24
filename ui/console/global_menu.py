@@ -28,7 +28,7 @@ def open_data_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_data_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 9)])
         if command == "0":
             return
         if command == "1":
@@ -48,6 +48,8 @@ def open_data_menu():
             interface_funcs.rename_movie_record()
         elif command == "8":
             rating_comparison.start_rating_comparison()
+        elif command == "9":
+            interface_funcs.delete_watched_record()
 
         ui.press_enter()
 
@@ -174,7 +176,7 @@ def open_extra_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_extra_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
         if command == "0":
             return
         if command == "1":
@@ -191,6 +193,8 @@ def open_extra_menu():
             interface_funcs.download_poster_images_local()
         elif command == "7":
             interface_funcs.fetch_watched_tmdb_metadata()
+        elif command == "8":
+            interface_funcs.diagnose_unresolved_watched_tmdb_metadata()
         ui.press_enter()
 
 

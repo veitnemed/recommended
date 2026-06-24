@@ -6,6 +6,7 @@ from unittest.mock import patch
 from config import constant
 from config import scheme
 from common import format_score
+from candidates.keys import title_identity_key
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:
@@ -152,6 +153,7 @@ def test_fetch_watched_tmdb_metadata_fills_meta_and_poster_cache(monkeypatch) ->
     assert stats["added_description"] == 1
     assert stats["added_poster_url"] == 1
     assert stats["poster_cache_updated"] == 1
+    assert stats["manual_overrides_used"] == 0
     assert saved_meta["Alpha"]["tmdb_id"] == 101
     assert saved_meta["Alpha"]["description"] == "Alpha overview"
     assert saved_cache
@@ -181,6 +183,161 @@ def test_fetch_watched_tmdb_metadata_network_error_does_not_crash(monkeypatch) -
 
     assert stats["network_errors"] == 1
     assert stats["found_tmdb_id"] == 0
+    assert stats["unresolved"][0]["reason"] == "network_error"
+
+
+def test_get_watched_tmdb_override_uses_title_identity_key() -> None:
+    from posters.tmdb_overrides import get_watched_tmdb_override
+
+    identity = title_identity_key({"title": "Идентификация", "year": 2022})
+    overrides = {
+        identity: {
+            "tmdb_id": 555,
+            "media_type": "tv",
+            "note": "manual confirmed",
+        }
+    }
+
+    entry = get_watched_tmdb_override("Идентификация", 2022, overrides=overrides)
+
+    assert entry is not None
+    assert entry["tmdb_id"] == 555
+
+
+def test_fetch_watched_tmdb_metadata_uses_override_before_search(monkeypatch) -> None:
+    from posters import fetch_watched_tmdb as module
+
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    meta = {
+        "Alpha": {
+            "main_info": dataset["Alpha"]["main_info"],
+            "raw_scores": dataset["Alpha"]["raw_scores"],
+        }
+    }
+    identity = title_identity_key({"title": "Alpha", "year": 2020})
+    overrides = {
+        identity: {
+            "tmdb_id": 909,
+            "media_type": "tv",
+            "note": "manual confirmed",
+        }
+    }
+
+    def fake_search(_title: str):
+        raise AssertionError("search must not run when manual override exists")
+
+    def fake_details(tmdb_id: int):
+        assert tmdb_id == 909
+        return {
+            "id": tmdb_id,
+            "name": "Alpha",
+            "original_name": "Alpha",
+            "first_air_date": "2020-01-01",
+            "overview": "Override overview",
+            "poster_path": "/override.jpg",
+        }
+
+    saved_meta = {}
+    saved_cache = {}
+
+    monkeypatch.setattr(module.storage_data, "load_dataset", lambda: dataset)
+    monkeypatch.setattr(module.storage_data, "load_meta", lambda: dict(meta))
+    monkeypatch.setattr(module.storage_data, "save_meta", lambda payload: saved_meta.update(payload))
+    monkeypatch.setattr(module, "load_poster_cache", lambda: {})
+    monkeypatch.setattr(module, "save_poster_cache", lambda payload: saved_cache.update(payload))
+
+    stats = module.fetch_watched_tmdb_metadata(
+        search_func=fake_search,
+        details_func=fake_details,
+        overrides=overrides,
+    )
+
+    assert stats["manual_overrides_used"] == 1
+    assert stats["found_tmdb_id"] == 1
+    assert stats["added_description"] == 1
+    assert stats["added_poster_url"] == 1
+    assert stats["poster_cache_updated"] == 1
+    assert saved_meta["Alpha"]["source"] == "tmdb_manual_override"
+    assert saved_meta["Alpha"]["description"] == "Override overview"
+    assert saved_cache
+
+
+def test_fetch_watched_tmdb_metadata_bad_override_does_not_crash(monkeypatch) -> None:
+    from posters import fetch_watched_tmdb as module
+
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    meta = {
+        "Alpha": {
+            "main_info": dataset["Alpha"]["main_info"],
+            "raw_scores": dataset["Alpha"]["raw_scores"],
+        }
+    }
+    identity = title_identity_key({"title": "Alpha", "year": 2020})
+    overrides = {
+        identity: {
+            "tmdb_id": 909,
+            "media_type": "tv",
+        }
+    }
+
+    def fake_search(_title: str):
+        return []
+
+    def fake_details(_tmdb_id: int):
+        raise OSError("bad override")
+
+    monkeypatch.setattr(module.storage_data, "load_dataset", lambda: dataset)
+    monkeypatch.setattr(module.storage_data, "load_meta", lambda: dict(meta))
+    monkeypatch.setattr(module.storage_data, "save_meta", lambda _payload: None)
+    monkeypatch.setattr(module, "load_poster_cache", lambda: {})
+    monkeypatch.setattr(module, "save_poster_cache", lambda _payload: None)
+
+    stats = module.fetch_watched_tmdb_metadata(
+        search_func=fake_search,
+        details_func=fake_details,
+        overrides=overrides,
+    )
+
+    assert stats["manual_overrides_failed"] == 1
+    assert stats["manual_overrides_used"] == 0
+    assert stats["skipped_not_found"] == 0
+    assert stats["unresolved"] == [{"title": "Alpha", "year": 2020, "reason": "manual_override_failed"}]
+
+
+def test_fetch_watched_tmdb_metadata_does_not_modify_dataset(monkeypatch) -> None:
+    from posters import fetch_watched_tmdb as module
+
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    original_dataset = copy.deepcopy(dataset)
+
+    monkeypatch.setattr(module.storage_data, "load_dataset", lambda: dataset)
+    monkeypatch.setattr(module.storage_data, "load_meta", lambda: {})
+    monkeypatch.setattr(module.storage_data, "save_meta", lambda _payload: None)
+    monkeypatch.setattr(module, "load_poster_cache", lambda: {})
+    monkeypatch.setattr(module, "save_poster_cache", lambda _payload: None)
+
+    module.fetch_watched_tmdb_metadata(
+        search_func=lambda _title: [],
+        details_func=lambda _id: {},
+        overrides={},
+    )
+
+    assert dataset == original_dataset
+
+
+def test_format_watched_tmdb_unresolved_report() -> None:
+    from posters.fetch_watched_tmdb import format_watched_tmdb_unresolved_report
+
+    report = format_watched_tmdb_unresolved_report(
+        [
+            {"title": "Псих", "year": 2020, "reason": "uncertain_match"},
+            {"title": "Alpha", "year": 2021, "reason": "not_found"},
+        ]
+    )
+
+    assert "Псих" in report
+    assert "uncertain_match" in report
+    assert "not_found" in report
 
 
 def test_build_add_meta_payload_includes_poster_fields() -> None:

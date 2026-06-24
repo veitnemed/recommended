@@ -102,3 +102,67 @@ def test_sort_by_year() -> None:
     sorted_entries = sort_entries(entries, "year")
 
     assert [entry[0] for entry in sorted_entries] == ["Charlie", "Alpha", "Bravo"]
+
+
+def test_format_user_score_display() -> None:
+    from desktop.watched_view import format_user_score_display
+
+    assert format_user_score_display(8.25) == "8.3"
+    assert format_user_score_display(8) == "8.0"
+    assert format_user_score_display(None) == "—"
+
+
+def test_build_meta_pill_items() -> None:
+    from desktop.watched_view import build_meta_pill_items
+
+    items = build_meta_pill_items(
+        {
+            "year": 2025,
+            "imdb_score": 7.34,
+            "kp_score": 7.8,
+        }
+    )
+
+    assert items[0] == {"text": "📅 2025", "rich": False}
+    assert items[1] == {"text": "★ IMDb 7.3", "rich": False}
+    assert items[2]["rich"] is True
+    assert "КП" in items[2]["text"]
+    assert "7.8" in items[2]["text"]
+
+
+def test_build_meta_pill_labels() -> None:
+    from desktop.watched_view import build_meta_pill_labels
+
+    pills = build_meta_pill_labels(
+        {
+            "year": 2025,
+            "imdb_score": 7.34,
+            "kp_score": 7.8,
+        }
+    )
+
+    assert pills == ["2025", "IMDb 7.3", "КП 7.8"]
+
+
+def test_build_genre_pill_labels_hides_empty() -> None:
+    from desktop.watched_view import build_genre_pill_labels
+
+    assert build_genre_pill_labels({"genres": []}) == []
+    assert build_genre_pill_labels({"genres": ["Драма", "Криминал"]}) == [
+        "🎭 Драма",
+        "🔫 Криминал",
+    ]
+
+
+def test_format_genre_pill_label_unknown_genre() -> None:
+    from desktop.watched_view import format_genre_pill_label
+
+    assert format_genre_pill_label("Документальный") == "Документальный"
+
+
+def test_get_country_display() -> None:
+    from desktop.watched_view import get_country_display
+
+    assert get_country_display({"country": "Россия"}) == "Россия"
+    assert get_country_display({"country": ""}) is None
+    assert get_country_display({}) is None

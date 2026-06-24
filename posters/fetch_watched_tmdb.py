@@ -7,6 +7,7 @@ from urllib.error import HTTPError, URLError
 from apis import tmdb_api
 from dataset.title_resolve import extract_api_identity_titles, extract_candidate_year, title_identity_match
 from posters.cache import load_poster_cache, save_poster_cache, sync_poster_cache_from_meta_and_sources
+from posters.tmdb_overrides import get_watched_tmdb_override, load_watched_tmdb_overrides
 from storage import data as storage_data
 
 
@@ -142,19 +143,105 @@ def merge_watched_meta_fields(title: str, movie: dict, fields: dict, meta: dict 
     return current_meta, updated
 
 
+def _record_unresolved(unresolved: list[dict], title: str, year, reason: str) -> None:
+    unresolved.append(
+        {
+            "title": title,
+            "year": year,
+            "reason": reason,
+        }
+    )
+
+
+def _update_fetch_stats(stats: dict, before_meta: dict, updated_meta: dict, poster_entry: dict) -> None:
+    if _meta_text(before_meta.get("tmdb_id")) == "" and _meta_text(updated_meta.get("tmdb_id")) != "":
+        stats["found_tmdb_id"] += 1
+    if _meta_text(before_meta.get("description")) == "" and _meta_text(updated_meta.get("description")) != "":
+        stats["added_description"] += 1
+    if _meta_text(before_meta.get("poster_url")) == "" and _meta_text(updated_meta.get("poster_url")) != "":
+        stats["added_poster_url"] += 1
+    if poster_entry.get("status") == "found":
+        stats["poster_cache_updated"] += 1
+
+
+def _apply_tmdb_details(
+    *,
+    title: str,
+    year,
+    movie: dict,
+    meta: dict,
+    meta_obj: dict | None,
+    poster_cache: dict,
+    stats: dict,
+    normalized: dict,
+    source: str,
+) -> tuple[dict, dict | None, bool]:
+    """Merge normalized TMDb details into meta and poster-cache."""
+    fields = build_tmdb_meta_fields(normalized)
+    if len(fields) == 0:
+        return meta, meta_obj, False
+
+    fields["source"] = source
+    before_meta = dict(meta_obj or {})
+    meta, updated_meta = merge_watched_meta_fields(title, movie, fields, meta=meta)
+
+    poster_entry = sync_poster_cache_from_meta_and_sources(
+        title,
+        year,
+        meta_obj=updated_meta,
+        movie=movie,
+        extra_sources=normalized,
+        cache=poster_cache,
+        persist=False,
+    )
+    _update_fetch_stats(stats, before_meta, updated_meta, poster_entry)
+    return meta, updated_meta, True
+
+
+def _fetch_override_details(override: dict, details_func) -> dict | None:
+    media_type = str(override.get("media_type") or "tv").strip().lower()
+    if media_type != "tv":
+        return None
+
+    try:
+        tmdb_id = int(override["tmdb_id"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    return details_func(tmdb_id)
+
+
+def format_watched_tmdb_unresolved_report(unresolved: list[dict]) -> str:
+    """Build read-only text report for unresolved watched TMDb lookups."""
+    if len(unresolved) == 0:
+        return "  Нерешённых записей нет."
+
+    lines = ["  Нерешённые записи:"]
+    for index, item in enumerate(unresolved, start=1):
+        title = item.get("title") or "?"
+        year = item.get("year")
+        year_label = year if year not in (None, "") else "—"
+        reason = item.get("reason") or "unknown"
+        lines.append(f"  {index}. {title} ({year_label}) — {reason}")
+    return "\n".join(lines)
+
+
 def fetch_watched_tmdb_metadata(
     *,
     search_func=None,
     details_func=None,
     progress_callback=None,
+    overrides: dict | None = None,
 ) -> dict:
     """Lookup TMDb metadata for watched records missing tmdb_id/description/poster."""
     search_func = search_func or tmdb_api.search_tv_by_name
     details_func = details_func or tmdb_api.get_tv_details
+    manual_overrides = load_watched_tmdb_overrides() if overrides is None else overrides
 
     data = storage_data.load_dataset()
     meta = storage_data.load_meta()
     poster_cache = load_poster_cache()
+    unresolved: list[dict] = []
 
     stats = {
         "checked": 0,
@@ -163,9 +250,12 @@ def fetch_watched_tmdb_metadata(
         "added_description": 0,
         "added_poster_url": 0,
         "poster_cache_updated": 0,
+        "manual_overrides_used": 0,
+        "manual_overrides_failed": 0,
         "skipped_not_found": 0,
         "skipped_uncertain_match": 0,
         "network_errors": 0,
+        "unresolved": unresolved,
     }
 
     total = len(data)
@@ -184,10 +274,51 @@ def fetch_watched_tmdb_metadata(
                 progress_callback(stats["checked"], total, title)
             continue
 
+        override = get_watched_tmdb_override(title, year, overrides=manual_overrides)
+        if override is not None:
+            try:
+                raw_details = _fetch_override_details(override, details_func)
+            except (HTTPError, URLError, OSError, RuntimeError, KeyError, TypeError, ValueError):
+                stats["manual_overrides_failed"] += 1
+                _record_unresolved(unresolved, title, year, "manual_override_failed")
+                if progress_callback is not None:
+                    progress_callback(stats["checked"], total, title)
+                continue
+
+            if isinstance(raw_details, dict) is False:
+                stats["manual_overrides_failed"] += 1
+                _record_unresolved(unresolved, title, year, "manual_override_failed")
+                if progress_callback is not None:
+                    progress_callback(stats["checked"], total, title)
+                continue
+
+            normalized = tmdb_api.normalize_tmdb_tv(raw_details)
+            meta, updated_meta, applied = _apply_tmdb_details(
+                title=title,
+                year=year,
+                movie=movie,
+                meta=meta,
+                meta_obj=meta_obj,
+                poster_cache=poster_cache,
+                stats=stats,
+                normalized=normalized,
+                source="tmdb_manual_override",
+            )
+            if applied is False:
+                stats["manual_overrides_failed"] += 1
+                _record_unresolved(unresolved, title, year, "manual_override_failed")
+            else:
+                stats["manual_overrides_used"] += 1
+
+            if progress_callback is not None:
+                progress_callback(stats["checked"], total, title)
+            continue
+
         try:
             results = search_func(title)
         except (HTTPError, URLError, OSError, RuntimeError):
             stats["network_errors"] += 1
+            _record_unresolved(unresolved, title, year, "network_error")
             if progress_callback is not None:
                 progress_callback(stats["checked"], total, title)
             continue
@@ -195,11 +326,13 @@ def fetch_watched_tmdb_metadata(
         selected, match_status = match_tmdb_search_result(title, year, results)
         if match_status == "uncertain_match":
             stats["skipped_uncertain_match"] += 1
+            _record_unresolved(unresolved, title, year, "uncertain_match")
             if progress_callback is not None:
                 progress_callback(stats["checked"], total, title)
             continue
         if selected is None:
             stats["skipped_not_found"] += 1
+            _record_unresolved(unresolved, title, year, "not_found")
             if progress_callback is not None:
                 progress_callback(stats["checked"], total, title)
             continue
@@ -208,39 +341,29 @@ def fetch_watched_tmdb_metadata(
             raw_details = details_func(int(selected["id"]))
         except (HTTPError, URLError, OSError, RuntimeError, KeyError, TypeError, ValueError):
             stats["network_errors"] += 1
+            _record_unresolved(unresolved, title, year, "network_error")
             if progress_callback is not None:
                 progress_callback(stats["checked"], total, title)
             continue
 
         normalized = tmdb_api.normalize_tmdb_tv(raw_details)
-        fields = build_tmdb_meta_fields(normalized)
-        if len(fields) == 0:
+        meta, updated_meta, applied = _apply_tmdb_details(
+            title=title,
+            year=year,
+            movie=movie,
+            meta=meta,
+            meta_obj=meta_obj,
+            poster_cache=poster_cache,
+            stats=stats,
+            normalized=normalized,
+            source="tmdb_api",
+        )
+        if applied is False:
             stats["skipped_not_found"] += 1
+            _record_unresolved(unresolved, title, year, "not_found")
             if progress_callback is not None:
                 progress_callback(stats["checked"], total, title)
             continue
-
-        before_meta = dict(meta_obj or {})
-        meta, updated_meta = merge_watched_meta_fields(title, movie, fields, meta=meta)
-
-        if _meta_text(before_meta.get("tmdb_id")) == "" and _meta_text(updated_meta.get("tmdb_id")) != "":
-            stats["found_tmdb_id"] += 1
-        if _meta_text(before_meta.get("description")) == "" and _meta_text(updated_meta.get("description")) != "":
-            stats["added_description"] += 1
-        if _meta_text(before_meta.get("poster_url")) == "" and _meta_text(updated_meta.get("poster_url")) != "":
-            stats["added_poster_url"] += 1
-
-        poster_entry = sync_poster_cache_from_meta_and_sources(
-            title,
-            year,
-            meta_obj=updated_meta,
-            movie=movie,
-            extra_sources=normalized,
-            cache=poster_cache,
-            persist=False,
-        )
-        if poster_entry.get("status") == "found":
-            stats["poster_cache_updated"] += 1
 
         if progress_callback is not None:
             progress_callback(stats["checked"], total, title)

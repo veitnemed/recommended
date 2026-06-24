@@ -14,6 +14,7 @@ from candidates import service as candidate_service
 from candidates import tmdb_country_options
 from candidates import tmdb_genre_options
 from dataset import dataset_stats
+from dataset import delete_record as dataset_delete_record
 from dataset import genre_import
 from dataset import genre_stats
 from dataset.dataset_records import update_dataset_record
@@ -701,6 +702,64 @@ def rename_movie_record() -> None:
         print("Переименование не выполнено.")
 
 
+def delete_watched_record() -> None:
+    """Safely deletes one watched record from dataset, meta and poster-cache."""
+    ui.clean_terminal()
+    data = storage_data.load_dataset()
+    if len(data) == 0:
+        print("Датасет пуст!")
+        return
+
+    query = input("\nПоиск записи по названию >> ").strip()
+    if query == "":
+        print("Поиск отменён: пустой запрос.")
+        return
+
+    matches = dataset_delete_record.search_watched_records_by_query(query, data=data)
+    if len(matches) == 0:
+        print("Запись не найдена.")
+        return
+
+    selected = matches[0]
+    if len(matches) > 1:
+        print("\nНайдено несколько записей:\n")
+        for index, item in enumerate(matches, start=1):
+            year_label = item.get("year") if item.get("year") not in (None, "") else "—"
+            score_label = item.get("user_score") if item.get("user_score") is not None else "—"
+            print(f"  {index}) {item['title']} ({year_label}) · оценка {score_label}")
+
+        while True:
+            answer = input("\nВыберите номер записи >> ").strip()
+            if answer.isdigit() is False:
+                print("Введите номер из списка.")
+                continue
+            choice = int(answer)
+            if choice < 1 or choice > len(matches):
+                print("Введите номер из списка.")
+                continue
+            selected = matches[choice - 1]
+            break
+
+    preview = dataset_delete_record.build_watched_delete_preview(selected["dataset_key"], data=data)
+    if preview is None:
+        print("Запись не найдена.")
+        return
+
+    print()
+    print(dataset_delete_record.format_watched_delete_preview(preview))
+    print()
+    confirmation = input("Введите DELETE для удаления: ").strip()
+    if confirmation != "DELETE":
+        print("Удаление отменено.")
+        return
+
+    result = dataset_delete_record.delete_watched_record(selected["dataset_key"])
+    print()
+    print(dataset_delete_record.format_watched_delete_report(result))
+    if result.get("ok") is False:
+        print("Данные не изменены.")
+
+
 def load_genre_markup():
     """Загружает жанровую разметку для текущего датасета с подтверждением."""
     ui.clean_terminal()
@@ -811,7 +870,10 @@ def download_poster_images_local() -> None:
 
 def fetch_watched_tmdb_metadata() -> None:
     """Loads TMDb metadata for watched records by title + year."""
-    from posters.fetch_watched_tmdb import fetch_watched_tmdb_metadata as run_fetch
+    from posters.fetch_watched_tmdb import (
+        fetch_watched_tmdb_metadata as run_fetch,
+        format_watched_tmdb_unresolved_report,
+    )
 
     print("Загрузка TMDb metadata для просмотренных...\n")
 
@@ -826,9 +888,30 @@ def fetch_watched_tmdb_metadata() -> None:
     print(f"  Добавлено description: {stats['added_description']}")
     print(f"  Добавлено poster_url: {stats['added_poster_url']}")
     print(f"  Обновлено poster-cache: {stats['poster_cache_updated']}")
+    print(f"  Manual overrides успешно: {stats['manual_overrides_used']}")
+    print(f"  Manual overrides ошибка: {stats['manual_overrides_failed']}")
     print(f"  Пропущено, не найдено: {stats['skipped_not_found']}")
     print(f"  Пропущено, сомнительный match: {stats['skipped_uncertain_match']}")
     print(f"  Ошибки сети: {stats['network_errors']}")
+    print()
+    print(format_watched_tmdb_unresolved_report(stats.get("unresolved") or []))
+
+
+def diagnose_unresolved_watched_tmdb_metadata() -> None:
+    """Print read-only diagnostics for unresolved watched TMDb metadata."""
+    from posters.tmdb_diagnostic import (
+        diagnose_watched_tmdb_unresolved,
+        format_watched_tmdb_diagnostic_report,
+    )
+
+    print("Диагностика unresolved TMDb metadata (read-only)...\n")
+
+    def progress(current: int, total: int, title: str) -> None:
+        print(f"{current}/{total} | {title}")
+
+    report = diagnose_watched_tmdb_unresolved(progress_callback=progress)
+    print()
+    print(format_watched_tmdb_diagnostic_report(report))
 
 
 def show_dataset_genres() -> None:
