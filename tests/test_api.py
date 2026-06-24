@@ -39,10 +39,31 @@ def make_opener(text: str):
 
 def test_empty_input() -> None:
     empty_title = api.find_series("", "США", token="token")
-    empty_country = api.find_series("Во все тяжкие", "", token="token")
+    empty_country = api.find_series(
+        "Euphoria",
+        "",
+        token="token",
+        opener=make_opener("""
+        {
+            "docs": [
+                {
+                    "id": 1,
+                    "name": "Эйфория",
+                    "alternativeName": "Euphoria",
+                    "year": 2019,
+                    "type": "tv-series",
+                    "countries": [{"name": "США"}],
+                    "rating": {"kp": 8.0, "imdb": 8.1},
+                    "votes": {"kp": 100000, "imdb": 300000}
+                }
+            ]
+        }
+        """),
+    )
 
     assert_check("Пустое название возвращает ошибку", empty_title["error"] == "empty_title")
-    assert_check("Пустая страна возвращает ошибку", empty_country["error"] == "empty_country")
+    assert_check("Пустая страна ищет без country filter", empty_country["ok"] is True)
+    assert_check("Без country filter берёт лучший match", empty_country["data"]["title"] == "Эйфория")
 
 
 def test_missing_token() -> None:

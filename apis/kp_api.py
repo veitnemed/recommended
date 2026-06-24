@@ -108,8 +108,6 @@ def validate_series_request(title, country) -> dict:
 
     if title == "":
         return make_response(False, error="empty_title", details="Название сериала не задано.")
-    if country == "":
-        return make_response(False, error="empty_country", details="Страна не задана.")
 
     return make_response(True, data={"title": title, "country": country})
 

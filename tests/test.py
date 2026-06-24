@@ -1057,6 +1057,36 @@ def test_add_defaults_keeps_sql_only_flow() -> None:
     assert_check("Источник IMDb SQL-only", built["sources"]["imdb_score"] == "imdb_sql")
 
 
+def test_add_record_country_selection() -> None:
+    """Проверяет выбор страны по номеру при добавлении записи."""
+    print("\n11.10.1) Проверяем выбор страны при добавлении записи")
+
+    assert_check(
+        "Пустой ввод страны = Россия",
+        tmdb_country_options.parse_single_country_index("", 26) == 1,
+    )
+    assert_check(
+        "Номер 2 = США",
+        tmdb_country_options.choose_single_country_label(input_func=lambda _prompt: "2") == "США",
+    )
+    assert_check(
+        "Enter по умолчанию = Россия",
+        tmdb_country_options.choose_single_country_label(input_func=lambda _prompt: "") == "Россия",
+    )
+    assert_check(
+        "0 = KP без фильтра страны",
+        tmdb_country_options.choose_single_country_label(input_func=lambda _prompt: "0") == "",
+    )
+
+    with patch("ui.console.request.loop_input", return_value="Euphoria"):
+        with patch("ui.console.request.tmdb_country_options.choose_single_country_label", return_value="США"):
+            with patch("ui.console.request.resolve_title_for_training", return_value={"title": "Euphoria"}) as resolve_training:
+                result = request_ui.request_api_defaults()
+
+    resolve_training.assert_called_once_with("Euphoria", "США", False)
+    assert_check("request_api_defaults передаёт выбранную страну", result == {"title": "Euphoria"})
+
+
 def test_add_resolver_second_pass_sql_after_identity_mismatch() -> None:
     """Проверяет second-pass SQL после first-pass mismatch, если API не дал IMDb."""
     print("\n11.11) Проверяем second-pass SQL после identity mismatch")
@@ -5307,6 +5337,7 @@ def run_tests() -> None:
         test_add_defaults_accepts_sql_when_title_year_match_without_imdb_id()
         test_add_defaults_rejects_sql_when_year_differs_more_than_one()
         test_add_defaults_keeps_sql_only_flow()
+        test_add_record_country_selection()
         test_add_resolver_second_pass_sql_after_identity_mismatch()
         test_add_resolver_skips_second_pass_when_api_has_imdb()
         test_add_resolver_rejects_second_pass_sql_mismatch()

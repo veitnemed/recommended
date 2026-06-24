@@ -105,3 +105,54 @@ def country_labels(codes: list[str]) -> list[str]:
     """Возвращает русские названия выбранных стран."""
     return [country_label(code) for code in codes]
 
+
+def print_country_options(output_func=print) -> None:
+    """Печатает нумерованный список стран для консольного выбора."""
+    options = country_options()
+    parts = [
+        f"{index}. {option['label']}"
+        for index, option in enumerate(options, start=1)
+    ]
+    output_func("Список:")
+    for start in range(0, len(parts), 5):
+        output_func("; ".join(parts[start:start + 5]))
+
+
+def parse_single_country_index(value: str, options_count: int) -> int | None:
+    """Разбирает один номер страны; пустой ввод = 1 (Россия); 0 = без фильтра KP."""
+    text = str(value or "").strip()
+    if text == "":
+        return 1
+
+    parts = text.replace(",", " ").split()
+    if len(parts) != 1:
+        return None
+    try:
+        index = int(parts[0])
+    except ValueError:
+        return None
+    if index == 0:
+        return 0
+    if index < 1 or index > options_count:
+        return None
+    return index
+
+
+def choose_single_country_label(input_func=input, output_func=print) -> str:
+    """Запрашивает одну страну по номеру; '' = KP без фильтра страны."""
+    options = country_options()
+    output_func("\nСтрана производства:")
+    output_func("0 >> KP без фильтра страны")
+    output_func("Введите номер страны из списка:")
+    print_country_options(output_func)
+
+    while True:
+        answer = input_func(">> [1] ").strip()
+        index = parse_single_country_index(answer, len(options))
+        if index is None:
+            output_func("Введите номер страны: 0 или 1–26, например: 2")
+            continue
+        if index == 0:
+            return ""
+        return options[index - 1]["label"]
+

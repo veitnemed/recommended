@@ -9,6 +9,7 @@ from common import valid
 from storage import data as storage_data
 from dataset import title_resolve
 from ui.console import title_presenters
+from candidates import tmdb_country_options
 
 
 def get_request_schema() -> dict:
@@ -364,7 +365,7 @@ def request_api_defaults(confirm_genres: bool = False) -> dict:
         text="Название сериала >> ",
         funcs_list=[valid.is_correct_title]
     )
-    country = "Россия"
+    country = tmdb_country_options.choose_single_country_label()
     return resolve_title_for_training(title, country, confirm_genres)
 
 
