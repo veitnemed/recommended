@@ -19,6 +19,7 @@ from dataset import genre_stats
 from dataset.dataset_records import update_dataset_record
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
+from model import feature_ablation
 from model import linear_regression_train
 from model import model
 from ui.console import candidate_pool_ui
@@ -630,6 +631,17 @@ def show_feature_importance(weights, full_error):
         group_avg = group_delta / len(rows)
         print(f"Итого по группе: {group_delta:.4f}")
         print(f"Средний вклад: {group_avg:.4f}\n")
+
+
+def show_feature_ablation_report(data) -> None:
+    """Показывает read-only диагностику групп признаков."""
+    ui.clean_terminal()
+    results = feature_ablation.collect_feature_ablation_report(data)
+    lines = feature_ablation.format_feature_ablation_report(results)
+    for line in lines:
+        print(line)
+    print("")
+    ui.press_enter()
 
 
 def show_data_info():

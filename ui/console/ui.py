@@ -138,6 +138,7 @@ def show_efficiency_menu(movies_counter: int, error: int):
     print(' 4 >> Проверка устойчивости к шуму')
     print(' 5 >> Показать влияние голосов')
     print(' 6 >> Пересчитать raw оценки')
+    print(' 7 >> Диагностика признаков / feature ablation')
     print(' 0 >> Назад\n')
 
 

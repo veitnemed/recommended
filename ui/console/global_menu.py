@@ -111,7 +111,7 @@ def open_efficiency_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_efficiency_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
         if command == "0":
             return
         if command == "1":
@@ -138,6 +138,9 @@ def open_efficiency_menu():
         elif command == "6":
             updated_count = storage_movie.rework_formated_scores()
             print(f'Пересчитано записей: {updated_count}')
+        elif command == "7":
+            interface_funcs.show_feature_ablation_report(data)
+            continue
 
         ui.press_enter()
 

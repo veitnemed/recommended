@@ -22,6 +22,7 @@ from model import model
 from model import linear_regression_train
 from model import noise_experiment
 from model import train_report
+from model import feature_ablation
 from storage import data as storage_data
 from storage import files as storage_files
 from storage import normalize as storage_normalize
@@ -620,9 +621,351 @@ def test_noise_experiment_uses_loo_metrics() -> None:
     assert_check("Noise grid пишет progress events", len(progress_events) > 0)
 
 
+def test_feature_ablation_helpers() -> None:
+    """Проверяет read-only helper-функции feature ablation."""
+    print("\n8a) Проверяем helper-функции feature ablation")
+
+    features = {"kp_score": 8.1, "imdb_score": "7.4"}
+    features_before = copy.deepcopy(features)
+    subset = feature_ablation.select_feature_subset(
+        features,
+        ["kp_score", "missing_feature", "imdb_score"],
+    )
+    assert_check("Subset выбирает нужные признаки", subset == [8.1, 0.0, 7.4])
+    assert_check("Subset не мутирует source dict", features == features_before)
+
+    values = [8.1, 7.4]
+    values_before = values.copy()
+    biased = feature_ablation.with_bias(values)
+    assert_check("Bias добавлен первым значением", biased == [1.0, 8.1, 7.4])
+    assert_check("with_bias не мутирует source list", values == values_before)
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+    }
+    data_before = copy.deepcopy(data)
+    x_data, y_data = feature_ablation.build_subset_xy(data, ["kp_score", "has_drama"])
+    assert_check("Subset X содержит 2 строки", len(x_data) == 2)
+    assert_check("Subset y содержит 2 значения", y_data == [8.0, 6.0])
+    assert_check("Subset X содержит bias", all(row[0] == 1.0 for row in x_data))
+    assert_check("Subset X содержит выбранные признаки", x_data[0][1:] == [8.0, 10.0])
+    assert_check("build_subset_xy не мутирует dataset", data == data_before)
+
+
+def test_feature_ablation_alpha_selection() -> None:
+    """Проверяет выбор alpha по LOO MAE для feature ablation."""
+    print("\n8b) Проверяем подбор alpha для feature ablation")
+
+    def fake_loo_result(_data, _features, alpha=None):
+        mae_by_alpha = {
+            0.1: 0.7,
+            1.0: 0.3,
+            10.0: 0.5,
+        }
+        return {"mae": mae_by_alpha[alpha], "count": 3}
+
+    with patch("model.feature_ablation.calculate_subset_ridge_loo_mae", side_effect=fake_loo_result):
+        result = feature_ablation.select_best_alpha_by_loo(
+            data={},
+            feature_names=["kp_score"],
+            alpha_grid=[0.1, 1.0, 10.0],
+        )
+
+    assert_check("Alpha selection возвращает best_alpha", result["best_alpha"] == 1.0)
+    assert_check("Alpha selection возвращает best_mae", result["best_mae"] == 0.3)
+    assert_check("Alpha selection возвращает alpha_results", len(result["alpha_results"]) == 3)
+
+    def fake_tied_loo_result(_data, _features, alpha=None):
+        mae_by_alpha = {
+            0.1: 0.5,
+            1.0: 0.4,
+            10.0: 0.4,
+        }
+        return {"mae": mae_by_alpha[alpha], "count": 3}
+
+    with patch("model.feature_ablation.calculate_subset_ridge_loo_mae", side_effect=fake_tied_loo_result):
+        tied_result = feature_ablation.select_best_alpha_by_loo(
+            data={},
+            feature_names=["kp_score"],
+            alpha_grid=[0.1, 1.0, 10.0],
+        )
+
+    assert_check("Tie-break выбирает больший alpha", tied_result["best_alpha"] == 10.0)
+
+
+def test_feature_ablation_subset_weights() -> None:
+    """Проверяет финальные диагностические веса subset-модели."""
+    print("\n8c) Проверяем диагностические веса feature ablation")
+    if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
+        print("SKIP: Ridge benchmark недоступен в текущем окружении.")
+        return
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+        "C": make_movie("C", user_score=9.0, raw_score=8.7),
+    }
+    data_before = copy.deepcopy(data)
+    weights = feature_ablation.fit_subset_ridge_weights(
+        data,
+        ["kp_score", "has_drama"],
+        alpha=1.0,
+    )
+
+    assert_check("Subset weights возвращают bias", "bias" in weights)
+    assert_check("Subset weights содержат только выбранные признаки", set(weights) == {"bias", "kp_score", "has_drama"})
+    assert_check("Subset weights не содержат imdb_score вне subset", "imdb_score" not in weights)
+    assert_check("fit_subset_ridge_weights не мутирует dataset", data == data_before)
+
+
+def test_feature_ablation_error_rows() -> None:
+    """Проверяет топ ошибок baseline и LOO subset-моделей."""
+    print("\n8d) Проверяем строки ошибок feature ablation")
+
+    data = {
+        "A": make_movie("A", user_score=9.0, raw_score=6.0),
+        "B": make_movie("B", user_score=5.0, raw_score=7.0),
+        "C": make_movie("C", user_score=8.0, raw_score=8.0),
+    }
+    baseline = feature_ablation.calculate_imdb_baseline_mae(data)
+    baseline_errors = baseline["errors"]
+    required_fields = {"title", "year", "user_score", "predicted_score", "error", "variant", "contributions"}
+    contribution_fields = {"feature", "value", "weight", "contribution"}
+
+    assert_check("Baseline result содержит errors", len(baseline_errors) == 3)
+    assert_check(
+        "Baseline errors отсортированы по убыванию",
+        [row["error"] for row in baseline_errors] == sorted([row["error"] for row in baseline_errors], reverse=True),
+    )
+    assert_check("Baseline error содержит обязательные поля", required_fields.issubset(baseline_errors[0]))
+    assert_check("Baseline error содержит вклад raw-score", baseline_errors[0]["contributions"][0]["feature"] == "imdb_score")
+    assert_check("Baseline contribution содержит обязательные поля", contribution_fields.issubset(baseline_errors[0]["contributions"][0]))
+
+    class FakeEstimator:
+        def fit(self, train_x, train_y):
+            self.train_count = len(train_y)
+            self.coef_ = [10.0, 2.0]
+            return self
+
+        def predict(self, rows):
+            return [100.0 + self.train_count]
+
+    with (
+        patch("model.feature_ablation.linear_regression_train.is_method_available", return_value=True),
+        patch("model.feature_ablation.linear_regression_train.build_estimator", return_value=FakeEstimator()),
+    ):
+        loo_result = feature_ablation.calculate_subset_ridge_loo_mae(
+            data,
+            ["kp_score"],
+            alpha=1.0,
+            variant="public_only_model",
+        )
+
+    model_errors = loo_result["errors"]
+    assert_check("Model result содержит errors", len(model_errors) == 3)
+    assert_check("Model error содержит обязательные поля", required_fields.issubset(model_errors[0]))
+    assert_check(
+        "Model error содержит не больше 4 вкладов",
+        all(len(row["contributions"]) <= 4 for row in model_errors),
+    )
+    assert_check(
+        "Model contribution содержит обязательные поля",
+        all(contribution_fields.issubset(item) for item in model_errors[0]["contributions"]),
+    )
+    assert_check(
+        "Model contributions отсортированы по модулю вклада",
+        all(
+            [abs(item["contribution"]) for item in row["contributions"]]
+            == sorted([abs(item["contribution"]) for item in row["contributions"]], reverse=True)
+            for row in model_errors
+        ),
+    )
+    assert_check(
+        "Model contributions используют LOO estimator weights",
+        any(item["feature"] == "bias" and item["contribution"] == 10.0 for item in model_errors[0]["contributions"]),
+    )
+    assert_check(
+        "Model errors используют LOO prediction, а не full-train prediction",
+        all(row["predicted_score"] == 102.0 for row in model_errors),
+    )
+    assert_check(
+        "Model errors отсортированы по убыванию",
+        [row["error"] for row in model_errors] == sorted([row["error"] for row in model_errors], reverse=True),
+    )
+
+
+def test_feature_ablation_collect_report_is_read_only() -> None:
+    """Проверяет сбор feature ablation report и отсутствие write-вызовов."""
+    print("\n8e) Проверяем read-only feature ablation report")
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+        "C": make_movie("C", user_score=9.0, raw_score=8.7),
+    }
+    data_before = copy.deepcopy(data)
+
+    with contextlib.ExitStack() as stack:
+        save_weights_mock = stack.enter_context(
+            patch("storage.data.save_weights", side_effect=AssertionError("save_weights не должен вызываться"))
+        )
+        save_metrics_mock = stack.enter_context(
+            patch("storage.data.save_model_metrics", side_effect=AssertionError("save_model_metrics не должен вызываться"))
+        )
+        set_loo_mock = stack.enter_context(
+            patch("storage.data.set_saved_loo_mae", side_effect=AssertionError("set_saved_loo_mae не должен вызываться"))
+        )
+        save_dataset_mock = stack.enter_context(
+            patch("storage.data.save_dataset", side_effect=AssertionError("save_dataset не должен вызываться"))
+        )
+        save_pool_mock = stack.enter_context(
+            patch("candidates.candidate_pool.save_candidate_pool", side_effect=AssertionError("save_candidate_pool не должен вызываться"))
+        )
+        loo_training_mock = stack.enter_context(
+            patch("model.linear_regression_train.run_loo_training", side_effect=AssertionError("run_loo_training не должен вызываться"))
+        )
+        train_model_mock = stack.enter_context(
+            patch("ui.console.train_menu.train_linear_model", side_effect=AssertionError("train_linear_model не должен вызываться"))
+        )
+        results = feature_ablation.collect_feature_ablation_report(data)
+
+    assert_check("Ablation report возвращает 5 результатов", len(results) == 5)
+    variants = [result["variant"] for result in results]
+    assert_check(
+        "Ablation variants идут в ожидаемом порядке",
+        variants == [
+            "imdb_baseline",
+            "kp_baseline",
+            "public_only_model",
+            "genres_only_model",
+            "public_plus_genres_model",
+        ],
+    )
+    assert_check("Есть baseline variants", sum(result["kind"] == "baseline" for result in results) == 2)
+    assert_check("Есть model variants", sum(result["kind"] == "model" for result in results) == 3)
+    baseline_results = [result for result in results if result["kind"] == "baseline"]
+    model_results = [result for result in results if result["kind"] == "model"]
+    assert_check("Baseline results без weights", all("weights" not in result for result in baseline_results))
+    assert_check("Baseline results имеют errors", all("errors" in result and len(result["errors"]) > 0 for result in baseline_results))
+    assert_check("Model results имеют best_alpha", all("best_alpha" in result for result in model_results))
+    assert_check("Model results имеют weights", all("weights" in result and "bias" in result["weights"] for result in model_results))
+    assert_check("Model results имеют alpha_results", all(len(result.get("alpha_results", [])) > 0 for result in model_results))
+    assert_check("Model results имеют errors", all("errors" in result and len(result["errors"]) > 0 for result in model_results))
+    assert_check(
+        "Ablation errors отсортированы по убыванию",
+        all(
+            [row["error"] for row in result["errors"]]
+            == sorted([row["error"] for row in result["errors"]], reverse=True)
+            for result in results
+        ),
+    )
+    assert_check(
+        "Ablation errors имеют обязательные поля",
+        all(
+            {"title", "year", "user_score", "predicted_score", "error", "contributions"}.issubset(row)
+            for result in results
+            for row in result["errors"]
+        ),
+    )
+    assert_check(
+        "Ablation errors имеют топ-4 вкладов",
+        all(len(row["contributions"]) <= 4 for result in results for row in result["errors"]),
+    )
+    assert_check("Ablation report не мутирует dataset", data == data_before)
+    assert_check("save_weights не вызван", save_weights_mock.call_count == 0)
+    assert_check("save_model_metrics не вызван", save_metrics_mock.call_count == 0)
+    assert_check("set_saved_loo_mae не вызван", set_loo_mock.call_count == 0)
+    assert_check("save_dataset не вызван", save_dataset_mock.call_count == 0)
+    assert_check("save_candidate_pool не вызван", save_pool_mock.call_count == 0)
+    assert_check("run_loo_training не вызван", loo_training_mock.call_count == 0)
+    assert_check("train_linear_model не вызван", train_model_mock.call_count == 0)
+
+    lines = feature_ablation.format_feature_ablation_report(results)
+    assert_check("Formatted report начинается с русским заголовком", lines[0] == "Отчёт диагностики признаков")
+    assert_check("Formatted report выводит Alpha", "Alpha" in lines[2])
+    assert_check("Formatted report выводит LOO MAE / MAE", "LOO MAE / MAE" in lines[2])
+    assert_check("Formatted report выводит блоки весов", any(line.startswith("Веса:") for line in lines))
+    assert_check("Formatted report выводит топ ошибок IMDb", "Топ-5 ошибок: Базовый IMDb" in lines)
+    assert_check("Formatted report выводит топ ошибок KP", "Топ-5 ошибок: Базовый KP" in lines)
+    assert_check("Formatted report выводит топ ошибок public", "Топ-5 ошибок: Модель только public" in lines)
+    assert_check("Formatted report выводит топ ошибок жанров", "Топ-5 ошибок: Модель только жанры" in lines)
+    assert_check("Formatted report выводит топ ошибок public+жанры", "Топ-5 ошибок: Public + жанры" in lines)
+    assert_check("Formatted report выводит топ-4 вкладов", any("Топ-4 вклада:" in line for line in lines))
+    assert_check("Formatted report поясняет диагностические веса", any("веса диагностические" in line for line in lines))
+    assert_check("Formatted report содержит лучший результат", any(line.startswith("Лучший результат:") for line in lines))
+    assert_check("Formatted report содержит вывод", any(line.startswith("Вывод:") for line in lines))
+
+
+def test_feature_ablation_console_report() -> None:
+    """Проверяет консольный показ feature ablation report без write-вызовов."""
+    print("\n8f) Проверяем консольный feature ablation report")
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+    }
+    fake_results = [{"variant": "imdb_baseline", "kind": "baseline", "mae": 0.5, "count": 2}]
+    fake_lines = [
+        "Отчёт диагностики признаков",
+        "",
+        "Базовый IMDb                база            2        -     0.50",
+        "Веса: Модель только public",
+        "Лучший результат: Базовый IMDb",
+    ]
+
+    with contextlib.ExitStack() as stack:
+        collect_mock = stack.enter_context(
+            patch("ui.console.interface_funcs.feature_ablation.collect_feature_ablation_report", return_value=fake_results)
+        )
+        format_mock = stack.enter_context(
+            patch("ui.console.interface_funcs.feature_ablation.format_feature_ablation_report", return_value=fake_lines)
+        )
+        press_enter_mock = stack.enter_context(patch("ui.console.interface_funcs.ui.press_enter"))
+        stack.enter_context(patch("ui.console.interface_funcs.ui.clean_terminal"))
+        save_weights_mock = stack.enter_context(
+            patch("storage.data.save_weights", side_effect=AssertionError("save_weights не должен вызываться"))
+        )
+        save_metrics_mock = stack.enter_context(
+            patch("storage.data.save_model_metrics", side_effect=AssertionError("save_model_metrics не должен вызываться"))
+        )
+        set_loo_mock = stack.enter_context(
+            patch("storage.data.set_saved_loo_mae", side_effect=AssertionError("set_saved_loo_mae не должен вызываться"))
+        )
+        save_dataset_mock = stack.enter_context(
+            patch("storage.data.save_dataset", side_effect=AssertionError("save_dataset не должен вызываться"))
+        )
+        save_pool_mock = stack.enter_context(
+            patch("candidates.candidate_pool.save_candidate_pool", side_effect=AssertionError("save_candidate_pool не должен вызываться"))
+        )
+        loo_training_mock = stack.enter_context(
+            patch("model.linear_regression_train.run_loo_training", side_effect=AssertionError("run_loo_training не должен вызываться"))
+        )
+        train_model_mock = stack.enter_context(
+            patch("ui.console.train_menu.train_linear_model", side_effect=AssertionError("train_linear_model не должен вызываться"))
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            interface_funcs.show_feature_ablation_report(data)
+
+    collect_mock.assert_called_once_with(data)
+    format_mock.assert_called_once_with(fake_results)
+    assert_check("Console report печатает русский заголовок", "Отчёт диагностики признаков" in output.getvalue())
+    assert_check("Console report печатает строки отчёта", "Базовый IMDb" in output.getvalue())
+    assert_check("Console report ждёт Enter", press_enter_mock.call_count == 1)
+    assert_check("Console report не вызывает save_weights", save_weights_mock.call_count == 0)
+    assert_check("Console report не вызывает save_model_metrics", save_metrics_mock.call_count == 0)
+    assert_check("Console report не вызывает set_saved_loo_mae", set_loo_mock.call_count == 0)
+    assert_check("Console report не вызывает save_dataset", save_dataset_mock.call_count == 0)
+    assert_check("Console report не вызывает save_candidate_pool", save_pool_mock.call_count == 0)
+    assert_check("Console report не вызывает run_loo_training", loo_training_mock.call_count == 0)
+    assert_check("Console report не вызывает train_linear_model", train_model_mock.call_count == 0)
+
+
 def test_biggest_error_cards_in_report() -> None:
     """Проверяет карточки «САМЫЕ БОЛЬШИЕ ОШИБКИ» и fallback описаний."""
-    print("\n8a) Проверяем карточки ошибок в train_report")
+    print("\n8g) Проверяем карточки ошибок в train_report")
 
     long_text = "Описание " + ("очень длинное " * 80)
     assert_check(
@@ -5321,6 +5664,12 @@ def run_tests() -> None:
         test_tag_compatibility()
         test_training()
         test_noise_experiment_uses_loo_metrics()
+        test_feature_ablation_helpers()
+        test_feature_ablation_alpha_selection()
+        test_feature_ablation_subset_weights()
+        test_feature_ablation_error_rows()
+        test_feature_ablation_collect_report_is_read_only()
+        test_feature_ablation_console_report()
         test_biggest_error_cards_in_report()
         test_backup_restore()
         test_api_fallback_to_secondary_token()
