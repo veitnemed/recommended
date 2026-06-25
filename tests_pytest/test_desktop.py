@@ -1,4 +1,5 @@
 import copy
+import inspect
 
 from config import constant
 from config import scheme
@@ -62,6 +63,18 @@ def test_start_app_entrypoint_is_guarded() -> None:
 
     assert start_app_module.__name__ != "__main__"
     assert callable(start_app_module.main)
+
+
+def test_score_edit_dialog_is_custom_dark_dialog() -> None:
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module)
+
+    assert "class ScoreEditDialog(QDialog)" in source
+    assert "QInputDialog" not in source
+    assert "setFixedWidth(390)" in source
+    assert "scoreEditCard" in source
+    assert "scoreEditSaveButton" in source
 
 
 def test_prepare_card_for_display_does_not_mutate_movie() -> None:
@@ -158,6 +171,79 @@ def test_format_genre_pill_label_unknown_genre() -> None:
     from desktop.watched_view import format_genre_pill_label
 
     assert format_genre_pill_label("Документальный") == "Документальный"
+
+
+def test_build_user_score_update_payload() -> None:
+    from desktop.watched_view import build_user_score_update_payload
+
+    assert build_user_score_update_payload(8.25) == {"main_info": {"user_score": 8.3}}
+
+
+def test_format_save_user_score_status() -> None:
+    from dataset.dataset_records import UpdateRecordResult
+    from desktop.watched_view import format_save_user_score_status
+
+    assert format_save_user_score_status(
+        UpdateRecordResult(True, "Alpha", "Запись обновлена.", "updated", ["main_info.user_score"])
+    ) == "Оценка сохранена"
+    assert format_save_user_score_status(
+        UpdateRecordResult(False, "Alpha", "Ошибка обновления!", "invalid_patch", [])
+    ) == "Ошибка обновления!"
+
+
+def test_save_watched_user_score_uses_update_pipeline(monkeypatch) -> None:
+    from dataset.dataset_records import UpdateRecordResult
+    from desktop.watched_view import save_watched_user_score
+
+    calls = []
+
+    def fake_update(title, patch, source_name=""):
+        calls.append((title, patch, source_name))
+        return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
+
+    monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
+
+    result = save_watched_user_score("Dataset Key", 8.5)
+
+    assert result.ok is True
+    assert calls == [("Dataset Key", {"main_info": {"user_score": 8.5}}, "desktop_gui")]
+
+
+def test_save_watched_user_score_does_not_touch_model_artifacts(monkeypatch) -> None:
+    from dataset.dataset_records import UpdateRecordResult
+    from desktop.watched_view import save_watched_user_score
+
+    def fail(_payload=None):
+        raise AssertionError("desktop score save must not touch model artifacts")
+
+    def fake_update(title, patch, source_name=""):
+        return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
+
+    monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
+    monkeypatch.setattr("storage.data.save_weights", fail)
+    monkeypatch.setattr("storage.data.save_model_metrics", fail)
+    monkeypatch.setattr("candidates.candidate_pool.save_candidate_pool", fail)
+    monkeypatch.setattr("model.model.save_weights_if_loo_improved", fail)
+    monkeypatch.setattr("model.linear_regression_train.train_ridge_for_benchmark", fail)
+
+    result = save_watched_user_score("Dataset Key", 8.5)
+
+    assert result.ok is True
+
+
+def test_get_user_score_spin_value() -> None:
+    from desktop.watched_view import get_user_score_spin_value
+
+    assert get_user_score_spin_value({"user_score": 8.25}) == 8.3
+    assert get_user_score_spin_value({"user_score": None}) == 0.0
+
+
+def test_validate_score_edit_entry() -> None:
+    from desktop.watched_view import validate_score_edit_entry
+
+    assert validate_score_edit_entry(None) == (False, "Запись не выбрана")
+    assert validate_score_edit_entry(("  ", {}, {})) == (False, "Запись не выбрана")
+    assert validate_score_edit_entry(("Alpha", {}, {})) == (True, "")
 
 
 def test_get_country_display() -> None:

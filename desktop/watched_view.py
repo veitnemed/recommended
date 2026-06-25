@@ -120,6 +120,61 @@ def format_user_score_display(user_score) -> str:
         return "—"
 
 
+USER_SCORE_MIN = 0.0
+USER_SCORE_MAX = 10.0
+USER_SCORE_STEP = 0.1
+
+
+def normalize_user_score_value(score) -> float:
+    """Normalize user score to one decimal place for storage/display."""
+    return float(Decimal(str(float(score))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+
+
+def get_user_score_spin_value(card: dict) -> float:
+    """Return user_score formatted for QDoubleSpinBox."""
+    score = card.get("user_score")
+    if score is None:
+        return USER_SCORE_MIN
+    return normalize_user_score_value(score)
+
+
+def build_user_score_update_payload(user_score: float) -> dict:
+    """Build update_dataset_record patch for user_score only."""
+    return {"main_info": {"user_score": normalize_user_score_value(user_score)}}
+
+
+def save_watched_user_score(dataset_key: str, user_score: float):
+    """Save user_score for a watched record via the dataset update pipeline."""
+    from dataset.dataset_records import update_dataset_record
+
+    return update_dataset_record(
+        dataset_key,
+        build_user_score_update_payload(user_score),
+        source_name="desktop_gui",
+    )
+
+
+def format_save_user_score_status(result) -> str:
+    """Short GUI status text after save attempt."""
+    if result.ok and result.reason == "updated":
+        return "Оценка сохранена"
+    if result.ok and result.reason == "nothing_changed":
+        return "Изменений нет"
+    return result.message
+
+
+def validate_score_edit_entry(entry: WatchedEntry | None) -> tuple[bool, str]:
+    """Validate that a watched entry can be used for score edit dialog."""
+    if entry is None:
+        return False, "Запись не выбрана"
+
+    dataset_key, _movie, _card = entry
+    if str(dataset_key).strip() == "":
+        return False, "Запись не выбрана"
+
+    return True, ""
+
+
 def format_rating_score_display(score) -> str | None:
     """Format external rating for pill badges."""
     if score is None:
@@ -318,6 +373,10 @@ QLabel#scoreCardValue {
     font-size: 24px;
     font-weight: 700;
 }
+QLabel#detailTitle {
+    background: transparent;
+    color: #ffffff;
+}
 QLabel#metaPill, QLabel#genrePill {
     background-color: #2a2d35;
     border: 1px solid #3a3f4a;
@@ -387,14 +446,6 @@ def _fill_meta_pill_row(layout, items: list[dict]) -> None:
     layout.addStretch()
 
 
-def _fill_pill_row(layout, labels: list[str], object_name: str) -> None:
-    _clear_layout(layout)
-    layout.setSpacing(6)
-    for text in labels:
-        layout.addWidget(_make_pill_label(text, object_name))
-    layout.addStretch()
-
-
 def _fill_pill_rows(container_layout, labels: list[str], object_name: str) -> None:
     _clear_layout(container_layout)
     container_layout.setSpacing(6)
@@ -417,7 +468,13 @@ class WatchedDetailCard:
     def __init__(self, parent=None) -> None:
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QFont
-        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+        from PyQt6.QtWidgets import (
+            QFrame,
+            QHBoxLayout,
+            QLabel,
+            QVBoxLayout,
+            QWidget,
+        )
 
         self._frame = QFrame(parent)
         self._frame.setObjectName("detailCard")
@@ -437,6 +494,7 @@ class WatchedDetailCard:
         info_column.setSpacing(14)
 
         self._title_label = QLabel("Выберите тайтл слева")
+        self._title_label.setObjectName("detailTitle")
         title_font = QFont()
         title_font.setPointSize(18)
         title_font.setBold(True)
@@ -457,8 +515,10 @@ class WatchedDetailCard:
 
         self._score_caption = QLabel("МОЯ ОЦЕНКА")
         self._score_caption.setObjectName("scoreCardCaption")
+
         self._score_value = QLabel("—")
         self._score_value.setObjectName("scoreCardValue")
+
         score_layout.addWidget(self._score_caption)
         score_layout.addWidget(self._score_value)
 

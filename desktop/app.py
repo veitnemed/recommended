@@ -1,4 +1,4 @@
-"""PyQt6 read-only desktop viewer for watched movies and series."""
+"""PyQt6 desktop viewer for watched movies and series."""
 
 from __future__ import annotations
 
@@ -8,11 +8,18 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QFrame,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QScrollArea,
     QSplitter,
     QVBoxLayout,
@@ -21,11 +28,19 @@ from PyQt6.QtWidgets import (
 
 from desktop.watched_view import (
     SORT_OPTIONS,
+    USER_SCORE_MAX,
+    USER_SCORE_MIN,
+    USER_SCORE_STEP,
     WatchedDetailCard,
     WatchedEntry,
     apply_view,
     format_list_label,
+    format_save_user_score_status,
+    format_user_score_display,
+    get_user_score_spin_value,
     load_watched_entries,
+    save_watched_user_score,
+    validate_score_edit_entry,
 )
 
 DARK_STYLE = """
@@ -73,8 +88,169 @@ QScrollArea {
 """
 
 
+SCORE_EDIT_DIALOG_STYLE = """
+QDialog#scoreEditDialog {
+    background-color: #14161b;
+}
+QFrame#scoreEditCard {
+    background-color: #1e2128;
+    border: 1px solid #343a46;
+    border-radius: 12px;
+}
+QLabel#scoreEditTitle {
+    background: transparent;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+}
+QLabel#scoreEditMovieTitle {
+    background: transparent;
+    color: #e8e8ea;
+    font-size: 14px;
+    font-weight: 600;
+}
+QLabel#scoreEditCurrent,
+QLabel#scoreEditFieldLabel {
+    background: transparent;
+    color: #aeb3bd;
+    font-size: 12px;
+}
+QDoubleSpinBox#scoreEditSpin {
+    background-color: #252933;
+    border: 1px solid #464c5a;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 600;
+    padding: 7px 10px;
+}
+QDoubleSpinBox#scoreEditSpin:focus {
+    border: 1px solid #c9a227;
+}
+QDoubleSpinBox#scoreEditSpin::up-button,
+QDoubleSpinBox#scoreEditSpin::down-button {
+    background-color: #303542;
+    border: none;
+    width: 22px;
+}
+QDoubleSpinBox#scoreEditSpin::up-button:hover,
+QDoubleSpinBox#scoreEditSpin::down-button:hover {
+    background-color: #3b4250;
+}
+QDialogButtonBox {
+    background: transparent;
+}
+QPushButton {
+    background-color: #2c313b;
+    border: 1px solid #474d59;
+    border-radius: 8px;
+    color: #e8e8ea;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    min-width: 92px;
+}
+QPushButton:hover {
+    background-color: #363c48;
+}
+QPushButton#scoreEditSaveButton {
+    background-color: #b99323;
+    border-color: #d0aa34;
+    color: #161616;
+}
+QPushButton#scoreEditSaveButton:hover {
+    background-color: #c9a227;
+}
+"""
+
+
+class ScoreEditDialog(QDialog):
+    """Compact dark dialog for editing a watched title score."""
+
+    def __init__(self, entry: WatchedEntry, parent=None) -> None:
+        super().__init__(parent)
+        dataset_key, _movie, card = entry
+        title = card.get("title") or dataset_key
+        year = card.get("year")
+        title_text = f"{title} ({year})" if year not in (None, "") else str(title)
+
+        self.setObjectName("scoreEditDialog")
+        self.setWindowTitle("Изменить оценку")
+        self.setModal(True)
+        self.setFixedWidth(390)
+        self.setStyleSheet(SCORE_EDIT_DIALOG_STYLE)
+
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(14, 14, 14, 14)
+        root_layout.setSpacing(0)
+
+        card_frame = QFrame()
+        card_frame.setObjectName("scoreEditCard")
+        root_layout.addWidget(card_frame)
+
+        card_layout = QVBoxLayout(card_frame)
+        card_layout.setContentsMargins(18, 18, 18, 18)
+        card_layout.setSpacing(12)
+
+        header = QLabel("Изменить оценку")
+        header.setObjectName("scoreEditTitle")
+        card_layout.addWidget(header)
+
+        title_label = QLabel(title_text)
+        title_label.setObjectName("scoreEditMovieTitle")
+        title_label.setWordWrap(True)
+        card_layout.addWidget(title_label)
+
+        current_label = QLabel(f"Текущая оценка: {format_user_score_display(card.get('user_score'))}")
+        current_label.setObjectName("scoreEditCurrent")
+        card_layout.addWidget(current_label)
+
+        form = QFormLayout()
+        form.setContentsMargins(0, 4, 0, 0)
+        form.setSpacing(8)
+        field_label = QLabel("Новая оценка")
+        field_label.setObjectName("scoreEditFieldLabel")
+        self._score_input = QDoubleSpinBox()
+        self._score_input.setObjectName("scoreEditSpin")
+        self._score_input.setRange(USER_SCORE_MIN, USER_SCORE_MAX)
+        self._score_input.setSingleStep(USER_SCORE_STEP)
+        self._score_input.setDecimals(1)
+        self._score_input.setValue(get_user_score_spin_value(card))
+        self._score_input.selectAll()
+        form.addRow(field_label, self._score_input)
+        card_layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        save_button = buttons.button(QDialogButtonBox.StandardButton.Save)
+        cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if save_button is not None:
+            save_button.setObjectName("scoreEditSaveButton")
+            save_button.setText("Сохранить")
+            save_button.setDefault(True)
+            save_button.setAutoDefault(True)
+        if cancel_button is not None:
+            cancel_button.setText("Отмена")
+            cancel_button.setAutoDefault(False)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        card_layout.addWidget(buttons)
+
+        self._score_input.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def score_value(self) -> float:
+        return self._score_input.value()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class WatchedMoviesWindow(QMainWindow):
-    """Main read-only window for browsing watched titles."""
+    """Main window for browsing watched titles."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -85,6 +261,7 @@ class WatchedMoviesWindow(QMainWindow):
         self.setWindowTitle("Terminal Movies Learn Desktop")
         self.resize(1180, 720)
         self.setStyleSheet(DARK_STYLE)
+        self.statusBar().showMessage("")
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -125,6 +302,8 @@ class WatchedMoviesWindow(QMainWindow):
 
         self._list_widget = QListWidget()
         self._list_widget.currentRowChanged.connect(self._on_selection_changed)
+        self._list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list_widget.customContextMenuRequested.connect(self._open_list_context_menu)
         layout.addWidget(self._list_widget, stretch=1)
 
         return panel
@@ -136,6 +315,72 @@ class WatchedMoviesWindow(QMainWindow):
         self._detail_card = WatchedDetailCard()
         scroll.setWidget(self._detail_card.widget)
         return scroll
+
+    def _current_entry_key(self) -> str | None:
+        row = self._list_widget.currentRow()
+        if row < 0 or row >= len(self._visible_entries):
+            return None
+        return self._visible_entries[row][0]
+
+    def _refresh_after_user_score_save(self, current_key: str, result) -> None:
+        self._entries = load_watched_entries()
+        self._refresh_list()
+
+        for index, (key, _, _) in enumerate(self._visible_entries):
+            if key == current_key:
+                self._list_widget.blockSignals(True)
+                self._list_widget.setCurrentRow(index)
+                self._list_widget.blockSignals(False)
+                self._detail_card.show_entry(self._visible_entries[index])
+                break
+
+        self.statusBar().showMessage(format_save_user_score_status(result), 4000)
+
+    def _entry_from_item(self, item) -> WatchedEntry | None:
+        if item is None:
+            return None
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(entry, tuple) and len(entry) == 3:
+            return entry
+        return None
+
+    def _open_list_context_menu(self, position) -> None:
+        item = self._list_widget.itemAt(position)
+        entry = self._entry_from_item(item)
+        is_valid, _message = validate_score_edit_entry(entry)
+        if is_valid is False:
+            return
+
+        self._list_widget.setCurrentItem(item)
+        menu = QMenu(self._list_widget)
+        edit_action = menu.addAction("Изменить оценку")
+        chosen_action = menu.exec(self._list_widget.viewport().mapToGlobal(position))
+        if chosen_action is edit_action:
+            self._edit_user_score(entry)
+
+    def _edit_user_score(self, entry: WatchedEntry | None) -> None:
+        is_valid, message = validate_score_edit_entry(entry)
+        if is_valid is False:
+            self.statusBar().showMessage(message, 4000)
+            return
+
+        score = self._show_user_score_dialog(entry)
+        if score is None:
+            return
+
+        dataset_key, _movie, _card = entry
+        result = save_watched_user_score(dataset_key, score)
+        if result.ok and result.reason in ("updated", "nothing_changed"):
+            self._refresh_after_user_score_save(dataset_key, result)
+            return
+
+        self.statusBar().showMessage(format_save_user_score_status(result), 4000)
+
+    def _show_user_score_dialog(self, entry: WatchedEntry) -> float | None:
+        dialog = ScoreEditDialog(entry, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.score_value()
 
     def _on_filters_changed(self) -> None:
         self._sort_key = self._sort_combo.currentData()
@@ -150,12 +395,6 @@ class WatchedMoviesWindow(QMainWindow):
                     break
         if self._list_widget.count() > 0:
             self._list_widget.setCurrentRow(row_to_select)
-
-    def _current_entry_key(self) -> str | None:
-        row = self._list_widget.currentRow()
-        if row < 0 or row >= len(self._visible_entries):
-            return None
-        return self._visible_entries[row][0]
 
     def _refresh_list(self) -> None:
         query = self._search_input.text()
