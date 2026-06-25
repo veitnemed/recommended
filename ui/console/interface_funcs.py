@@ -371,6 +371,7 @@ def apply_rating_order_draft_flow(input_func=input) -> bool:
         for error in result["errors"]:
             print(f"- {error.title}: {error.message}")
     print("Оценки изменены. Запустите LOO обучение отдельно.")
+    print("Сохранённый LOO MAE помечен как устаревший.")
     return True
 
 
@@ -428,6 +429,8 @@ def change_user_score_from_rows(rows: list[dict]) -> None:
         source_name="scores_menu",
     )
     print(result.message)
+    if result.ok and result.reason == "updated":
+        print("Сохранённый LOO MAE помечен как устаревший. Запустите LOO обучение.")
 
 
 def get_predict(weights: dict) -> None:

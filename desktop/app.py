@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -47,141 +48,206 @@ from desktop.watched_view import (
 
 DARK_STYLE = """
 QMainWindow, QWidget {
-    background-color: #1b1b1f;
-    color: #e8e8ea;
+    background-color: #0f0f10;
+    color: #f4f4f5;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 13px;
 }
 QLineEdit, QComboBox {
-    background-color: #2a2a31;
-    border: 1px solid #3a3a44;
-    border-radius: 6px;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
     padding: 8px 10px;
-    color: #f0f0f2;
+    color: #f4f4f5;
+    selection-background-color: #10a37f;
+}
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid #10a37f;
 }
 QComboBox::drop-down {
     border: none;
     width: 24px;
 }
 QComboBox QAbstractItemView {
-    background-color: #2a2a31;
-    color: #f0f0f2;
-    selection-background-color: #3d5afe;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    color: #f4f4f5;
+    selection-background-color: #1f3f36;
 }
 QListWidget {
-    background-color: #222228;
-    border: 1px solid #3a3a44;
-    border-radius: 8px;
-    padding: 4px;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 16px;
+    padding: 6px;
 }
 QListWidget::item {
     padding: 10px 12px;
-    border-radius: 6px;
+    border-radius: 10px;
+    color: #d4d4d8;
 }
 QListWidget::item:selected {
-    background-color: #3d5afe;
-    color: #ffffff;
+    background-color: #1f3f36;
+    color: #f4f4f5;
 }
 QListWidget::item:hover {
-    background-color: #2f3340;
+    background-color: #1c1c1f;
 }
 QScrollArea {
     border: none;
     background-color: transparent;
 }
+QStatusBar {
+    background-color: #0f0f10;
+    color: #a1a1aa;
+    border-top: 1px solid #2a2a2e;
+}
+QMenu {
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    padding: 6px;
+    color: #f4f4f5;
+}
+QMenu::item {
+    padding: 8px 14px;
+    border-radius: 8px;
+}
+QMenu::item:selected {
+    background-color: #1f3f36;
+}
+QSplitter::handle {
+    background-color: #0f0f10;
+}
+QSplitter::handle:hover {
+    background-color: #2a2a2e;
+}
+QScrollBar:vertical {
+    background: #0f0f10;
+    width: 10px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical {
+    background: #2a2a2e;
+    border-radius: 5px;
+    min-height: 28px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #3f3f46;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    background: #0f0f10;
+    height: 10px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal {
+    background: #2a2a2e;
+    border-radius: 5px;
+    min-width: 28px;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
 QTabWidget::pane {
     border: none;
 }
 QTabBar::tab {
-    background-color: #222228;
-    border: 1px solid #3a3a44;
-    border-bottom: none;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    color: #bfc4ce;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    color: #a1a1aa;
     padding: 9px 16px;
-    margin-right: 4px;
+    margin-right: 6px;
 }
 QTabBar::tab:selected {
-    background-color: #2a2d35;
-    color: #ffffff;
+    background-color: #1c1c1f;
+    color: #f4f4f5;
+    border-color: #10a37f;
 }
 QTabBar::tab:hover {
-    background-color: #303542;
+    background-color: #202024;
+    color: #f4f4f5;
 }
 """
 
 
 SCORE_EDIT_DIALOG_STYLE = """
 QDialog#scoreEditDialog {
-    background-color: #14161b;
+    background-color: #0f0f10;
+    font-family: "Segoe UI", Arial, sans-serif;
 }
 QFrame#scoreEditCard {
-    background-color: #1e2128;
-    border: 1px solid #343a46;
-    border-radius: 12px;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 18px;
 }
 QLabel#scoreEditTitle {
     background: transparent;
-    color: #ffffff;
+    color: #f4f4f5;
     font-size: 18px;
     font-weight: 700;
 }
 QLabel#scoreEditMovieTitle {
     background: transparent;
-    color: #e8e8ea;
+    color: #f4f4f5;
     font-size: 14px;
     font-weight: 600;
 }
 QLabel#scoreEditCurrent,
 QLabel#scoreEditFieldLabel {
     background: transparent;
-    color: #aeb3bd;
+    color: #a1a1aa;
     font-size: 12px;
 }
 QDoubleSpinBox#scoreEditSpin {
-    background-color: #252933;
-    border: 1px solid #464c5a;
-    border-radius: 8px;
-    color: #ffffff;
+    background-color: #111113;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    color: #f4f4f5;
     font-size: 18px;
     font-weight: 600;
     padding: 7px 10px;
 }
 QDoubleSpinBox#scoreEditSpin:focus {
-    border: 1px solid #c9a227;
+    border: 1px solid #10a37f;
 }
 QDoubleSpinBox#scoreEditSpin::up-button,
 QDoubleSpinBox#scoreEditSpin::down-button {
-    background-color: #303542;
+    background-color: #1c1c1f;
     border: none;
     width: 22px;
 }
 QDoubleSpinBox#scoreEditSpin::up-button:hover,
 QDoubleSpinBox#scoreEditSpin::down-button:hover {
-    background-color: #3b4250;
+    background-color: #27272a;
 }
 QDialogButtonBox {
     background: transparent;
 }
 QPushButton {
-    background-color: #2c313b;
-    border: 1px solid #474d59;
-    border-radius: 8px;
-    color: #e8e8ea;
+    background-color: #1c1c1f;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    color: #f4f4f5;
     font-size: 13px;
     font-weight: 600;
     padding: 8px 14px;
     min-width: 92px;
 }
 QPushButton:hover {
-    background-color: #363c48;
+    background-color: #27272a;
+    border-color: #3f3f46;
 }
 QPushButton#scoreEditSaveButton {
-    background-color: #b99323;
-    border-color: #d0aa34;
-    color: #161616;
+    background-color: #10a37f;
+    border-color: #10a37f;
+    color: #f4f4f5;
 }
 QPushButton#scoreEditSaveButton:hover {
-    background-color: #c9a227;
+    background-color: #13b98f;
+    border-color: #13b98f;
 }
 """
 
@@ -455,8 +521,19 @@ class WatchedMoviesWindow(QMainWindow):
         self._detail_card.show_empty(title)
 
 
+def _prepare_webengine() -> None:
+    """Prepare Qt WebEngine before QApplication is created."""
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
+    try:
+        from PyQt6 import QtWebEngineWidgets  # noqa: F401
+    except ImportError:
+        pass
+
+
 def main() -> None:
+    _prepare_webengine()
     app = QApplication(sys.argv)
+    app.setFont(QFont("Segoe UI", 10))
     window = WatchedMoviesWindow()
     window.show()
     sys.exit(app.exec())

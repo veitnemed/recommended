@@ -17,6 +17,16 @@ SCORE_BUCKETS: tuple[tuple[str, float | None, float | None], ...] = (
 )
 
 
+PLOTLY_SCORE_BUCKETS: tuple[tuple[str, float | None, float | None], ...] = (
+    ("ниже 6.0", None, 6.0),
+    ("6.0-6.9", 6.0, 7.0),
+    ("7.0-7.9", 7.0, 8.0),
+    ("8.0-8.9", 8.0, 9.0),
+    ("9.0-9.9", 9.0, 10.0),
+    ("10.0", 10.0, None),
+)
+
+
 def normalize_score(score) -> float | None:
     """Return a one-decimal score or None when score is missing/invalid."""
     if score is None:
@@ -104,6 +114,29 @@ def build_score_distribution(scores: list[float]) -> list[dict]:
     return distribution
 
 
+def build_score_distribution_chart_rows(records, title_limit: int = 5) -> list[dict]:
+    """Build low-to-high score buckets with title examples for interactive charts."""
+    items = collect_score_items(records)
+    total = len(items)
+    rows: list[dict] = []
+
+    for label, lower, upper in PLOTLY_SCORE_BUCKETS:
+        bucket_items = [item for item in items if _score_in_bucket(item["score"], lower, upper)]
+        titles = [item["title"] for item in bucket_items if item["title"]]
+        count = len(bucket_items)
+        rows.append(
+            {
+                "label": label,
+                "count": count,
+                "percent": 0.0 if total == 0 else round(count * 100 / total, 1),
+                "example_titles": titles[:title_limit],
+                "extra_count": max(0, len(titles) - title_limit),
+            }
+        )
+
+    return rows
+
+
 def _coerce_score_items(items_or_scores) -> list[dict]:
     items: list[dict] = []
     for item in items_or_scores:
@@ -119,6 +152,28 @@ def _coerce_score_items(items_or_scores) -> list[dict]:
         if score is not None:
             items.append({"title": "", "score": score})
     return items
+
+
+def build_score_count_points(items_or_scores, title_limit: int = 5) -> list[dict]:
+    """Build exact user_score frequency points for a scatter/line chart."""
+    grouped: dict[float, list[str]] = defaultdict(list)
+    for item in _coerce_score_items(items_or_scores):
+        grouped[item["score"]].append(item["title"])
+
+    points: list[dict] = []
+    for score, titles in grouped.items():
+        display_titles = [title for title in titles if title]
+        points.append(
+            {
+                "score": score,
+                "count": len(titles),
+                "example_titles": display_titles[:title_limit],
+                "extra_count": max(0, len(display_titles) - title_limit),
+            }
+        )
+
+    points.sort(key=lambda point: point["score"])
+    return points
 
 
 def build_dense_score_rows(items_or_scores, limit: int = 5, title_limit: int = 5) -> list[dict]:
@@ -172,12 +227,16 @@ def build_score_analytics(records) -> dict:
     scores = [item["score"] for item in score_items]
     summary = build_score_summary(scores)
     distribution = build_score_distribution(scores)
+    chart_distribution = build_score_distribution_chart_rows(records)
+    score_count_points = build_score_count_points(score_items)
     dense_scores = build_dense_score_rows(score_items)
     return {
         "scores": scores,
         "score_items": score_items,
         "summary": summary,
         "distribution": distribution,
+        "chart_distribution": chart_distribution,
+        "score_count_points": score_count_points,
         "dense_scores": dense_scores,
         "insights": build_score_insights(summary, distribution, dense_scores),
     }

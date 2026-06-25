@@ -1,3 +1,7 @@
 {
-    "loo_mae": 0.7366230544955431
+    "loo_mae": 0.7366230544955431,
+    "is_stale": false,
+    "stale_reason": null,
+    "updated_at": null,
+    "dataset_changed_at": null
 }

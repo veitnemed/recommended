@@ -146,7 +146,7 @@ def apply_rating_comparison_scores(
     else:
         print("\nОценки применены.")
     print(f"Snapshot сохранён: {snapshot_path}")
-    print("После изменения оценок рекомендуется запустить LOO обучение.")
+    print("Сохранённый LOO MAE помечен как устаревший. После изменения оценок рекомендуется запустить LOO обучение.")
 
     return {
         "ok": len(errors) == 0,

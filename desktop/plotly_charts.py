@@ -1,0 +1,242 @@
+"""Plotly chart builders for read-only desktop analytics."""
+
+from __future__ import annotations
+
+from html import escape
+
+
+CHART_BG = "#171719"
+PLOT_BG = "#111113"
+TEXT_COLOR = "#f4f4f5"
+MUTED_TEXT = "#a1a1aa"
+GRID_COLOR = "#2a2a2e"
+BAR_COLOR = "#10a37f"
+BAR_HOVER_COLOR = "#35caa5"
+SCORE_CHART_HEIGHT = 300
+
+
+def _format_hover(row: dict) -> str:
+    title_line = escape(str(row["label"]))
+    count_line = f"{int(row['count'])} тайтлов · {float(row['percent']):.1f}%"
+    examples = [escape(str(title)) for title in row.get("example_titles", []) if title]
+
+    lines = [title_line, count_line]
+    if examples:
+        lines.append(f"Примеры: {', '.join(examples)}")
+    else:
+        lines.append("Примеры: нет")
+
+    extra_count = int(row.get("extra_count") or 0)
+    if extra_count > 0:
+        lines.append(f"ещё {extra_count}")
+
+    return "<br>".join(lines)
+
+
+def build_score_distribution_figure(rows: list[dict]):
+    """Build a Plotly bar figure for user_score distribution."""
+    import plotly.graph_objects as go
+
+    labels = [row["label"] for row in rows]
+    counts = [row["count"] for row in rows]
+    hover_texts = [_format_hover(row) for row in rows]
+
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=labels,
+                y=counts,
+                marker={
+                    "color": BAR_COLOR,
+                    "line": {"color": BAR_HOVER_COLOR, "width": 1},
+                },
+                hovertext=hover_texts,
+                hovertemplate="%{hovertext}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        title={"text": "Распределение оценок user_score", "x": 0.02, "xanchor": "left"},
+        paper_bgcolor=CHART_BG,
+        plot_bgcolor=PLOT_BG,
+        font={"color": TEXT_COLOR, "family": "Arial, sans-serif", "size": 13},
+        height=330,
+        margin={"l": 54, "r": 20, "t": 54, "b": 54},
+        hoverlabel={
+            "bgcolor": "#1c1c1f",
+            "bordercolor": "#2a2a2e",
+            "font": {"color": TEXT_COLOR, "size": 12},
+        },
+        xaxis={
+            "title": "Оценка",
+            "gridcolor": GRID_COLOR,
+            "linecolor": GRID_COLOR,
+            "tickfont": {"color": MUTED_TEXT},
+        },
+        yaxis={
+            "title": "Количество тайтлов",
+            "gridcolor": GRID_COLOR,
+            "linecolor": GRID_COLOR,
+            "tickfont": {"color": MUTED_TEXT},
+            "rangemode": "tozero",
+            "dtick": 1,
+        },
+    )
+    return fig
+
+
+def build_score_distribution_html(rows: list[dict]) -> str:
+    """Build standalone HTML for QWebEngineView."""
+    import plotly.io as pio
+
+    fig = build_score_distribution_figure(rows)
+    chart = pio.to_html(
+        fig,
+        include_plotlyjs=True,
+        full_html=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
+    return f"""
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        html, body {{
+            margin: 0;
+            padding: 0;
+            background: {CHART_BG};
+            overflow: hidden;
+        }}
+        .plotly-graph-div {{
+            width: 100% !important;
+        }}
+    </style>
+</head>
+<body>
+{chart}
+</body>
+</html>
+"""
+
+
+def _format_score_count_hover(point: dict) -> str:
+    score = float(point["score"])
+    count = int(point["count"])
+    examples = [escape(str(title)) for title in point.get("example_titles", []) if title]
+
+    lines = [
+        f"Оценка: {score:.1f}",
+        f"{count} сериалов",
+    ]
+    if examples:
+        lines.append(f"Примеры: {', '.join(examples)}")
+
+    extra_count = int(point.get("extra_count") or 0)
+    if extra_count > 0:
+        lines.append(f"ещё {extra_count}")
+
+    return "<br>".join(lines)
+
+
+def build_score_count_figure(points: list[dict]):
+    """Build a Plotly dot/line chart: X=user_score, Y=title count."""
+    import plotly.graph_objects as go
+
+    scores = [point["score"] for point in points]
+    counts = [point["count"] for point in points]
+    hover_texts = [_format_score_count_hover(point) for point in points]
+
+    fig = go.Figure(
+        data=[
+            go.Scatter(
+                x=scores,
+                y=counts,
+                mode="lines+markers",
+                line={"color": "#10a37f", "width": 2, "shape": "spline"},
+                marker={
+                    "size": 9,
+                    "color": BAR_COLOR,
+                    "line": {"color": "#35caa5", "width": 1},
+                },
+                hovertext=hover_texts,
+                hovertemplate="%{hovertext}<extra></extra>",
+            )
+        ]
+    )
+    fig.update_layout(
+        title={"text": "Сколько сериалов у каждой моей оценки", "x": 0.02, "xanchor": "left"},
+        paper_bgcolor=CHART_BG,
+        plot_bgcolor=PLOT_BG,
+        font={"color": TEXT_COLOR, "family": "Arial, sans-serif", "size": 13},
+        height=SCORE_CHART_HEIGHT,
+        margin={"l": 54, "r": 18, "t": 48, "b": 46},
+        hoverlabel={
+            "bgcolor": "#1c1c1f",
+            "bordercolor": "#2a2a2e",
+            "font": {"color": TEXT_COLOR, "size": 12},
+        },
+        xaxis={
+            "title": "Моя оценка user_score",
+            "gridcolor": GRID_COLOR,
+            "linecolor": GRID_COLOR,
+            "tickfont": {"color": MUTED_TEXT},
+            "range": _score_axis_range(scores),
+            "dtick": 0.5,
+        },
+        yaxis={
+            "title": "Количество сериалов",
+            "gridcolor": GRID_COLOR,
+            "linecolor": GRID_COLOR,
+            "tickfont": {"color": MUTED_TEXT},
+            "rangemode": "tozero",
+            "dtick": 1,
+        },
+    )
+    return fig
+
+
+def _score_axis_range(scores: list[float]) -> list[float]:
+    if not scores:
+        return [0, 10]
+
+    minimum = min(scores)
+    maximum = max(scores)
+    if minimum == maximum:
+        return [max(0, minimum - 0.5), min(10, maximum + 0.5)]
+    return [minimum, maximum]
+
+
+def build_score_count_html(points: list[dict]) -> str:
+    """Build standalone HTML for exact-score count chart."""
+    import plotly.io as pio
+
+    fig = build_score_count_figure(points)
+    chart = pio.to_html(
+        fig,
+        include_plotlyjs=True,
+        full_html=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
+    return f"""
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        html, body {{
+            margin: 0;
+            padding: 0;
+            background: {CHART_BG};
+            overflow: hidden;
+        }}
+        .plotly-graph-div {{
+            width: 100% !important;
+        }}
+    </style>
+</head>
+<body>
+{chart}
+</body>
+</html>
+"""

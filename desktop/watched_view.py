@@ -230,7 +230,7 @@ def format_imdb_pill(score: str) -> str:
 
 
 def format_kp_pill(score: str) -> str:
-    return f'<span style="color:#f0a040;font-weight:600">КП</span> {score}'
+    return f'<span style="color:#10a37f;font-weight:600">КП</span> {score}'
 
 
 GENRE_ICONS: dict[str, str] = {
@@ -347,66 +347,66 @@ GENRES_PER_ROW = 4
 CARD_PADDING = 18
 
 POSTER_PLACEHOLDER_STYLE = (
-    "background-color: #2a2d35; border-radius: 10px; color: #9a9aa3;"
+    "background-color: #171719; border: 1px solid #2a2a2e; border-radius: 16px; color: #71717a;"
 )
-POSTER_IMAGE_STYLE = "background: transparent; border-radius: 10px;"
+POSTER_IMAGE_STYLE = "background: transparent; border-radius: 16px;"
 
 DETAIL_CARD_STYLE = """
 QFrame#detailCard {
-    background-color: #1e2128;
-    border: 1px solid #323845;
-    border-radius: 14px;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 18px;
 }
 QFrame#scoreCard {
     background-color: transparent;
-    border: 1px solid #c9a227;
-    border-radius: 10px;
+    border: 1px solid #10a37f;
+    border-radius: 14px;
 }
 QLabel#scoreCardCaption {
-    color: #e8a830;
+    color: #10a37f;
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.5px;
 }
 QLabel#scoreCardValue {
-    color: #ffffff;
+    color: #f4f4f5;
     font-size: 24px;
     font-weight: 700;
 }
 QLabel#detailTitle {
     background: transparent;
-    color: #ffffff;
+    color: #f4f4f5;
 }
 QLabel#metaPill, QLabel#genrePill {
-    background-color: #2a2d35;
-    border: 1px solid #3a3f4a;
-    border-radius: 10px;
+    background-color: #1c1c1f;
+    border: 1px solid #2a2a2e;
+    border-radius: 14px;
     padding: 5px 11px;
-    color: #e8e8ea;
+    color: #d4d4d8;
     font-size: 13px;
 }
 QFrame#overviewBlock {
-    background-color: #2a2d35;
-    border: 1px solid #353945;
-    border-radius: 10px;
+    background-color: #1c1c1f;
+    border: 1px solid #2a2a2e;
+    border-radius: 16px;
 }
 QLabel#overviewTitle {
     background: transparent;
-    color: #f0f0f2;
+    color: #f4f4f5;
     font-size: 13px;
     font-weight: 600;
 }
 QLabel#overviewText {
     background: transparent;
-    color: #e0e0e6;
+    color: #d4d4d8;
     font-size: 15px;
 }
 QLabel#countryHeader {
-    color: #9a9aa3;
+    color: #71717a;
     font-size: 12px;
 }
 QLabel#countryValue {
-    color: #f0f0f2;
+    color: #f4f4f5;
     font-size: 14px;
 }
 """
@@ -496,7 +496,7 @@ class WatchedDetailCard:
         self._title_label = QLabel("Выберите тайтл слева")
         self._title_label.setObjectName("detailTitle")
         title_font = QFont()
-        title_font.setPointSize(18)
+        title_font.setPointSize(20)
         title_font.setBold(True)
         self._title_label.setFont(title_font)
         self._title_label.setWordWrap(True)

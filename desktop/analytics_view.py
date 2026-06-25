@@ -2,34 +2,41 @@
 
 from __future__ import annotations
 
+import os
+import sys
+import tempfile
+
 from dataset.score_analytics import build_score_analytics
 
 
 ANALYTICS_STYLE = """
 QWidget#analyticsRoot {
-    background-color: #1b1b1f;
+    background-color: #0f0f10;
+    color: #f4f4f5;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 13px;
 }
 QWidget#analyticsBarRow {
     background: transparent;
 }
 QLabel#analyticsTitle {
     background: transparent;
-    color: #ffffff;
-    font-size: 22px;
+    color: #f4f4f5;
+    font-size: 24px;
     font-weight: 700;
 }
 QLabel#analyticsSubtitle {
     background: transparent;
-    color: #9fa5b1;
+    color: #a1a1aa;
     font-size: 13px;
 }
 QFrame#summaryCard,
 QFrame#analyticsSection,
 QFrame#insightCard,
 QFrame#sameScoreCard {
-    background-color: #1e2128;
-    border: 1px solid #323845;
-    border-radius: 10px;
+    background-color: #171719;
+    border: 1px solid #2a2a2e;
+    border-radius: 16px;
 }
 QLabel#summaryLabel,
 QLabel#barLabel,
@@ -37,53 +44,60 @@ QLabel#denseLabel,
 QLabel#denseTitles,
 QLabel#insightText {
     background: transparent;
-    color: #aeb3bd;
+    color: #a1a1aa;
     font-size: 12px;
 }
 QLabel#summaryValue {
     background: transparent;
-    color: #ffffff;
+    color: #f4f4f5;
     font-size: 22px;
     font-weight: 700;
 }
 QLabel#sectionTitle {
     background: transparent;
-    color: #f0f0f2;
+    color: #f4f4f5;
     font-size: 15px;
     font-weight: 700;
 }
 QFrame#barTrack {
-    background-color: #2a2d35;
+    background-color: #1c1c1f;
     border-radius: 6px;
 }
 QFrame#barFill {
-    background-color: #c9a227;
+    background-color: #10a37f;
     border-radius: 6px;
 }
 QLabel#barCount,
 QLabel#denseCount {
     background: transparent;
-    color: #f0f0f2;
+    color: #f4f4f5;
     font-size: 13px;
     font-weight: 600;
 }
 QLabel#denseScore {
     background: transparent;
-    color: #c9a227;
+    color: #10a37f;
     font-size: 18px;
     font-weight: 700;
 }
 QLabel#sameScoreTitles {
     background: transparent;
-    color: #c9ced8;
+    color: #d4d4d8;
     font-size: 12px;
+}
+QLabel#analyticsFallback {
+    background: transparent;
+    color: #d4d4d8;
+    font-size: 13px;
+    padding: 10px 2px;
 }
 """
 
 BAR_TRACK_WIDTH = 330
 BAR_HEIGHT = 12
-BAR_TRACK_STYLE = "background-color: #2a2d35; border-radius: 6px;"
-BAR_FILL_STYLE = "background-color: #c9a227; border-radius: 6px;"
+PLOTLY_VIEW_HEIGHT = 318
+BAR_TRACK_STYLE = "background-color: #1c1c1f; border-radius: 6px;"
+BAR_FILL_STYLE = "background-color: #10a37f; border-radius: 6px;"
 
 
 def _format_metric(value) -> str:
@@ -115,6 +129,8 @@ class AnalyticsView:
 
     def __init__(self, entries: list[tuple[str, dict, dict]] | None = None) -> None:
         from PyQt6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+
+        self._plotly_html_paths: list[str] = []
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -161,8 +177,29 @@ class AnalyticsView:
         analytics = build_score_analytics(_entries_to_records(entries))
         self._fill_summary(analytics["summary"])
         self._fill_insights(analytics["insights"])
-        self._fill_distribution(analytics["distribution"])
+        self._fill_distribution(analytics["score_count_points"])
         self._fill_dense_scores(analytics["dense_scores"])
+
+    def _clear_plotly_html_files(self) -> None:
+        while self._plotly_html_paths:
+            path = self._plotly_html_paths.pop()
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    def _write_plotly_html_file(self, html: str) -> str:
+        handle = tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            suffix=".html",
+            prefix="recommended_plotly_",
+            delete=False,
+        )
+        with handle:
+            handle.write(html)
+        self._plotly_html_paths.append(handle.name)
+        return handle.name
 
     def _make_section(self, title_text: str, content_layout):
         from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
@@ -225,9 +262,60 @@ class AnalyticsView:
 
     def _fill_distribution(self, distribution: list[dict]) -> None:
         _clear_layout(self._distribution_layout)
-        max_count = max((item["count"] for item in distribution), default=0)
-        for item in distribution:
-            self._distribution_layout.addWidget(self._make_bar_row(item, max_count))
+        self._clear_plotly_html_files()
+        try:
+            from PyQt6.QtCore import QUrl
+            from PyQt6.QtWebEngineWidgets import QWebEngineView
+        except ImportError as error:
+            self._distribution_layout.addWidget(
+                self._make_fallback_message(
+                    "Интерактивные графики требуют PyQt6-WebEngine\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+            return
+
+        try:
+            from desktop.plotly_charts import build_score_count_html
+
+            html = build_score_count_html(distribution)
+        except ImportError as error:
+            self._distribution_layout.addWidget(
+                self._make_fallback_message(
+                    "Интерактивные графики требуют plotly\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+            return
+
+        try:
+            from PyQt6.QtWidgets import QSizePolicy
+
+            view = QWebEngineView()
+            view.setFixedHeight(PLOTLY_VIEW_HEIGHT)
+            view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            view.setStyleSheet("background-color: #171719;")
+            html_path = self._write_plotly_html_file(html)
+            view.setUrl(QUrl.fromLocalFile(html_path))
+            self._distribution_layout.addWidget(view)
+        except Exception as error:
+            self._distribution_layout.addWidget(
+                self._make_fallback_message(
+                    "Не удалось открыть интерактивный график\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+
+    def _make_fallback_message(self, text: str):
+        from PyQt6.QtWidgets import QLabel
+
+        label = QLabel(text)
+        label.setObjectName("analyticsFallback")
+        label.setWordWrap(True)
+        return label
 
     def _make_bar_row(self, item: dict, max_count: int):
         from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget

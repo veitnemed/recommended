@@ -115,6 +115,6 @@ def test_update_dataset_record_does_not_mark_stale_for_non_score_change(monkeypa
 def test_console_loo_display_marks_stale() -> None:
     from ui.console.ui import format_loo_mae_display
 
-    assert format_loo_mae_display(0.7366, {"is_stale": False}) == "LOO MAE: 0.7366"
-    assert format_loo_mae_display(0.7366, {"is_stale": True}) == "LOO MAE: 0.7366 (устарело после изменения dataset)"
-    assert format_loo_mae_display(None, {"is_stale": True}) == "LOO MAE: не рассчитан"
+    assert format_loo_mae_display(0.7366, {"is_stale": False}) == "Сохранённый LOO MAE: 0.7366"
+    assert format_loo_mae_display(0.7366, {"is_stale": True}) == "Сохранённый LOO MAE: 0.7366 (устарело после изменения dataset)"
+    assert format_loo_mae_display(None, {"is_stale": True}) == "Сохранённый LOO MAE: не рассчитан"

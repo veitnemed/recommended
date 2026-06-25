@@ -38,12 +38,12 @@ def format_loo_mae_display(loo_mae=None, model_metrics_status: dict | None = Non
         loo_mae = model_metrics_status.get("loo_mae")
 
     if loo_mae is None:
-        return "LOO MAE: не рассчитан"
+        return "Сохранённый LOO MAE: не рассчитан"
 
     suffix = ""
     if isinstance(model_metrics_status, dict) and model_metrics_status.get("is_stale") is True:
         suffix = " (устарело после изменения dataset)"
-    return f"LOO MAE: {float(loo_mae):.4f}{suffix}"
+    return f"Сохранённый LOO MAE: {float(loo_mae):.4f}{suffix}"
 
 
 def show_global_menu(movies_counter: int, error: int, kp_error: int, loo_mae=None, model_metrics_status: dict | None = None):

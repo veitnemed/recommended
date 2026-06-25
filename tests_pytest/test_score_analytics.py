@@ -1,7 +1,9 @@
 from dataset.score_analytics import (
     build_dense_score_rows,
     build_score_analytics,
+    build_score_count_points,
     build_score_distribution,
+    build_score_distribution_chart_rows,
     build_score_insights,
     build_score_summary,
     collect_user_scores,
@@ -48,6 +50,89 @@ def test_score_distribution_buckets() -> None:
         ("ниже 6.0", 1),
     ]
     assert all(item["percent"] == 16.7 for item in distribution)
+
+
+def test_score_distribution_chart_rows_counts_and_percent() -> None:
+    rows = build_score_distribution_chart_rows(
+        {
+            "A": _movie(5.5, "A"),
+            "B": _movie(6.2, "B"),
+            "C": _movie(7.4, "C"),
+            "D": _movie(8.1, "D"),
+            "E": _movie(9.9, "E"),
+            "F": _movie(10.0, "F"),
+        }
+    )
+
+    assert [(row["label"], row["count"], row["percent"]) for row in rows] == [
+        ("ниже 6.0", 1, 16.7),
+        ("6.0-6.9", 1, 16.7),
+        ("7.0-7.9", 1, 16.7),
+        ("8.0-8.9", 1, 16.7),
+        ("9.0-9.9", 1, 16.7),
+        ("10.0", 1, 16.7),
+    ]
+
+
+def test_score_distribution_chart_rows_limits_hover_examples() -> None:
+    rows = build_score_distribution_chart_rows(
+        {
+            f"T{index}": _movie(7.2, f"Title {index}")
+            for index in range(1, 8)
+        }
+    )
+
+    target = next(row for row in rows if row["label"] == "7.0-7.9")
+
+    assert target["count"] == 7
+    assert target["example_titles"] == ["Title 1", "Title 2", "Title 3", "Title 4", "Title 5"]
+    assert target["extra_count"] == 2
+
+
+def test_score_distribution_chart_rows_empty_and_missing_scores() -> None:
+    rows = build_score_distribution_chart_rows(
+        {
+            "A": _movie(None, "A"),
+            "B": {"main_info": {"title": "B"}},
+            "C": _movie("bad", "C"),
+        }
+    )
+
+    assert sum(row["count"] for row in rows) == 0
+    assert all(row["percent"] == 0.0 for row in rows)
+    assert all(row["example_titles"] == [] for row in rows)
+
+
+def test_score_count_points_group_exact_scores() -> None:
+    points = build_score_count_points(
+        [
+            {"score": 8.0, "title": "A"},
+            {"score": 8.04, "title": "B"},
+            {"score": 8.5, "title": "C"},
+            {"score": 8.5, "title": "D"},
+            {"score": 9.0, "title": "E"},
+        ]
+    )
+
+    assert points == [
+        {"score": 8.0, "count": 2, "example_titles": ["A", "B"], "extra_count": 0},
+        {"score": 8.5, "count": 2, "example_titles": ["C", "D"], "extra_count": 0},
+        {"score": 9.0, "count": 1, "example_titles": ["E"], "extra_count": 0},
+    ]
+
+
+def test_score_count_points_limits_examples() -> None:
+    points = build_score_count_points(
+        [{"score": 7.5, "title": f"Title {index}"} for index in range(1, 8)],
+        title_limit=5,
+    )
+
+    assert points[0]["example_titles"] == ["Title 1", "Title 2", "Title 3", "Title 4", "Title 5"]
+    assert points[0]["extra_count"] == 2
+
+
+def test_score_count_points_empty_and_invalid() -> None:
+    assert build_score_count_points([None, {"score": None}, {"score": "bad"}]) == []
 
 
 def test_collect_user_scores_ignores_missing_and_invalid() -> None:
@@ -119,5 +204,9 @@ def test_build_score_analytics() -> None:
     assert analytics["scores"] == [8.0, 9.0]
     assert analytics["summary"]["median"] == 8.5
     assert analytics["distribution"][1]["count"] == 1
+    assert analytics["score_count_points"] == [
+        {"score": 8.0, "count": 1, "example_titles": ["Alpha"], "extra_count": 0},
+        {"score": 9.0, "count": 1, "example_titles": ["Bravo"], "extra_count": 0},
+    ]
     assert analytics["dense_scores"][0]["titles"] == ["Bravo"]
     assert len(analytics["insights"]) == 3
