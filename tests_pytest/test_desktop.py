@@ -1,5 +1,7 @@
 import copy
 import inspect
+import tempfile
+from pathlib import Path
 
 from config import constant
 from config import scheme
@@ -825,3 +827,201 @@ def test_score_count_chart_height_matches_plotly_constant() -> None:
 
     figure = build_score_count_figure([{"score": 8.5, "count": 2, "example_titles": ["A"], "extra_count": 0}])
     assert figure.layout.height == SCORE_CHART_HEIGHT
+
+
+def test_format_list_label() -> None:
+    from desktop.watched_view import format_list_label
+
+    assert format_list_label({"title": "Alpha", "year": 2020, "user_score": 8.0}) == "Alpha (2020)  ·  8.0"
+    assert format_list_label({"title": "No Year", "user_score": None}) == "No Year"
+    assert format_list_label({"year": 2019, "user_score": 7.5}) == "Без названия (2019)  ·  7.5"
+
+
+def test_format_rating_score_display() -> None:
+    from desktop.watched_view import format_rating_score_display
+
+    assert format_rating_score_display(8.25) == "8.3"
+    assert format_rating_score_display(None) is None
+    assert format_rating_score_display("bad") is None
+
+
+def test_normalize_user_score_value() -> None:
+    from desktop.watched_view import normalize_user_score_value
+
+    assert normalize_user_score_value(8.25) == 8.3
+    assert normalize_user_score_value(7.0) == 7.0
+
+
+def test_sort_entries_by_title() -> None:
+    from desktop.watched_view import sort_entries
+
+    entries = _make_entries()
+    sorted_entries = sort_entries(entries, "title")
+    assert [entry[0] for entry in sorted_entries] == ["Alpha", "Bravo", "Charlie"]
+
+
+def test_resolve_local_poster_path_prefers_existing_file() -> None:
+    from desktop.watched_view import resolve_local_poster_path
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        poster = Path(temp_root) / "poster.jpg"
+        poster.write_bytes(b"x")
+        card = {"poster_path": str(poster)}
+        assert resolve_local_poster_path({}, card) == str(poster)
+
+
+def test_resolve_local_poster_path_ignores_http_urls() -> None:
+    from desktop.watched_view import resolve_local_poster_path
+
+    assert resolve_local_poster_path({"poster_src": "https://example.com/a.jpg"}, {}) is None
+    assert resolve_local_poster_path({"poster_path": "http://example.com/b.jpg"}, {}) is None
+
+
+def test_resolve_local_poster_path_reads_nested_poster_dict() -> None:
+    from desktop.watched_view import resolve_local_poster_path
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        poster = Path(temp_root) / "nested.jpg"
+        poster.write_bytes(b"x")
+        movie = {"poster": {"path": str(poster)}}
+        assert resolve_local_poster_path(movie) == str(poster)
+
+
+def test_watched_list_delegate_uses_poster_resolver() -> None:
+    import inspect
+
+    import desktop.watched_view as watched_view_module
+
+    source = inspect.getsource(watched_view_module.WatchedListItemDelegate.__new__)
+    assert "resolve_local_poster_path" in source
+    assert "format_user_score_display" in source
+
+
+def test_format_delete_status_message() -> None:
+    from desktop.watched_delete import format_delete_status_message
+
+    assert format_delete_status_message({"ok": True}) == "Запись удалена"
+    assert format_delete_status_message({"ok": False, "message": "Ошибка сервиса"}) == "Ошибка сервиса"
+    assert format_delete_status_message({"ok": False}) == "Не удалось удалить запись"
+
+
+def test_format_delete_preview_lines_includes_local_poster() -> None:
+    from desktop.watched_delete import format_delete_preview_lines
+
+    lines = format_delete_preview_lines(
+        {
+            "title": "Alpha",
+            "poster_local_path": "posters/alpha.jpg",
+        }
+    )
+    assert any("Локальный постер: posters/alpha.jpg" in line for line in lines)
+
+
+def test_load_delete_preview_with_inline_dataset() -> None:
+    from desktop.watched_delete import load_delete_preview
+
+    data = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    preview = load_delete_preview("Alpha", data=data)
+    assert preview is not None
+    assert preview["dataset_key"] == "Alpha"
+    assert preview["title"] == "Alpha"
+    assert preview["year"] == 2020
+    assert preview["user_score"] == 8.0
+
+
+def test_load_delete_preview_returns_none_for_missing_key() -> None:
+    from desktop.watched_delete import load_delete_preview
+
+    assert load_delete_preview("Missing", data={}) is None
+
+
+def test_execute_watched_delete_delegates_to_service(monkeypatch) -> None:
+    from desktop.watched_delete import execute_watched_delete
+
+    calls: list[str] = []
+
+    def fake_delete(dataset_key: str) -> dict:
+        calls.append(dataset_key)
+        return {"ok": True, "dataset_key": dataset_key}
+
+    monkeypatch.setattr("desktop.watched_delete.delete_watched_record", fake_delete)
+    result = execute_watched_delete("Alpha")
+    assert calls == ["Alpha"]
+    assert result["ok"] is True
+
+
+def test_build_delete_dialog_style_contains_selectors() -> None:
+    from desktop.theme import build_delete_dialog_style
+
+    style = build_delete_dialog_style()
+    assert "deleteRecordDialog" in style
+    assert "deleteRecordConfirmButton" in style
+    assert "deleteRecordConfirmInput" in style
+
+
+def test_watched_delete_dialog_contract() -> None:
+    import inspect
+
+    import desktop.delete_dialog as delete_dialog_module
+
+    source = inspect.getsource(delete_dialog_module.WatchedDeleteDialog)
+    assert "deleteRecordDialog" in source
+    assert "is_delete_confirmation_valid" in source
+    assert "setEnabled(False)" in source
+    assert "dialog.exec()" not in source
+
+
+def test_watched_delete_dialog_button_state_logic() -> None:
+    import inspect
+
+    import desktop.delete_dialog as delete_dialog_module
+
+    source = inspect.getsource(delete_dialog_module.WatchedDeleteDialog._update_delete_button_state)
+    assert "is_delete_confirmation_valid" in source
+    assert "setEnabled" in source
+
+
+def test_watched_delete_dialog_on_accept_requires_confirmation() -> None:
+    import inspect
+
+    import desktop.delete_dialog as delete_dialog_module
+
+    source = inspect.getsource(delete_dialog_module.WatchedDeleteDialog._on_accept)
+    assert "is_delete_confirmation_valid" in source
+    assert "self.accept()" in source
+
+
+def test_delete_watched_entry_handles_cancel_and_missing_preview() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow._delete_watched_entry)
+    assert "validate_score_edit_entry" in source
+    assert "preview is None" in source
+    assert "dialog.exec()" in source
+    assert "QDialog.DialogCode.Accepted" in source
+
+
+def test_refresh_after_delete_wiring() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_delete)
+    assert "load_watched_entries" in source
+    assert "_reload_genre_filter_options" in source
+    assert "_analytics_view.update_entries" in source
+    assert "_show_empty_details" in source
+    assert "format_delete_status_message" in source
+
+
+def test_open_list_context_menu_includes_delete_action() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow._open_list_context_menu)
+    assert "Удалить запись" in source
+    assert "_delete_watched_entry" in source
+    assert "Изменить оценку" in source
