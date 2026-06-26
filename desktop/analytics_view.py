@@ -7,41 +7,53 @@ import sys
 import tempfile
 
 from dataset.score_analytics import build_score_analytics
+from desktop.theme import (
+    COLOR_CARD,
+    FONT_BASE,
+    FONT_DENSE_SCORE,
+    FONT_KPI_VALUE,
+    FONT_SECTION,
+    FONT_SMALL,
+    FONT_TITLE,
+    build_analytics_style,
+    build_bar_fill_style,
+    build_bar_track_style,
+)
 
 
 # --- Базовая типографика вкладки «Аналитика» (QSS) ---
 
-ANALYTICS_FONT_BASE = 14
+ANALYTICS_FONT_BASE = FONT_BASE
 # Общий размер текста вкладки, если у виджета нет своего objectName.
 
-ANALYTICS_FONT_PAGE_TITLE = 24
+ANALYTICS_FONT_PAGE_TITLE = FONT_TITLE
 # Заголовок «Аналитика» вверху вкладки.
 
-ANALYTICS_FONT_SUBTITLE = 14
+ANALYTICS_FONT_SUBTITLE = FONT_BASE
 # Подзаголовок «Распределение моих оценок в watched-базе».
 
-ANALYTICS_FONT_SECTION_TITLE = 16
+ANALYTICS_FONT_SECTION_TITLE = FONT_SECTION
 # Заголовки секций: «Коротко», «Распределение оценок», «Одинаковые оценки».
 
-ANALYTICS_FONT_SUMMARY_LABEL = 13
+ANALYTICS_FONT_SUMMARY_LABEL = FONT_SMALL
 # Подписи KPI-карточек: «Всего», «Средняя», «Медиана», «Минимум», «Максимум».
 
-ANALYTICS_FONT_SUMMARY_VALUE = 26
+ANALYTICS_FONT_SUMMARY_VALUE = FONT_KPI_VALUE
 # Числа в KPI-карточках: 51, 6.8, 4.2 и т.д.
 
-ANALYTICS_FONT_INSIGHT = 14
+ANALYTICS_FONT_INSIGHT = FONT_BASE
 # Строки текста в блоке «Коротко».
 
-ANALYTICS_FONT_DENSE_COUNT = 14
+ANALYTICS_FONT_DENSE_COUNT = FONT_BASE
 # Строка «N тайтлов» справа от оценки в «Одинаковые оценки».
 
-ANALYTICS_FONT_DENSE_SCORE = 22
+ANALYTICS_FONT_DENSE_SCORE = FONT_DENSE_SCORE
 # Число внутри зелёного badge с оценкой (6.5, 7.5, …).
 
-ANALYTICS_FONT_SAME_SCORE_TITLES = 13
+ANALYTICS_FONT_SAME_SCORE_TITLES = FONT_SMALL
 # Список названий тайтлов под строкой «N тайтлов».
 
-ANALYTICS_FONT_FALLBACK = 14
+ANALYTICS_FONT_FALLBACK = FONT_BASE
 # Сообщение, если Plotly/WebEngine недоступен.
 
 
@@ -101,103 +113,24 @@ BAR_TRACK_WIDTH = 330
 BAR_HEIGHT = 12
 # Высота полосы fallback-графика (legacy helper).
 
-BAR_TRACK_STYLE = "background-color: #1c1c1f; border-radius: 6px;"
-BAR_FILL_STYLE = "background-color: #10a37f; border-radius: 6px;"
+BAR_TRACK_STYLE = build_bar_track_style()
+BAR_FILL_STYLE = build_bar_fill_style()
 
 
 def _build_analytics_style() -> str:
-    return f"""
-QWidget#analyticsRoot {{
-    background-color: #0f0f10;
-    color: #f4f4f5;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: {ANALYTICS_FONT_BASE}px;
-}}
-QWidget#analyticsBarRow {{
-    background: transparent;
-}}
-QLabel#analyticsTitle {{
-    background: transparent;
-    color: #f4f4f5;
-    font-size: {ANALYTICS_FONT_PAGE_TITLE}px;
-    font-weight: 700;
-}}
-QLabel#analyticsSubtitle {{
-    background: transparent;
-    color: #a1a1aa;
-    font-size: {ANALYTICS_FONT_SUBTITLE}px;
-}}
-QFrame#summaryCard,
-QFrame#analyticsSection,
-QFrame#insightCard,
-QFrame#sameScoreCard {{
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 16px;
-}}
-QLabel#summaryLabel,
-QLabel#barLabel,
-QLabel#denseLabel,
-QLabel#denseTitles {{
-    background: transparent;
-    color: #a1a1aa;
-    font-size: {ANALYTICS_FONT_SUMMARY_LABEL}px;
-}}
-QLabel#insightText {{
-    background: transparent;
-    color: #d4d4d8;
-    font-size: {ANALYTICS_FONT_INSIGHT}px;
-}}
-QLabel#summaryValue {{
-    background: transparent;
-    color: #f4f4f5;
-    font-size: {ANALYTICS_FONT_SUMMARY_VALUE}px;
-    font-weight: 700;
-}}
-QLabel#sectionTitle {{
-    background: transparent;
-    color: #f4f4f5;
-    font-size: {ANALYTICS_FONT_SECTION_TITLE}px;
-    font-weight: 700;
-}}
-QFrame#barTrack {{
-    background-color: #1c1c1f;
-    border-radius: 6px;
-}}
-QFrame#barFill {{
-    background-color: #10a37f;
-    border-radius: 6px;
-}}
-QLabel#barCount,
-QLabel#denseCount {{
-    background: transparent;
-    color: #f4f4f5;
-    font-size: {ANALYTICS_FONT_DENSE_COUNT}px;
-    font-weight: 600;
-}}
-QLabel#denseScore {{
-    background: transparent;
-    color: #10a37f;
-    font-size: {ANALYTICS_FONT_DENSE_SCORE}px;
-    font-weight: 700;
-}}
-QFrame#denseScoreBadge {{
-    background-color: #1c1c1f;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-}}
-QLabel#sameScoreTitles {{
-    background: transparent;
-    color: #d4d4d8;
-    font-size: {ANALYTICS_FONT_SAME_SCORE_TITLES}px;
-}}
-QLabel#analyticsFallback {{
-    background: transparent;
-    color: #d4d4d8;
-    font-size: {ANALYTICS_FONT_FALLBACK}px;
-    padding: 8px 2px;
-}}
-"""
+    return build_analytics_style(
+        font_base=ANALYTICS_FONT_BASE,
+        font_page_title=ANALYTICS_FONT_PAGE_TITLE,
+        font_subtitle=ANALYTICS_FONT_SUBTITLE,
+        font_section_title=ANALYTICS_FONT_SECTION_TITLE,
+        font_summary_label=ANALYTICS_FONT_SUMMARY_LABEL,
+        font_summary_value=ANALYTICS_FONT_SUMMARY_VALUE,
+        font_insight=ANALYTICS_FONT_INSIGHT,
+        font_dense_count=ANALYTICS_FONT_DENSE_COUNT,
+        font_dense_score=ANALYTICS_FONT_DENSE_SCORE,
+        font_same_score_titles=ANALYTICS_FONT_SAME_SCORE_TITLES,
+        font_fallback=ANALYTICS_FONT_FALLBACK,
+    )
 
 
 ANALYTICS_STYLE = _build_analytics_style()
@@ -410,7 +343,7 @@ class AnalyticsView:
             view = QWebEngineView()
             view.setFixedHeight(SCORE_CHART_HEIGHT)
             view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            view.setStyleSheet("background-color: #171719; border: none;")
+            view.setStyleSheet(f"background-color: {COLOR_CARD}; border: none;")
             html_path = self._write_plotly_html_file(html)
             view.setUrl(QUrl.fromLocalFile(html_path))
             self._distribution_layout.addWidget(view)

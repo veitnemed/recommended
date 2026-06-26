@@ -6,6 +6,27 @@
 
 Desktop GUI должен выглядеть спокойно, минималистично и цельно: тёмный графитовый фон, мягкие карточки, приглушённые рамки, читаемая типографика и умеренный зелёно-бирюзовый акцент.
 
+## Code-level contract
+
+Источник базовых style values в коде — `desktop/theme.py`.
+
+В `theme.py` живут общие design tokens:
+
+- цвета фона, карточек, вложенных блоков, рамок, текста и акцента;
+- спокойные акценты IMDb/КП;
+- базовые размеры шрифтов;
+- радиусы карточек, чипов, input/button и fallback-bars;
+- общие spacing/padding tokens;
+- builder-функции QSS для main app, score dialog, watched detail card и analytics.
+
+Правила:
+
+- новые hardcoded цвета, `font-size`, `border-radius` и повторяющиеся spacing values в GUI-коде не добавлять без причины;
+- если значение относится к общей палитре/типографике/радиусу — сначала добавить или переиспользовать token из `desktop/theme.py`;
+- layout-правки не смешивать с theme-refactor: `addStretch`, `QSizePolicy`, `setFixedSize`, poster sync и resize logic менять отдельной задачей;
+- feature-задачи не должны трогать QSS/layout, кроме минимального wiring нового виджета;
+- локальные geometry-константы конкретного виджета могут оставаться рядом с виджетом, если это не общий visual token.
+
 ## Палитра
 
 | Назначение | Цвет |
@@ -176,4 +197,3 @@ Layout-правила обязательны при GUI-polish. Точечные
 | короткий title + короткое описание | KPI: целое и дробное значение |
 | длинный title (2–3 строки) | dense row с длинным списком тайтлов |
 | без IMDb/КП / без постера | fallback без Plotly/WebEngine |
-

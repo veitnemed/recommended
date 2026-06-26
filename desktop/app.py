@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.analytics_view import AnalyticsView
+from desktop.theme import FONT_FAMILY, build_app_style, build_score_edit_dialog_style
 from desktop.watched_view import (
     SORT_OPTIONS,
     USER_SCORE_MAX,
@@ -47,225 +48,8 @@ from desktop.watched_view import (
     validate_score_edit_entry,
 )
 
-DARK_STYLE = """
-QMainWindow, QWidget {
-    background-color: #0f0f10;
-    color: #f4f4f5;
-    font-family: "Segoe UI", Arial, sans-serif;
-    font-size: 13px;
-}
-QLineEdit, QComboBox {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    padding: 8px 10px;
-    color: #f4f4f5;
-    selection-background-color: #10a37f;
-}
-QLineEdit:focus, QComboBox:focus {
-    border: 1px solid #10a37f;
-}
-QComboBox::drop-down {
-    border: none;
-    width: 24px;
-}
-QComboBox QAbstractItemView {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    color: #f4f4f5;
-    selection-background-color: #1f3f36;
-}
-QListWidget {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 16px;
-    padding: 6px;
-    outline: none;
-}
-QListWidget#watchedList {
-    padding: 8px;
-}
-QListWidget::item {
-    padding: 10px 12px;
-    border-radius: 10px;
-    color: #d4d4d8;
-    margin: 1px 0;
-}
-QListWidget::item:selected {
-    background-color: #1f3f36;
-    color: #f4f4f5;
-}
-QListWidget::item:selected:!active {
-    background-color: #1f3f36;
-    color: #f4f4f5;
-}
-QListWidget::item:hover {
-    background-color: #1c1c1f;
-}
-QLineEdit#watchedSearch {
-    font-size: 14px;
-}
-QComboBox#watchedSort {
-    font-size: 13px;
-}
-QScrollArea {
-    border: none;
-    background-color: transparent;
-}
-QStatusBar {
-    background-color: #0f0f10;
-    color: #a1a1aa;
-    border-top: 1px solid #2a2a2e;
-}
-QMenu {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    padding: 6px;
-    color: #f4f4f5;
-}
-QMenu::item {
-    padding: 8px 14px;
-    border-radius: 8px;
-}
-QMenu::item:selected {
-    background-color: #1f3f36;
-}
-QSplitter::handle {
-    background-color: #0f0f10;
-}
-QSplitter::handle:hover {
-    background-color: #2a2a2e;
-}
-QScrollBar:vertical {
-    background: #0f0f10;
-    width: 10px;
-    margin: 2px;
-}
-QScrollBar::handle:vertical {
-    background: #2a2a2e;
-    border-radius: 5px;
-    min-height: 28px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #3f3f46;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0;
-}
-QScrollBar:horizontal {
-    background: #0f0f10;
-    height: 10px;
-    margin: 2px;
-}
-QScrollBar::handle:horizontal {
-    background: #2a2a2e;
-    border-radius: 5px;
-    min-width: 28px;
-}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    width: 0;
-}
-QTabWidget::pane {
-    border: none;
-}
-QTabBar::tab {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    color: #a1a1aa;
-    padding: 9px 16px;
-    margin-right: 6px;
-}
-QTabBar::tab:selected {
-    background-color: #1c1c1f;
-    color: #f4f4f5;
-    border-color: #10a37f;
-}
-QTabBar::tab:hover {
-    background-color: #202024;
-    color: #f4f4f5;
-}
-"""
-
-
-SCORE_EDIT_DIALOG_STYLE = """
-QDialog#scoreEditDialog {
-    background-color: #0f0f10;
-    font-family: "Segoe UI", Arial, sans-serif;
-}
-QFrame#scoreEditCard {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 18px;
-}
-QLabel#scoreEditTitle {
-    background: transparent;
-    color: #f4f4f5;
-    font-size: 18px;
-    font-weight: 700;
-}
-QLabel#scoreEditMovieTitle {
-    background: transparent;
-    color: #f4f4f5;
-    font-size: 14px;
-    font-weight: 600;
-}
-QLabel#scoreEditCurrent,
-QLabel#scoreEditFieldLabel {
-    background: transparent;
-    color: #a1a1aa;
-    font-size: 12px;
-}
-QDoubleSpinBox#scoreEditSpin {
-    background-color: #111113;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    color: #f4f4f5;
-    font-size: 18px;
-    font-weight: 600;
-    padding: 7px 10px;
-}
-QDoubleSpinBox#scoreEditSpin:focus {
-    border: 1px solid #10a37f;
-}
-QDoubleSpinBox#scoreEditSpin::up-button,
-QDoubleSpinBox#scoreEditSpin::down-button {
-    background-color: #1c1c1f;
-    border: none;
-    width: 22px;
-}
-QDoubleSpinBox#scoreEditSpin::up-button:hover,
-QDoubleSpinBox#scoreEditSpin::down-button:hover {
-    background-color: #27272a;
-}
-QDialogButtonBox {
-    background: transparent;
-}
-QPushButton {
-    background-color: #1c1c1f;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    color: #f4f4f5;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 8px 14px;
-    min-width: 92px;
-}
-QPushButton:hover {
-    background-color: #27272a;
-    border-color: #3f3f46;
-}
-QPushButton#scoreEditSaveButton {
-    background-color: #10a37f;
-    border-color: #10a37f;
-    color: #f4f4f5;
-}
-QPushButton#scoreEditSaveButton:hover {
-    background-color: #13b98f;
-    border-color: #13b98f;
-}
-"""
+DARK_STYLE = build_app_style()
+SCORE_EDIT_DIALOG_STYLE = build_score_edit_dialog_style()
 
 
 class ScoreEditDialog(QDialog):
@@ -562,7 +346,7 @@ def _prepare_webengine() -> None:
 def main() -> None:
     _prepare_webengine()
     app = QApplication(sys.argv)
-    app.setFont(QFont("Segoe UI", 10))
+    app.setFont(QFont(FONT_FAMILY, 10))
     window = WatchedMoviesWindow()
     window.show()
     sys.exit(app.exec())

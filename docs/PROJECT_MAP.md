@@ -149,6 +149,7 @@ PyQt desktop GUI для watched-базы и read-only аналитики.
 - [desktop/watched_view.py](../desktop/watched_view.py) - watched-список, read-only карточка выбранного тайтла и helpers отображения.
 - [desktop/analytics_view.py](../desktop/analytics_view.py) - вкладка `Аналитика`.
 - [desktop/plotly_charts.py](../desktop/plotly_charts.py) - helpers для Plotly-графика, если доступен WebEngine.
+- [desktop/theme.py](../desktop/theme.py) - code-level style tokens и QSS builders для PyQt desktop GUI.
 
 Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этапы миграции и приоритеты: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Desktop GUI не должен напрямую писать dataset JSON и не должен запускать обучение.
 

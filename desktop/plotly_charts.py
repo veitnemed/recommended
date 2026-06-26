@@ -4,14 +4,27 @@ from __future__ import annotations
 
 from html import escape
 
+from desktop.theme import (
+    COLOR_ACCENT,
+    COLOR_ACCENT_PLOT_HOVER,
+    COLOR_BORDER,
+    COLOR_CARD,
+    COLOR_CARD_ALT,
+    COLOR_SURFACE,
+    COLOR_TEXT,
+    COLOR_TEXT_SECONDARY,
+    FONT_FAMILY,
+    FONT_FAMILY_FALLBACK,
+)
 
-CHART_BG = "#171719"
-PLOT_BG = "#111113"
-TEXT_COLOR = "#f4f4f5"
-MUTED_TEXT = "#a1a1aa"
-GRID_COLOR = "#2a2a2e"
-BAR_COLOR = "#10a37f"
-BAR_HOVER_COLOR = "#35caa5"
+CHART_BG = COLOR_CARD
+PLOT_BG = COLOR_SURFACE
+TEXT_COLOR = COLOR_TEXT
+MUTED_TEXT = COLOR_TEXT_SECONDARY
+GRID_COLOR = COLOR_BORDER
+BAR_COLOR = COLOR_ACCENT
+BAR_HOVER_COLOR = COLOR_ACCENT_PLOT_HOVER
+PLOT_FONT_FAMILY = f"{FONT_FAMILY}, {FONT_FAMILY_FALLBACK}"
 SCORE_CHART_HEIGHT = 280
 SCORE_DISTRIBUTION_CHART_HEIGHT = 280
 
@@ -59,13 +72,13 @@ def build_score_distribution_figure(rows: list[dict]):
     fig.update_layout(
         paper_bgcolor=CHART_BG,
         plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": "Segoe UI, Arial, sans-serif", "size": 12},
+        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
         height=SCORE_DISTRIBUTION_CHART_HEIGHT,
         margin={"l": 48, "r": 12, "t": 6, "b": 48},
         bargap=0.28,
         hoverlabel={
-            "bgcolor": "#1c1c1f",
-            "bordercolor": "#2a2a2e",
+            "bgcolor": COLOR_CARD_ALT,
+            "bordercolor": GRID_COLOR,
             "font": {"color": TEXT_COLOR, "size": 12},
         },
         xaxis={
@@ -156,11 +169,11 @@ def build_score_count_figure(points: list[dict]):
                 x=scores,
                 y=counts,
                 mode="lines+markers",
-                line={"color": "#10a37f", "width": 2, "shape": "spline"},
+                line={"color": BAR_COLOR, "width": 2, "shape": "spline"},
                 marker={
                     "size": 9,
                     "color": BAR_COLOR,
-                    "line": {"color": "#35caa5", "width": 1},
+                    "line": {"color": BAR_HOVER_COLOR, "width": 1},
                 },
                 hovertext=hover_texts,
                 hovertemplate="%{hovertext}<extra></extra>",
@@ -170,12 +183,12 @@ def build_score_count_figure(points: list[dict]):
     fig.update_layout(
         paper_bgcolor=CHART_BG,
         plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": "Segoe UI, Arial, sans-serif", "size": 12},
+        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
         height=SCORE_CHART_HEIGHT,
         margin={"l": 48, "r": 12, "t": 6, "b": 48},
         hoverlabel={
-            "bgcolor": "#1c1c1f",
-            "bordercolor": "#2a2a2e",
+            "bgcolor": COLOR_CARD_ALT,
+            "bordercolor": GRID_COLOR,
             "font": {"color": TEXT_COLOR, "size": 12},
         },
         xaxis={

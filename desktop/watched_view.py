@@ -6,6 +6,22 @@ from copy import deepcopy
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
+from desktop.theme import (
+    COLOR_ACCENT,
+    COLOR_BORDER,
+    COLOR_IMDB_ACCENT,
+    COLOR_KP_ACCENT,
+    COLOR_SURFACE,
+    COLOR_TEXT,
+    COLOR_TEXT_SECONDARY,
+    FONT_FAMILY,
+    FONT_RATING_LABEL_POINT,
+    FONT_RATING_VALUE_POINT,
+    TRANSPARENT_STYLE,
+    build_detail_card_style,
+    build_poster_image_style,
+    build_poster_placeholder_style,
+)
 from storage import data as storage_data
 from web.export import build_export_lookup_cache, build_watched_movie_card
 
@@ -227,7 +243,7 @@ def _rating_indicator_item(source: str, score: str, label: str) -> dict:
         "source": source,
         "label": label,
         "score": score,
-        "accent": "#8b949e" if source == "imdb" else "#87978f",
+        "accent": COLOR_IMDB_ACCENT if source == "imdb" else COLOR_KP_ACCENT,
     }
 
 
@@ -352,49 +368,9 @@ CARD_PADDING = 22
 RATING_CIRCLE_WIDGET_SIZE = 88
 RATING_CIRCLE_DIAMETER = 78
 
-POSTER_PLACEHOLDER_STYLE = (
-    "background-color: #171719; border: 1px solid #2a2a2e; border-radius: 16px; color: #71717a;"
-)
-POSTER_IMAGE_STYLE = "background: transparent; border-radius: 16px;"
-
-DETAIL_CARD_STYLE = """
-QFrame#detailCard {
-    background-color: #171719;
-    border: 1px solid #2a2a2e;
-    border-radius: 18px;
-}
-QLabel#detailTitle {
-    background: transparent;
-    color: #f4f4f5;
-    font-size: 26px;
-    font-weight: 700;
-    padding: 0 0 2px 0;
-}
-QLabel#genrePill {
-    background-color: #1c1c1f;
-    border: 1px solid #2a2a2e;
-    border-radius: 12px;
-    padding: 7px 12px;
-    color: #c7c7ce;
-    font-size: 14px;
-}
-QFrame#overviewBlock {
-    background-color: #1c1c1f;
-    border: 1px solid #2a2a2e;
-    border-radius: 16px;
-}
-QLabel#overviewTitle {
-    background: transparent;
-    color: #f4f4f5;
-    font-size: 16px;
-    font-weight: 600;
-}
-QLabel#overviewText {
-    background: transparent;
-    color: #d4d4d8;
-    font-size: 15px;
-}
-"""
+POSTER_PLACEHOLDER_STYLE = build_poster_placeholder_style()
+POSTER_IMAGE_STYLE = build_poster_image_style()
+DETAIL_CARD_STYLE = build_detail_card_style()
 
 
 def _clear_layout(layout) -> None:
@@ -424,7 +400,7 @@ def _make_pill_label(text: str, object_name: str, rich: bool = False):
 class RatingCircleIndicator:
     """Small circular score indicator with a radial progress ring."""
 
-    def __new__(cls, label: str, score=None, accent: str = "#10a37f"):
+    def __new__(cls, label: str, score=None, accent: str = COLOR_ACCENT):
         from PyQt6.QtWidgets import QWidget
 
         class _RatingCircleWidget(QWidget):
@@ -434,7 +410,7 @@ class RatingCircleIndicator:
                 self._score = score_value
                 self._accent = accent_color
                 self.setFixedSize(RATING_CIRCLE_WIDGET_SIZE, RATING_CIRCLE_WIDGET_SIZE)
-                self.setStyleSheet("background: transparent;")
+                self.setStyleSheet(TRANSPARENT_STYLE)
 
             def set_score(self, score_value) -> None:
                 self._score = score_value
@@ -453,11 +429,11 @@ class RatingCircleIndicator:
                 inner_rect = rect.adjusted(6, 6, -6, -6)
 
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor("#111113"))
+                painter.setBrush(QColor(COLOR_SURFACE))
                 painter.drawEllipse(rect)
 
                 ring_rect = rect.adjusted(5, 5, -5, -5)
-                track_pen = QPen(QColor("#2a2a2e"), 5)
+                track_pen = QPen(QColor(COLOR_BORDER), 5)
                 track_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 painter.setPen(track_pen)
                 painter.drawArc(ring_rect, 90 * 16, -360 * 16)
@@ -469,16 +445,16 @@ class RatingCircleIndicator:
                     painter.setPen(accent_pen)
                     painter.drawArc(ring_rect, 90 * 16, -int(360 * 16 * progress))
 
-                painter.setPen(QColor("#f4f4f5"))
-                value_font = QFont("Segoe UI")
-                value_font.setPointSize(16)
+                painter.setPen(QColor(COLOR_TEXT))
+                value_font = QFont(FONT_FAMILY)
+                value_font.setPointSize(FONT_RATING_VALUE_POINT)
                 value_font.setBold(True)
                 painter.setFont(value_font)
                 painter.drawText(inner_rect.adjusted(0, -8, 0, 0), Qt.AlignmentFlag.AlignCenter, _score_text(self._score))
 
-                painter.setPen(QColor("#a1a1aa"))
-                label_font = QFont("Segoe UI")
-                label_font.setPointSize(8)
+                painter.setPen(QColor(COLOR_TEXT_SECONDARY))
+                label_font = QFont(FONT_FAMILY)
+                label_font.setPointSize(FONT_RATING_LABEL_POINT)
                 label_font.setBold(True)
                 painter.setFont(label_font)
                 painter.drawText(inner_rect.adjusted(0, 38, 0, -4), Qt.AlignmentFlag.AlignCenter, self._label)
@@ -502,7 +478,7 @@ def _make_meta_pill(item: dict):
     return RatingCircleIndicator(
         item.get("label", ""),
         item.get("score"),
-        item.get("accent", "#10a37f"),
+        item.get("accent", COLOR_ACCENT),
     )
 
 
@@ -571,7 +547,7 @@ class WatchedDetailCard:
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
 
         self._info_column_widget = QWidget()
-        self._info_column_widget.setStyleSheet("background: transparent;")
+        self._info_column_widget.setStyleSheet(TRANSPARENT_STYLE)
         self._info_column_widget.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Minimum,
@@ -591,16 +567,16 @@ class WatchedDetailCard:
         )
 
         metrics_row_widget = QWidget()
-        metrics_row_widget.setStyleSheet("background: transparent;")
+        metrics_row_widget.setStyleSheet(TRANSPARENT_STYLE)
         self._metrics_row_widget = metrics_row_widget
         self._metrics_row = QHBoxLayout(metrics_row_widget)
         self._metrics_row.setContentsMargins(0, 0, 0, 0)
         self._metrics_row.setSpacing(10)
 
-        self._score_indicator = RatingCircleIndicator("моя", None, "#10a37f")
+        self._score_indicator = RatingCircleIndicator("моя", None, COLOR_ACCENT)
 
         self._meta_pills_widget = QWidget()
-        self._meta_pills_widget.setStyleSheet("background: transparent;")
+        self._meta_pills_widget.setStyleSheet(TRANSPARENT_STYLE)
         self._meta_pills_layout = QHBoxLayout(self._meta_pills_widget)
         self._meta_pills_layout.setContentsMargins(0, 0, 0, 0)
         self._meta_pills_layout.setSpacing(10)
@@ -610,7 +586,7 @@ class WatchedDetailCard:
         self._metrics_row.addStretch()
 
         self._genre_section = QWidget()
-        self._genre_section.setStyleSheet("background: transparent;")
+        self._genre_section.setStyleSheet(TRANSPARENT_STYLE)
         self._genre_pills_layout = QVBoxLayout(self._genre_section)
         self._genre_pills_layout.setContentsMargins(0, 0, 0, 0)
         self._genre_pills_layout.setSpacing(8)
