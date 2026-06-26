@@ -176,6 +176,45 @@ def filter_entries_by_year(
     return result
 
 
+GENRE_FILTER_ALL = "Все жанры"
+
+
+def _entry_genres(entry: WatchedEntry) -> list[str]:
+    _key, _movie, card = entry
+    genres = card.get("genres") or []
+    if isinstance(genres, str):
+        genres = [genres]
+    result: list[str] = []
+    for genre in genres:
+        text = str(genre).strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def get_available_genres(entries: list[WatchedEntry]) -> list[str]:
+    """Return sorted genre labels present in watched entries."""
+    genres: set[str] = set()
+    for entry in entries:
+        genres.update(_entry_genres(entry))
+    return sorted(genres, key=str.casefold)
+
+
+def filter_entries_by_genre(entries: list[WatchedEntry], genre: str | None = None) -> list[WatchedEntry]:
+    """Return entries containing the selected watched-card genre."""
+    if genre is None:
+        return list(entries)
+    selected = str(genre).strip()
+    if selected == "" or selected == GENRE_FILTER_ALL:
+        return list(entries)
+
+    result: list[WatchedEntry] = []
+    for entry in entries:
+        if selected in _entry_genres(entry):
+            result.append(entry)
+    return result
+
+
 def sort_entries(entries: list[WatchedEntry], sort_key: str) -> list[WatchedEntry]:
     """Return a sorted copy of entries without mutating source data."""
     items = list(entries)
@@ -203,11 +242,13 @@ def apply_view(
     max_score: float | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    genre: str | None = None,
 ) -> list[WatchedEntry]:
     """Filter and sort entries for display."""
     filtered = filter_by_title(entries, query)
     filtered = filter_entries_by_user_score(filtered, min_score, max_score)
     filtered = filter_entries_by_year(filtered, year_from, year_to)
+    filtered = filter_entries_by_genre(filtered, genre)
     return sort_entries(filtered, sort_key)
 
 
@@ -230,8 +271,8 @@ def format_user_score_display(user_score) -> str:
 USER_SCORE_MIN = 0.0
 USER_SCORE_MAX = 10.0
 USER_SCORE_STEP = 0.1
-YEAR_FILTER_MIN = 1900
-YEAR_FILTER_MAX = 2100
+YEAR_FILTER_MIN = 1980
+YEAR_FILTER_MAX = date.today().year
 YEAR_FILTER_DEFAULT_FROM = 2000
 YEAR_FILTER_DEFAULT_TO = date.today().year
 
@@ -415,10 +456,11 @@ def format_watched_list_status(
     query: str = "",
     has_score_filter: bool = False,
     has_year_filter: bool = False,
+    has_genre_filter: bool = False,
 ) -> str:
     """Status bar text for watched list filter results."""
     normalized = query.strip()
-    has_filter = bool(normalized) or has_score_filter or has_year_filter
+    has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter
     if visible_count == 0:
         return "Ничего не найдено" if has_filter else "Список пуст"
     if has_filter:

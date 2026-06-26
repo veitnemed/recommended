@@ -41,6 +41,7 @@ from desktop.theme import (
     build_score_edit_dialog_style,
 )
 from desktop.watched_view import (
+    GENRE_FILTER_ALL,
     SORT_OPTIONS,
     USER_SCORE_MAX,
     USER_SCORE_MIN,
@@ -56,6 +57,7 @@ from desktop.watched_view import (
     format_save_user_score_status,
     format_user_score_display,
     format_watched_list_status,
+    get_available_genres,
     get_user_score_spin_value,
     load_watched_entries,
     save_watched_user_score,
@@ -333,6 +335,7 @@ class WatchedMoviesWindow(QMainWindow):
 
         layout.addWidget(self._build_score_filter_panel())
         layout.addWidget(self._build_year_filter_panel())
+        layout.addWidget(self._build_genre_filter_panel())
 
         self._list_widget = QListWidget()
         self._list_widget.setObjectName("watchedList")
@@ -471,6 +474,33 @@ class WatchedMoviesWindow(QMainWindow):
         self._update_year_range_label()
         self._on_filters_changed()
 
+    def _build_genre_filter_panel(self) -> QWidget:
+        frame = QFrame()
+        frame.setObjectName("watchedGenreFilter")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(8)
+
+        title = QLabel("Жанр")
+        title.setObjectName("watchedGenreFilterTitle")
+        layout.addWidget(title)
+
+        self._genre_combo = QComboBox()
+        self._genre_combo.setObjectName("watchedGenre")
+        self._genre_combo.addItem(GENRE_FILTER_ALL, None)
+        for genre in get_available_genres(self._entries):
+            self._genre_combo.addItem(genre, genre)
+        self._genre_combo.currentIndexChanged.connect(self._on_filters_changed)
+        layout.addWidget(self._genre_combo)
+        return frame
+
+    def _selected_genre_filter(self) -> str | None:
+        genre = self._genre_combo.currentData()
+        return genre if isinstance(genre, str) else None
+
+    def _genre_filter_active(self) -> bool:
+        return self._selected_genre_filter() is not None
+
     def _build_right_panel(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -565,6 +595,7 @@ class WatchedMoviesWindow(QMainWindow):
         query = self._search_input.text()
         min_score, max_score = self._score_filter_range()
         year_from, year_to = self._year_filter_range()
+        genre = self._selected_genre_filter()
         self._visible_entries = apply_view(
             self._entries,
             query,
@@ -573,6 +604,7 @@ class WatchedMoviesWindow(QMainWindow):
             max_score,
             year_from,
             year_to,
+            genre,
         )
 
         self._list_widget.blockSignals(True)
@@ -598,6 +630,7 @@ class WatchedMoviesWindow(QMainWindow):
                 self._search_input.text(),
                 self._score_filter_active(),
                 self._year_filter_active(),
+                self._genre_filter_active(),
             )
         )
 

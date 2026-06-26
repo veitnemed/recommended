@@ -202,16 +202,85 @@ def test_filter_entries_by_year_swaps_invalid_range() -> None:
     assert [entry[0] for entry in filtered] == ["Alpha", "Charlie"]
 
 
-def test_apply_view_combines_title_score_year_filter_and_sort() -> None:
+def test_get_available_genres_empty() -> None:
+    from desktop.watched_view import get_available_genres
+
+    assert get_available_genres([]) == []
+
+
+def test_get_available_genres_sorts_and_hides_empty_duplicates() -> None:
+    from desktop.watched_view import get_available_genres
+
+    entries = [
+        ("Alpha", {}, {"title": "Alpha", "genres": ["Драма", "Криминал", "Драма"]}),
+        ("Bravo", {}, {"title": "Bravo", "genres": ["Комедия", "", "  "]}),
+        ("Charlie", {}, {"title": "Charlie"}),
+    ]
+
+    assert get_available_genres(entries) == ["Драма", "Комедия", "Криминал"]
+
+
+def test_filter_entries_by_genre_no_filter_returns_all() -> None:
+    from desktop.watched_view import GENRE_FILTER_ALL, filter_entries_by_genre
+
+    entries = [
+        ("Alpha", {}, {"title": "Alpha", "genres": ["Драма"]}),
+        ("Bravo", {}, {"title": "Bravo", "genres": ["Комедия"]}),
+    ]
+
+    assert filter_entries_by_genre(entries, None) == entries
+    assert filter_entries_by_genre(entries, GENRE_FILTER_ALL) == entries
+
+
+def test_filter_entries_by_genre_matches_selected_genre() -> None:
+    from desktop.watched_view import filter_entries_by_genre
+
+    entries = [
+        ("Alpha", {}, {"title": "Alpha", "genres": ["Драма", "Криминал"]}),
+        ("Bravo", {}, {"title": "Bravo", "genres": ["Комедия"]}),
+        ("Charlie", {}, {"title": "Charlie"}),
+    ]
+
+    filtered = filter_entries_by_genre(entries, "Драма")
+
+    assert [entry[0] for entry in filtered] == ["Alpha"]
+
+
+def test_filter_entries_by_genre_missing_genre_returns_empty() -> None:
+    from desktop.watched_view import filter_entries_by_genre
+
+    entries = [
+        ("Alpha", {}, {"title": "Alpha", "genres": ["Драма"]}),
+        ("No Genre", {}, {"title": "No Genre"}),
+    ]
+
+    assert filter_entries_by_genre(entries, "Фантастика") == []
+
+
+def test_apply_view_combines_title_score_year_genre_filter_and_sort() -> None:
     from desktop.watched_view import apply_view
 
     entries = [
         *_make_entries(),
-        ("Bravo Low", _make_movie("Bravo Low", 6.0, 2017, 7.0), {"title": "Bravo Low", "user_score": 6.0, "year": 2017}),
-        ("Bravo New", _make_movie("Bravo New", 8.5, 2024, 7.0), {"title": "Bravo New", "user_score": 8.5, "year": 2024}),
+        (
+            "Bravo Low",
+            _make_movie("Bravo Low", 6.0, 2017, 7.0),
+            {"title": "Bravo Low", "user_score": 6.0, "year": 2017, "genres": ["Драма"]},
+        ),
+        (
+            "Bravo New",
+            _make_movie("Bravo New", 8.5, 2024, 7.0),
+            {"title": "Bravo New", "user_score": 8.5, "year": 2024, "genres": ["Драма"]},
+        ),
+        (
+            "Bravo Genre",
+            _make_movie("Bravo Genre", 8.2, 2021, 7.0),
+            {"title": "Bravo Genre", "user_score": 8.2, "year": 2021, "genres": ["Комедия"]},
+        ),
     ]
+    entries[1][2]["genres"] = ["Драма"]
 
-    filtered = apply_view(entries, "bravo", "user_score", 7.0, 10.0, 2018, 2023)
+    filtered = apply_view(entries, "bravo", "user_score", 7.0, 10.0, 2018, 2023, "Драма")
 
     assert [entry[0] for entry in filtered] == ["Bravo"]
 
@@ -230,6 +299,20 @@ def test_apply_view_sorts_after_year_filter() -> None:
     filtered = apply_view(_make_entries(), "", "year", 0.0, 10.0, 2019, 2022)
 
     assert [entry[0] for entry in filtered] == ["Charlie", "Alpha"]
+
+
+def test_apply_view_sorts_after_genre_filter() -> None:
+    from desktop.watched_view import apply_view
+
+    entries = [
+        ("Older", {}, {"title": "Older", "user_score": 7.0, "year": 2018, "genres": ["Драма"]}),
+        ("Newer", {}, {"title": "Newer", "user_score": 9.0, "year": 2022, "genres": ["Драма"]}),
+        ("Other", {}, {"title": "Other", "user_score": 10.0, "year": 2023, "genres": ["Комедия"]}),
+    ]
+
+    filtered = apply_view(entries, "", "user_score", 0.0, 10.0, 2000, 2026, "Драма")
+
+    assert [entry[0] for entry in filtered] == ["Newer", "Older"]
 
 
 def test_sort_by_user_score() -> None:
@@ -425,9 +508,11 @@ def test_format_watched_list_status() -> None:
     assert format_watched_list_status(3, 12, "alpha") == "Показано 3 из 12"
     assert format_watched_list_status(3, 12, "", True) == "Показано 3 из 12"
     assert format_watched_list_status(3, 12, "", False, True) == "Показано 3 из 12"
+    assert format_watched_list_status(3, 12, "", False, False, True) == "Показано 3 из 12"
     assert format_watched_list_status(0, 12, "missing") == "Ничего не найдено"
     assert format_watched_list_status(0, 12, "", True) == "Ничего не найдено"
     assert format_watched_list_status(0, 12, "", False, True) == "Ничего не найдено"
+    assert format_watched_list_status(0, 12, "", False, False, True) == "Ничего не найдено"
     assert format_watched_list_status(0, 0, "") == "Список пуст"
 
 

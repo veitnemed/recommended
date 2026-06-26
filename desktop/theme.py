@@ -158,17 +158,24 @@ QComboBox#watchedSort {{
     font-size: {FONT_SMALL}px;
 }}
 QFrame#watchedScoreFilter,
-QFrame#watchedYearFilter {{
+QFrame#watchedYearFilter,
+QFrame#watchedGenreFilter {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_INPUT}px;
 }}
 QLabel#watchedScoreFilterTitle,
-QLabel#watchedYearFilterTitle {{
+QLabel#watchedYearFilterTitle,
+QLabel#watchedGenreFilterTitle {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {FONT_SMALL}px;
     font-weight: 600;
+}}
+QComboBox#watchedGenre {{
+    background-color: {COLOR_SURFACE};
+    font-size: {FONT_SMALL}px;
+    padding: 5px 8px;
 }}
 QLabel#watchedScoreFilterLabel,
 QLabel#watchedYearFilterLabel {{
