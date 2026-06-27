@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -647,6 +648,48 @@ POSTER_PLACEHOLDER_STYLE = build_poster_placeholder_style()
 POSTER_IMAGE_STYLE = build_poster_image_style()
 DETAIL_CARD_STYLE = build_detail_card_style()
 
+
+@dataclass(frozen=True)
+class DetailCardLayoutProfile:
+    """Layout sizing for WatchedDetailCard (full watched view vs compact add-preview)."""
+
+    poster_width: int
+    poster_height: int
+    poster_row_spacing: int
+    card_padding: int
+    rating_widget_size: int
+    rating_circle_diameter: int
+    rating_value_font_point: int
+    rating_label_font_point: int
+    show_user_score: bool = True
+    include_bottom_stretch: bool = True
+
+
+DETAIL_CARD_LAYOUT_PROFILE = DetailCardLayoutProfile(
+    poster_width=POSTER_WIDTH,
+    poster_height=POSTER_HEIGHT,
+    poster_row_spacing=POSTER_TOP_ROW_SPACING,
+    card_padding=CARD_PADDING,
+    rating_widget_size=RATING_CIRCLE_WIDGET_SIZE,
+    rating_circle_diameter=RATING_CIRCLE_DIAMETER,
+    rating_value_font_point=FONT_RATING_VALUE_POINT,
+    rating_label_font_point=FONT_RATING_LABEL_POINT,
+    show_user_score=True,
+)
+
+ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
+    poster_width=POSTER_WIDTH // 2,
+    poster_height=POSTER_HEIGHT // 2,
+    poster_row_spacing=max(10, POSTER_TOP_ROW_SPACING // 2),
+    card_padding=14,
+    rating_widget_size=50,
+    rating_circle_diameter=44,
+    rating_value_font_point=11,
+    rating_label_font_point=7,
+    show_user_score=False,
+    include_bottom_stretch=False,
+)
+
 _thumb_pixmap_cache: dict[str, object] = {}
 
 
@@ -837,7 +880,17 @@ def _make_pill_label(text: str, object_name: str, rich: bool = False):
 class RatingCircleIndicator:
     """Small circular score indicator with a radial progress ring."""
 
-    def __new__(cls, label: str, score=None, accent: str = COLOR_ACCENT):
+    def __new__(
+        cls,
+        label: str,
+        score=None,
+        accent: str = COLOR_ACCENT,
+        *,
+        widget_size: int = RATING_CIRCLE_WIDGET_SIZE,
+        circle_diameter: int = RATING_CIRCLE_DIAMETER,
+        value_font_point: int = FONT_RATING_VALUE_POINT,
+        label_font_point: int = FONT_RATING_LABEL_POINT,
+    ):
         from PyQt6.QtWidgets import QWidget
 
         class _RatingCircleWidget(QWidget):
@@ -846,7 +899,11 @@ class RatingCircleIndicator:
                 self._label = label_text
                 self._score = score_value
                 self._accent = accent_color
-                self.setFixedSize(RATING_CIRCLE_WIDGET_SIZE, RATING_CIRCLE_WIDGET_SIZE)
+                self._widget_size = widget_size
+                self._circle_diameter = circle_diameter
+                self._value_font_point = value_font_point
+                self._label_font_point = label_font_point
+                self.setFixedSize(self._widget_size, self._widget_size)
                 self.setStyleSheet(TRANSPARENT_STYLE)
 
             def set_score(self, score_value) -> None:
@@ -860,41 +917,53 @@ class RatingCircleIndicator:
                 painter = QPainter(self)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-                left = (self.width() - RATING_CIRCLE_DIAMETER) / 2
-                top = (self.height() - RATING_CIRCLE_DIAMETER) / 2
-                rect = QRectF(left, top, RATING_CIRCLE_DIAMETER, RATING_CIRCLE_DIAMETER)
-                inner_rect = rect.adjusted(6, 6, -6, -6)
+                left = (self.width() - self._circle_diameter) / 2
+                top = (self.height() - self._circle_diameter) / 2
+                rect = QRectF(left, top, self._circle_diameter, self._circle_diameter)
+                inner_pad = max(4, int(self._circle_diameter * 0.08))
+                inner_rect = rect.adjusted(inner_pad, inner_pad, -inner_pad, -inner_pad)
+                ring_pen_width = max(3, int(self._circle_diameter * 0.06))
 
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor(COLOR_SURFACE))
                 painter.drawEllipse(rect)
 
-                ring_rect = rect.adjusted(5, 5, -5, -5)
-                track_pen = QPen(QColor(COLOR_BORDER), 5)
+                ring_rect = rect.adjusted(ring_pen_width, ring_pen_width, -ring_pen_width, -ring_pen_width)
+                track_pen = QPen(QColor(COLOR_BORDER), ring_pen_width)
                 track_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 painter.setPen(track_pen)
                 painter.drawArc(ring_rect, 90 * 16, -360 * 16)
 
                 progress = _score_progress(self._score)
                 if progress > 0:
-                    accent_pen = QPen(QColor(self._accent), 5)
+                    accent_pen = QPen(QColor(self._accent), ring_pen_width)
                     accent_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                     painter.setPen(accent_pen)
                     painter.drawArc(ring_rect, 90 * 16, -int(360 * 16 * progress))
 
                 painter.setPen(QColor(COLOR_TEXT))
                 value_font = QFont(FONT_FAMILY)
-                value_font.setPointSize(FONT_RATING_VALUE_POINT)
+                value_font.setPointSize(self._value_font_point)
                 value_font.setBold(True)
                 painter.setFont(value_font)
-                painter.drawText(inner_rect.adjusted(0, -8, 0, 0), Qt.AlignmentFlag.AlignCenter, _score_text(self._score))
+                value_offset = max(4, int(self._circle_diameter * 0.1))
+                painter.drawText(
+                    inner_rect.adjusted(0, -value_offset, 0, 0),
+                    Qt.AlignmentFlag.AlignCenter,
+                    _score_text(self._score),
+                )
 
                 painter.setPen(QColor(COLOR_TEXT_SECONDARY))
                 label_font = QFont(FONT_FAMILY)
-                label_font.setPointSize(FONT_RATING_LABEL_POINT)
+                label_font.setPointSize(self._label_font_point)
                 label_font.setBold(True)
                 painter.setFont(label_font)
-                painter.drawText(inner_rect.adjusted(0, 38, 0, -4), Qt.AlignmentFlag.AlignCenter, self._label)
+                label_offset = max(18, int(self._circle_diameter * 0.48))
+                painter.drawText(
+                    inner_rect.adjusted(0, label_offset, 0, -4),
+                    Qt.AlignmentFlag.AlignCenter,
+                    self._label,
+                )
 
         return _RatingCircleWidget(label, score, accent)
 
@@ -911,19 +980,27 @@ def _score_text(score) -> str:
     return format_user_score_display(score)
 
 
-def _make_meta_pill(item: dict):
+def _make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE):
     return RatingCircleIndicator(
         item.get("label", ""),
         item.get("score"),
         item.get("accent", COLOR_ACCENT),
+        widget_size=profile.rating_widget_size,
+        circle_diameter=profile.rating_circle_diameter,
+        value_font_point=profile.rating_value_font_point,
+        label_font_point=profile.rating_label_font_point,
     )
 
 
-def _fill_meta_pill_row(layout, items: list[dict]) -> None:
+def _fill_meta_pill_row(
+    layout,
+    items: list[dict],
+    profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE,
+) -> None:
     _clear_layout(layout)
     layout.setSpacing(8)
     for item in items:
-        layout.addWidget(_make_meta_pill(item))
+        layout.addWidget(_make_meta_pill(item, profile))
     layout.addStretch()
 
 
@@ -946,7 +1023,7 @@ def _fill_pill_rows(container_layout, labels: list[str], object_name: str) -> No
 class WatchedDetailCard:
     """Detail card widget for the selected watched title."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, profile: DetailCardLayoutProfile | None = None) -> None:
         from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import (
             QFrame,
@@ -957,6 +1034,7 @@ class WatchedDetailCard:
             QWidget,
         )
 
+        self._profile = profile or DETAIL_CARD_LAYOUT_PROFILE
         self._poster_source_pixmap = None
         self._local_poster_path: str | None = None
         card = self
@@ -972,15 +1050,20 @@ class WatchedDetailCard:
         self._frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         root = QVBoxLayout(self._frame)
-        root.setContentsMargins(CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING)
+        root.setContentsMargins(
+            self._profile.card_padding,
+            self._profile.card_padding,
+            self._profile.card_padding,
+            self._profile.card_padding,
+        )
         root.setSpacing(OVERVIEW_SECTION_TOP_SPACING)
 
         top_row = QHBoxLayout()
-        top_row.setSpacing(POSTER_TOP_ROW_SPACING)
+        top_row.setSpacing(self._profile.poster_row_spacing)
 
         self._poster_label = QLabel("Нет постера")
         self._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._poster_label.setFixedSize(POSTER_WIDTH, POSTER_HEIGHT)
+        self._poster_label.setFixedSize(self._profile.poster_width, self._profile.poster_height)
         self._poster_label.setScaledContents(False)
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
         self._poster_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -1013,7 +1096,17 @@ class WatchedDetailCard:
         self._metrics_row.setContentsMargins(0, 0, 0, 0)
         self._metrics_row.setSpacing(10)
 
-        self._score_indicator = RatingCircleIndicator("моя", None, COLOR_ACCENT)
+        self._score_indicator = None
+        if self._profile.show_user_score:
+            self._score_indicator = RatingCircleIndicator(
+                "моя",
+                None,
+                COLOR_ACCENT,
+                widget_size=self._profile.rating_widget_size,
+                circle_diameter=self._profile.rating_circle_diameter,
+                value_font_point=self._profile.rating_value_font_point,
+                label_font_point=self._profile.rating_label_font_point,
+            )
 
         self._meta_pills_widget = QWidget()
         self._meta_pills_widget.setStyleSheet(TRANSPARENT_STYLE)
@@ -1021,7 +1114,8 @@ class WatchedDetailCard:
         self._meta_pills_layout.setContentsMargins(0, 0, 0, 0)
         self._meta_pills_layout.setSpacing(10)
 
-        self._metrics_row.addWidget(self._score_indicator, alignment=Qt.AlignmentFlag.AlignLeft)
+        if self._score_indicator is not None:
+            self._metrics_row.addWidget(self._score_indicator, alignment=Qt.AlignmentFlag.AlignLeft)
         self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
         self._metrics_row.addStretch()
 
@@ -1070,7 +1164,8 @@ class WatchedDetailCard:
         top_row.addWidget(self._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
         root.addLayout(top_row)
         root.addWidget(self._overview_frame)
-        root.addStretch(1)
+        if self._profile.include_bottom_stretch:
+            root.addStretch(1)
 
     @property
     def widget(self):
@@ -1083,17 +1178,25 @@ class WatchedDetailCard:
         frame_width = self._frame.width()
         if frame_width <= 0:
             return 0
-        return max(120, frame_width - POSTER_WIDTH - POSTER_TOP_ROW_SPACING - (2 * CARD_PADDING))
+        return max(
+            120,
+            frame_width
+            - self._profile.poster_width
+            - self._profile.poster_row_spacing
+            - (2 * self._profile.card_padding),
+        )
 
     def _sync_poster_display(self) -> None:
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QPixmap
 
+        poster_width = self._profile.poster_width
+        poster_height = self._profile.poster_height
         if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
             display_pixmap = fit_poster_pixmap_for_display(
                 self._poster_source_pixmap,
-                POSTER_WIDTH,
-                POSTER_HEIGHT,
+                poster_width,
+                poster_height,
             )
             width = max(display_pixmap.width(), 1)
             height = max(display_pixmap.height(), 1)
@@ -1103,7 +1206,7 @@ class WatchedDetailCard:
             self._poster_label.setPixmap(display_pixmap)
             return
 
-        self._poster_label.setFixedSize(POSTER_WIDTH, POSTER_HEIGHT)
+        self._poster_label.setFixedSize(poster_width, poster_height)
         if self._poster_label.pixmap() is None or self._poster_label.pixmap().isNull():
             self._poster_label.setPixmap(QPixmap())
             if self._poster_label.text() == "":
@@ -1176,23 +1279,27 @@ class WatchedDetailCard:
         self._set_poster_placeholder()
         self._set_local_poster_path(None)
         self._title_label.setText(title)
-        self._score_indicator.set_score(None)
-        _fill_meta_pill_row(self._meta_pills_layout, [])
+        if self._score_indicator is not None:
+            self._score_indicator.set_score(None)
+        _fill_meta_pill_row(self._meta_pills_layout, [], self._profile)
         self._meta_pills_widget.setVisible(False)
         _fill_pill_rows(self._genre_pills_layout, [], "genrePill")
         self._genre_section.setVisible(False)
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
+        self._metrics_row_widget.setVisible(self._profile.show_user_score)
         self._schedule_poster_height_sync()
 
     def show_entry(self, entry: WatchedEntry) -> None:
         _, movie, card = entry
         self._title_label.setText(card.get("title") or entry[0])
-        self._score_indicator.set_score(card.get("user_score"))
+        if self._score_indicator is not None:
+            self._score_indicator.set_score(card.get("user_score"))
 
         meta_pills = build_meta_pill_items(card)
-        _fill_meta_pill_row(self._meta_pills_layout, meta_pills)
+        _fill_meta_pill_row(self._meta_pills_layout, meta_pills, self._profile)
         self._meta_pills_widget.setVisible(len(meta_pills) > 0)
+        self._metrics_row_widget.setVisible(self._profile.show_user_score or len(meta_pills) > 0)
 
         detail_pills = build_detail_info_pill_labels(card)
         _fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")

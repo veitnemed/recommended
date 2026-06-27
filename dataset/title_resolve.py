@@ -49,6 +49,22 @@ def print_progress_step(source: str, status: str) -> None:
     print(f"{source}: {status}")
 
 
+ADD_TITLE_RESOLVE_PROGRESS_TOTAL = 7
+
+
+def _report_add_progress(
+    on_progress,
+    step: int,
+    source: str,
+    status: str,
+) -> None:
+    message = f"{source}: {status}"
+    if on_progress is not None:
+        on_progress(step, ADD_TITLE_RESOLVE_PROGRESS_TOTAL, message)
+        return
+    print_progress_step(source, status)
+
+
 def split_known_genres(genres: list) -> tuple[list, list]:
     """Разделяет жанры на известные модели и неизвестные подсказки."""
     mapping = raw_genres_to_dataset_genres(genres)
@@ -845,15 +861,25 @@ def get_sql_status(sql_data: dict | None, sql_identity: dict | None) -> str:
     return "найдено и принято"
 
 
-def resolve_title_data_for_add(title: str, country: str = "Россия") -> dict:
+def resolve_title_data_for_add(
+    title: str,
+    country: str = "Россия",
+    *,
+    on_progress=None,
+) -> dict:
     """Собирает defaults для добавления записи по приоритетам SQL -> KP -> TMDb -> ручной ввод."""
     title = api.normalize_text(title)
     country = api.normalize_text(country)
 
-    print_progress_step("IMDb dataset", "Поиск")
+    _report_add_progress(on_progress, 1, "IMDb dataset", "Поиск")
     sql_result = sql_search.search_title_in_sql(title, country)
     sql_data = sql_result["data"] if sql_result["ok"] else None
-    print_progress_step("IMDb dataset", "Успешно" if sql_data is not None else "Нет кандидатов")
+    _report_add_progress(
+        on_progress,
+        2,
+        "IMDb dataset",
+        "Успешно" if sql_data is not None else "Нет кандидатов",
+    )
 
     api_data = None
     last_api_error = None
@@ -862,7 +888,7 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
         (sql_data or {}).get("title"),
         (sql_data or {}).get("original_title"),
     ])
-    print_progress_step("KP API", "Ожидание ответа")
+    _report_add_progress(on_progress, 3, "KP API", "Ожидание ответа")
     for query in api_queries:
         api_result = api.find_series_raw(query, country)
         if api_result["ok"]:
@@ -871,29 +897,30 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
         last_api_error = api_result
     kp_status = get_kp_status(api_data, last_api_error)
     if kp_status == "найдено":
-        print_progress_step("KP API", "Успешно")
+        _report_add_progress(on_progress, 4, "KP API", "Успешно")
     elif kp_status == "ошибка":
-        print_progress_step("KP API", "Ошибка сети")
+        _report_add_progress(on_progress, 4, "KP API", "Ошибка сети")
     else:
-        print_progress_step("KP API", "Нет кандидатов")
+        _report_add_progress(on_progress, 4, "KP API", "Нет кандидатов")
 
     tmdb_data = None
     tmdb_error = None
     tmdb_status = "не найдено"
     if api_data is None:
-        print_progress_step("TMDb API", "Ожидание ответа")
+        _report_add_progress(on_progress, 5, "TMDb API", "Ожидание ответа")
         tmdb_result = search_tmdb_defaults_data(api_queries)
         tmdb_data = tmdb_result["data"]
         tmdb_error = tmdb_result["error"]
         tmdb_status = tmdb_result["status"]
         if tmdb_status == "найдено":
-            print_progress_step("TMDb API", "Успешно")
+            _report_add_progress(on_progress, 6, "TMDb API", "Успешно")
         elif tmdb_status == "ошибка":
-            print_progress_step("TMDb API", "Ошибка сети")
+            _report_add_progress(on_progress, 6, "TMDb API", "Ошибка сети")
         else:
-            print_progress_step("TMDb API", "Нет кандидатов")
+            _report_add_progress(on_progress, 6, "TMDb API", "Нет кандидатов")
     else:
-        print_progress_step("TMDb API", "Не требуется")
+        _report_add_progress(on_progress, 5, "TMDb API", "Не требуется")
+        _report_add_progress(on_progress, 6, "TMDb API", "Не требуется")
 
     api_identity_candidate = api_data if api_data is not None else tmdb_data
     sql_first_identity = None
@@ -938,6 +965,8 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
     }
     if sql_second_pass_status is not None:
         statuses["sql_second_pass"] = sql_second_pass_status
+
+    _report_add_progress(on_progress, 7, "Подготовка", "Готово")
 
     return {
         "title": title,

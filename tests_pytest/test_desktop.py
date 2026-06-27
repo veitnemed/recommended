@@ -79,20 +79,24 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
     assert "scoreEditSaveButton" in source
 
 
-def test_add_title_button_is_ui_stub_only() -> None:
+def test_add_title_button_opens_wizard_dialog() -> None:
     import desktop.app as app_module
+    import desktop.add_title_dialog as dialog_module
 
     source = inspect.getsource(app_module.WatchedMoviesWindow)
-    handler_source = inspect.getsource(app_module.WatchedMoviesWindow._show_add_title_stub)
+    handler_source = inspect.getsource(app_module.WatchedMoviesWindow._open_add_title_dialog)
+    dialog_source = inspect.getsource(dialog_module.AddTitleDialog)
 
     assert "watchedAddTitle" in source
     assert "+ Добавить тайтл" in source
-    assert "Добавление тайтла будет добавлено позже." in handler_source
-    assert "План: поиск по названию" in handler_source
-    assert "QMessageBox.information" in handler_source
-    assert "save_" not in handler_source
-    assert "update_dataset_record" not in handler_source
-    assert "load_watched_entries" not in handler_source
+    assert "AddTitleDialog" in handler_source
+    assert "save_result" in handler_source
+    assert "load_watched_entries" in handler_source
+    assert "_show_add_title_stub" not in source
+    assert "QStackedWidget" in dialog_source
+    assert "_show_search_page" in dialog_source
+    assert "_show_preview_page" in dialog_source
+    assert "Искать другой" in dialog_source
 
 
 def test_prepare_card_for_display_does_not_mutate_movie() -> None:

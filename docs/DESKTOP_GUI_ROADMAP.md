@@ -118,7 +118,7 @@ Pipeline для **каждого** нового графика:
 
 ### Задачи
 
-- [x] **3.0** UI-stub будущего добавления watched-тайтла — done (`+ Добавить тайтл` показывает заглушку, без записи данных).
+- [x] **3.0** UI-stub будущего добавления watched-тайтла — done (`+ Добавить тайтл` → wizard: search, progress, card confirm, save через service).
 - [x] **3.1** Удаление записи — done (ПКМ → «Удалить запись», preview dialog, подтверждение `DELETE`, `delete_watched_record()` через `desktop/watched_delete.py`).
 - [x] **3.2** Read-only сервисные пункты (опционально): «Открыть локальный постер», «Показать путь poster-cache» — done (`WatchedDetailCard`, `open_path_in_shell`).
 
@@ -232,8 +232,8 @@ TMDb build, массовые операции, сложный import.
 | 1 | A1 Analytics Plotly/KPI polish | 1 | done |
 | 2 | A2 Read-only poster actions в карточке | 1 | done |
 | 3 | A3 Status bar LOO MAE | 1 | next |
-| 4 | B1 Wizard «Добавить тайтл» (search + preview) | 3 | planned |
-| 5 | B2 Wizard save через service | 3 | planned |
+| 4 | B1 Wizard «Добавить тайтл» (search + preview) | 3 | done |
+| 5 | B2 Wizard save через service | 3 | done |
 | 6 | C4 Вкладка «Рекомендации» read-only | 5 | planned |
 | 7 | C1 Вкладка «Модель» KPI + LOO обучение | 4 | done |
 | 8 | C1.2 Baseline comparison + «Коротко» | 4 | next |

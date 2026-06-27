@@ -342,7 +342,7 @@ class WatchedMoviesWindow(QMainWindow):
 
         self._add_title_button = QPushButton("+ Добавить тайтл")
         self._add_title_button.setObjectName("watchedAddTitle")
-        self._add_title_button.clicked.connect(self._show_add_title_stub)
+        self._add_title_button.clicked.connect(self._open_add_title_dialog)
         layout.addWidget(self._add_title_button)
 
         self._search_input = QLineEdit()
@@ -592,12 +592,32 @@ class WatchedMoviesWindow(QMainWindow):
         layout.addWidget(self._genre_combo)
         return frame
 
-    def _show_add_title_stub(self) -> None:
-        QMessageBox.information(
-            self,
-            "Добавить тайтл",
-            "Добавление тайтла будет добавлено позже.\n\nПлан: поиск по названию → preview → подтверждение.",
-        )
+    def _open_add_title_dialog(self) -> None:
+        from desktop.add_title_dialog import AddTitleDialog
+
+        dialog = AddTitleDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        result = dialog.save_result
+        if result is None or result.ok is False:
+            return
+
+        added_key = result.title
+        self._entries = load_watched_entries()
+        self._analytics_view.update_entries(self._entries)
+        self._model_view.refresh()
+        self._refresh_list()
+
+        for index, (key, _, _) in enumerate(self._visible_entries):
+            if key == added_key:
+                self._list_widget.blockSignals(True)
+                self._list_widget.setCurrentRow(index)
+                self._list_widget.blockSignals(False)
+                self._detail_card.show_entry(self._visible_entries[index])
+                break
+
+        self.statusBar().showMessage(result.message or "Новая запись добавлена!", 5000)
 
     def _selected_genre_filter(self) -> str | None:
         genre = self._genre_combo.currentData()

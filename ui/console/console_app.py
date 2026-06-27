@@ -25,7 +25,7 @@ def run_console_app():
         model_metrics_status = storage_data.get_model_metrics_status()
         ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error, model_metrics_status.get("loo_mae"), model_metrics_status)
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
         if command == "0":
             break
         elif command == "1":
@@ -35,9 +35,11 @@ def run_console_app():
         elif command == "3":
             global_menu.open_model_menu()
         elif command == "4":
-            global_menu.open_extra_menu()
+            global_menu.open_genres_menu()
         elif command == "5":
-            global_menu.open_candidate_pool_menu()
+            global_menu.open_extra_menu()
         elif command == "6":
+            global_menu.open_candidate_pool_menu()
+        elif command == "7":
             global_menu.export_report()
             ui.press_enter()

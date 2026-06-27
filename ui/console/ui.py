@@ -54,9 +54,10 @@ def show_global_menu(movies_counter: int, error: int, kp_error: int, loo_mae=Non
     print(' 1 >> Данные')
     print(' 2 >> Обучение')
     print(' 3 >> Модель')
-    print(' 4 >> Дополнительно')
-    print(' 5 >> Пулл кандидатов')
-    print(' 6 >> Выгрузить отчёт')
+    print(' 4 >> Жанры')
+    print(' 5 >> Дополнительно')
+    print(' 6 >> Пулл кандидатов')
+    print(' 7 >> Выгрузить отчёт')
     print(' 0 >> Выход\n')
 
 
@@ -152,6 +153,13 @@ def show_efficiency_menu(movies_counter: int, error: int):
     print(' 7 >> Диагностика признаков / feature ablation')
     print(' 8 >> Эффективность жанровой разметки')
     print(' 0 >> Назад\n')
+
+
+def show_genres_menu():
+    """Печатает меню жанров модели."""
+    show_menu_title('ЖАНРЫ')
+    print(' 1 >> Показать все жанры')
+    print(' 0 >> Главное меню\n')
 
 
 def show_extra_menu(movies_counter: int, error: int):

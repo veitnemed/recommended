@@ -12,6 +12,7 @@ from ui.console import interface_funcs
 from ui.console import menu_state
 from ui.console import request
 from ui.console import rating_comparison
+from ui.console import genre_menu
 from ui.console import tags_menu
 from ui.console import ui
 from model import linear_regression_train
@@ -167,6 +168,21 @@ def open_model_menu():
         elif command == "3":
             interface_funcs.get_predict(weights)
             ui.press_enter()
+
+
+def open_genres_menu():
+    """Открывает меню жанров модели."""
+    while True:
+        ui.clean_terminal()
+        ui.show_genres_menu()
+
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 1)])
+        if command == "0":
+            return
+        if command == "1":
+            genre_menu.show_model_genres()
+
+        ui.press_enter()
 
 
 def open_extra_menu():

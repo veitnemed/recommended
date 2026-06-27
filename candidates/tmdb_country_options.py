@@ -66,6 +66,17 @@ COUNTRY_CODE_ORDER: list[str] = [
 ]
 
 
+ADD_TITLE_COUNTRY_ANY_LABEL = "Не важно"
+
+
+def add_title_country_combo_options() -> list[tuple[str, str]]:
+    """Return (label, value) pairs for add-title country selector."""
+    return [(ADD_TITLE_COUNTRY_ANY_LABEL, "")] + [
+        (option["label"], option["label"])
+        for option in country_options()
+    ]
+
+
 def country_options() -> list[dict[str, str]]:
     """Возвращает страны в порядке показа в UI."""
     return [
