@@ -180,6 +180,9 @@ def test_run_loo_training_saves_via_explicit_policy(monkeypatch) -> None:
     )
     monkeypatch.setattr(linear_regression_train, "print_baseline_comparison", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(linear_regression_train, "print_weights_summary", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_regression_train, "print_previous_saved_metrics_status", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_regression_train, "print_metrics_report", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(linear_regression_train, "print_explicit_loo_training_save_report", lambda *_args, **_kwargs: None)
 
     dataset = {
         "Alpha": _make_movie("Alpha", 8.0, 2020),
@@ -208,3 +211,54 @@ def test_run_loo_training_saves_via_explicit_policy(monkeypatch) -> None:
     assert metrics["loo_mae"] == 0.9
     assert metrics["is_stale"] is False
     assert saved_weights["bias"] == 0.77
+
+
+def test_execute_explicit_loo_training_reports_progress(monkeypatch) -> None:
+    from model import linear_regression_train
+
+    progress_events: list[tuple[int, int, str]] = []
+
+    def fake_calculate_linear_loo_mae(**_kwargs) -> float:
+        callback = _kwargs.get("progress_callback")
+        if callback is not None:
+            callback(1, 3, {"main_info": {"title": "Alpha"}})
+        return 0.75
+
+    def fake_train_ridge_for_benchmark(**_kwargs) -> dict:
+        return copy.deepcopy(constant.DEFAULT_WEIGHTS)
+
+    monkeypatch.setattr(linear_regression_train, "calculate_linear_loo_mae", fake_calculate_linear_loo_mae)
+    monkeypatch.setattr(linear_regression_train, "train_ridge_for_benchmark", fake_train_ridge_for_benchmark)
+    monkeypatch.setattr(
+        linear_regression_train.model,
+        "save_weights_after_explicit_loo_training",
+        lambda new_weights, new_loo_mae, **kwargs: {
+            "saved": True,
+            "previous_loo_mae": None,
+            "previous_is_stale": False,
+            "new_loo_mae": new_loo_mae,
+            "delta": None,
+        },
+    )
+
+    dataset = {
+        "Alpha": _make_movie("Alpha", 8.0, 2020),
+        "Bravo": _make_movie("Bravo", 7.0, 2019),
+        "Charlie": _make_movie("Charlie", 6.0, 2018),
+    }
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        root = Path(temp_root)
+        _patch_storage_paths(monkeypatch, root)
+        from storage import data as storage_data
+
+        storage_data.save_weights(constant.DEFAULT_WEIGHTS)
+        result = linear_regression_train.execute_explicit_loo_training(
+            dataset,
+            constant.DEFAULT_WEIGHTS,
+            on_progress=lambda current, total, message: progress_events.append((current, total, message)),
+        )
+
+    assert result["ok"] is True
+    assert len(progress_events) > 0
+    assert progress_events[-1][0] == progress_events[-1][1]

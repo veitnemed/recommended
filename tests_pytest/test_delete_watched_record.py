@@ -100,6 +100,7 @@ def test_delete_watched_record_removes_dataset_meta_and_poster_cache(monkeypatch
     assert result["deleted_dataset"] == 1
     assert result["deleted_meta"] == 1
     assert result["deleted_poster_cache"] == 1
+    assert result.get("deleted_poster_file", 0) == 0
     assert "Alpha" not in saved_dataset
     assert "Beta" in saved_dataset
     assert "Alpha" not in saved_meta

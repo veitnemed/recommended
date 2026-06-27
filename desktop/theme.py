@@ -34,6 +34,10 @@ COLOR_ADD_BUTTON_HOVER_TOP = "#327a62"
 COLOR_DELETE_BUTTON = "#7a3f3f"
 COLOR_DELETE_BUTTON_HOVER = "#8f4a4a"
 
+COLOR_STALE_BG = "#3a1f1f"
+COLOR_STALE_BORDER = "#8f4a4a"
+COLOR_STALE_TEXT = "#fecaca"
+
 COLOR_IMDB_ACCENT = "#8b949e"
 COLOR_KP_ACCENT = "#87978f"
 
@@ -675,6 +679,91 @@ QFrame#sameScoreCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_CARD}px;
+}}
+QFrame#summaryCardStale {{
+    background-color: {COLOR_STALE_BG};
+    border: 1px solid {COLOR_STALE_BORDER};
+    border-radius: {RADIUS_CARD}px;
+}}
+QFrame#summaryCardStale QLabel#summaryValue {{
+    color: {COLOR_STALE_TEXT};
+}}
+QFrame#modelStaleBanner {{
+    background-color: {COLOR_STALE_BG};
+    border: 1px solid {COLOR_STALE_BORDER};
+    border-radius: {RADIUS_CARD}px;
+}}
+QLabel#modelStaleBannerText {{
+    background: transparent;
+    color: {COLOR_STALE_TEXT};
+    font-size: {font_base}px;
+    font-weight: 600;
+}}
+QPushButton#modelTrainButton {{
+    background-color: {COLOR_ADD_BUTTON};
+    border: 1px solid {COLOR_ADD_BUTTON_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {font_base}px;
+    font-weight: 600;
+    padding: 10px 16px;
+}}
+QPushButton#modelTrainButton:hover:enabled {{
+    background-color: {COLOR_ADD_BUTTON_HOVER};
+    border-color: {COLOR_ADD_BUTTON_HOVER};
+}}
+QPushButton#modelTrainButton:disabled {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER};
+    color: {COLOR_TEXT_MUTED};
+}}
+QPushButton#modelDetailsButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_base}px;
+    font-weight: 600;
+    padding: 10px 16px;
+}}
+QPushButton#modelDetailsButton:hover:enabled {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+    color: {COLOR_TEXT};
+}}
+QFrame#modelWeightsPanel {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD}px;
+}}
+QLabel#modelWeightsText {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: {font_summary_label}px;
+}}
+QLabel#modelTrainingStatus {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_base}px;
+}}
+QLabel#modelTrainingResult {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_base}px;
+}}
+QProgressBar#modelTrainingProgress {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BAR}px;
+    height: 14px;
+    text-align: center;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_summary_label}px;
+}}
+QProgressBar#modelTrainingProgress::chunk {{
+    background-color: {COLOR_ACCENT};
+    border-radius: {RADIUS_BAR}px;
 }}
 QFrame#summaryIconBadge,
 QFrame#sectionHeaderIconBadge {{

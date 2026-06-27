@@ -1306,6 +1306,21 @@ def test_model_tab_wiring() -> None:
     view_source = inspect.getsource(model_view_module.ModelView.refresh)
     assert "build_model_tab_summary" in view_source
 
+    training_source = inspect.getsource(model_view_module.ModelView._start_loo_training)
+    assert "validate_explicit_loo_training" in training_source
+    assert "LooTrainingWorker" in training_source
+
+    details_source = inspect.getsource(model_view_module.ModelView._refresh_weights_panel)
+    assert "build_weights_summary" in details_source
+    assert "Подробнее" in inspect.getsource(model_view_module.ModelView.__init__)
+
+    model_source = inspect.getsource(model_view_module.ModelView)
+    assert "modelStaleBanner" in model_source
+    assert "modelTrainingProgress" in model_source
+    assert "modelWeightsPanel" in model_source
+    init_block = inspect.getsource(model_view_module.ModelView.__init__)
+    assert "root_layout.addStretch" not in init_block
+
 
 def test_open_list_context_menu_includes_delete_action() -> None:
     import inspect

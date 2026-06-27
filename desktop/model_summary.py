@@ -26,6 +26,10 @@ def format_metrics_status_label(*, is_stale: bool, stale_reason: str | None) -> 
     return "Устарело после изменения dataset"
 
 
+def format_metrics_status_kpi(*, is_stale: bool) -> str:
+    return "Устарело" if is_stale else "Актуально"
+
+
 def count_scored_baseline(data: dict, score_field: str) -> int:
     scored = 0
     for movie in model.iter_movies(data):
@@ -47,6 +51,78 @@ def baseline_mae_or_none(data: dict, score_field: str) -> float | None:
     if score_field == "imdb_score":
         return model.imdb_mean_absolute_error(data)
     return None
+
+
+def format_stale_retrain_message(stale_reason: str | None) -> str:
+    if stale_reason == "user_score_changed":
+        return "Оценки в dataset изменились — нужно повторное LOO обучение."
+    return "Dataset изменился — нужно повторное LOO обучение."
+
+
+def format_training_result_message(result: dict) -> str:
+    if result.get("ok") is not True:
+        return str(result.get("message") or "LOO обучение не выполнено.")
+
+    save_result = result.get("save_result") or {}
+    new_loo = save_result.get("new_loo_mae")
+    best_alpha = result.get("best_alpha")
+    if new_loo is None or best_alpha is None:
+        return "LOO обучение завершено."
+
+    return f"LOO обучение завершено. Новый LOO MAE: {float(new_loo):.2f}, alpha={best_alpha}"
+
+
+def build_weights_summary(weights: dict, top_n: int = 10) -> dict:
+    """Build read-only model weights blocks for the Model tab details panel."""
+    bias = float(weights.get("bias", 0.0))
+    weighted_features = []
+    for name, value in weights.items():
+        if name == "bias":
+            continue
+        try:
+            weight = float(value)
+        except (TypeError, ValueError):
+            continue
+        weighted_features.append((name, weight))
+
+    positive_weights = sorted(
+        ((name, weight) for name, weight in weighted_features if weight > 0),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    negative_weights = sorted(
+        ((name, weight) for name, weight in weighted_features if weight < 0),
+        key=lambda item: item[1],
+    )
+
+    positive_lines = [
+        f"{index}. {name}: {weight:+.4f}"
+        for index, (name, weight) in enumerate(positive_weights[:top_n], start=1)
+    ]
+    negative_lines = [
+        f"{index}. {name}: {weight:+.4f}"
+        for index, (name, weight) in enumerate(negative_weights[:top_n], start=1)
+    ]
+
+    text_lines = [f"bias: {bias:.4f}", ""]
+    if positive_lines:
+        text_lines.append("Топ положительных весов:")
+        text_lines.extend(positive_lines)
+    else:
+        text_lines.append("Топ положительных весов: нет")
+    text_lines.append("")
+    if negative_lines:
+        text_lines.append("Топ отрицательных весов:")
+        text_lines.extend(negative_lines)
+    else:
+        text_lines.append("Топ отрицательных весов: нет")
+
+    return {
+        "bias": bias,
+        "positive_lines": positive_lines,
+        "negative_lines": negative_lines,
+        "text_block": "\n".join(text_lines),
+    }
 
 
 def build_model_tab_summary() -> dict:
@@ -76,7 +152,9 @@ def build_model_tab_summary() -> dict:
             is_stale=is_stale,
             stale_reason=stale_reason,
         ),
+        "metrics_status_kpi": format_metrics_status_kpi(is_stale=is_stale),
         "stale_reason": stale_reason,
+        "stale_retrain_message": format_stale_retrain_message(stale_reason) if is_stale else "",
         "updated_at": metrics_status.get("updated_at"),
         "dataset_changed_at": metrics_status.get("dataset_changed_at"),
     }

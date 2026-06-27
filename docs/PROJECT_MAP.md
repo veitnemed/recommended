@@ -69,6 +69,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 Пользовательский dataset: записи, meta, Excel, статистика, теги, резолв тайтлов.
 
 - [dataset/dataset_records.py](../dataset/dataset_records.py) - центральный add/update service.
+- [dataset/delete_record.py](../dataset/delete_record.py) - удаление watched (dataset, meta, poster-cache, локальный файл постера).
 - [dataset/storage_movie.py](../dataset/storage_movie.py) - `add_movie()`, Excel row -> movie payload, пересчёт computed.
 - [dataset/excel_work.py](../dataset/excel_work.py) - Excel export/import.
 - [dataset/dataset_stats.py](../dataset/dataset_stats.py) - сводка dataset.
@@ -76,6 +77,14 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 - [dataset/genre_stats.py](../dataset/genre_stats.py) - просмотр жанров dataset.
 - [dataset/tags_work.py](../dataset/tags_work.py) - мутации тегов в данных (`add_tag`, `delete_tag`, `delete_all_tags`, backup).
 - [dataset/title_resolve.py](../dataset/title_resolve.py) - сбор defaults из SQL/API/TMDb, payload переноса кандидата, сервисные обёртки над apis.
+
+### `posters/`
+
+Poster-cache и локальные изображения для watched.
+
+- [posters/cache.py](../posters/cache.py) - JSON poster-cache, sync URL из meta/TMDb/KP.
+- [posters/download_images.py](../posters/download_images.py) - скачивание JPG в `data/cache/posters/images/`; `download_poster_for_title()` вызывается из `add_dataset_record()`; `remove_local_poster_file()` — из `delete_watched_record()`; batch backfill — `download_poster_images_local()` (консоль Extra).
+- [posters/fetch_metadata.py](../posters/fetch_metadata.py), [posters/fetch_watched_tmdb.py](../posters/fetch_watched_tmdb.py) - обновление meta/description через TMDb.
 
 ### `candidates/`
 
@@ -143,15 +152,18 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 
 ### `desktop/`
 
-PyQt desktop GUI для watched-базы и read-only аналитики.
+PyQt desktop GUI для watched-базы, read-only аналитики и явного LOO-обучения на вкладке «Модель».
 
 - [desktop/app.py](../desktop/app.py) - главное окно, вкладки, контекстное меню и dialog редактирования `user_score`.
 - [desktop/watched_view.py](../desktop/watched_view.py) - watched-список, read-only карточка выбранного тайтла и helpers отображения.
 - [desktop/analytics_view.py](../desktop/analytics_view.py) - вкладка `Аналитика`.
+- [desktop/model_view.py](../desktop/model_view.py) - вкладка `Модель`: KPI, stale-banner, LOO-обучение.
+- [desktop/model_summary.py](../desktop/model_summary.py) - сбор KPI и текста весов для Model tab.
+- [desktop/model_loo_worker.py](../desktop/model_loo_worker.py) - `QThread` → `execute_explicit_loo_training()`.
 - [desktop/plotly_charts.py](../desktop/plotly_charts.py) - helpers для Plotly-графика, если доступен WebEngine.
 - [desktop/theme.py](../desktop/theme.py) - code-level style tokens и QSS builders для PyQt desktop GUI.
 
-Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этапы миграции и приоритеты: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Desktop GUI не должен напрямую писать dataset JSON и не должен запускать обучение.
+Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этапы миграции и приоритеты: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Desktop GUI не пишет dataset JSON напрямую; LOO-обучение и save weights — только через `model/` service (`execute_explicit_loo_training`), не из PyQt в обход service.
 
 ### `tests/`
 

@@ -136,9 +136,9 @@ Delete проходит тот же service path, что и консоль; canc
 
 ---
 
-## Этап 4. Вкладка «Модель» (read-only)
+## Этап 4. Вкладка «Модель»
 
-**Отдельная вкладка**, без обучения и save.
+**Read-only KPI + явное LOO-обучение** через service; без линейного обучения из GUI.
 
 | Блок | Источник |
 | --- | --- |
@@ -150,12 +150,12 @@ Delete проходит тот же service path, что и консоль; canc
 ### Задачи
 
 - [x] **4.1** Вкладка «Модель» с read-only summary из `model_metrics` — done (`ModelView`, KPI: LOO MAE, IMDb/КП baseline, dataset size, fresh/stale).
-- [ ] **4.2** Кнопка «Посчитать» → фоновый поток + progress (не блокировать UI).
-- [ ] **4.3** Результат — текст/таблица; **ничего не сохранять**.
+- [x] **4.2** LOO-обучение: кнопка, progress bar, `QThread` → `execute_explicit_loo_training()` — done (`model_loo_worker.py`); stale-banner + «Подробнее» (веса).
+- [ ] **4.3** Read-only «Посчитать отчёт» / ablation / top errors (без save).
 
 ### Не делать
 
-«Обучить модель», save weights, auto-update metrics.
+Линейное обучение из GUI, auto-update metrics без явного LOO.
 
 ---
 
@@ -195,6 +195,10 @@ TMDb build, массовые операции, сложный import.
 
 ## Этап 7. Постеры и metadata
 
+### Backend (done)
+
+- [x] **7.0** При добавлении записи — sync poster-cache + `download_poster_for_title()`; при удалении — `remove_local_poster_file()` (`add_dataset_record`, `delete_watched_record`).
+
 ### Read-only (сначала)
 
 - [ ] **7.1** Диагностика: сколько постеров local / missing / без description.
@@ -202,7 +206,7 @@ TMDb build, массовые операции, сложный import.
 ### Позже
 
 - update metadata;
-- download missing posters.
+- batch download missing posters (консоль Extra уже есть для backfill).
 
 Отдельный риск-этап: сеть, TMDb, SSL.
 
@@ -231,7 +235,7 @@ TMDb build, массовые операции, сложный import.
 | 4 | B1 Wizard «Добавить тайтл» (search + preview) | 3 | planned |
 | 5 | B2 Wizard save через service | 3 | planned |
 | 6 | C4 Вкладка «Рекомендации» read-only | 5 | planned |
-| 7 | C1 Вкладка «Модель» read-only (этап 1: KPI) | 4 | done |
+| 7 | C1 Вкладка «Модель» KPI + LOO обучение | 4 | done |
 | 8 | C1.2 Baseline comparison + «Коротко» | 4 | next |
 | 9 | E1 Mark watched из pool | 6 | planned |
 

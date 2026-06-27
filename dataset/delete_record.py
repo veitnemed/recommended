@@ -142,6 +142,7 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
             "deleted_dataset": 0,
             "deleted_meta": 0,
             "deleted_poster_cache": 0,
+            "deleted_poster_file": 0,
             "dataset_count": len(dataset),
             "backups": [],
         }
@@ -152,13 +153,33 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
 
     meta_key = _find_meta_key(meta, title)
     cache_identity = poster_identity_key(title, year)
-    had_cache_entry = isinstance(poster_cache.get(cache_identity), dict)
+    cache_entry = poster_cache.get(cache_identity) if isinstance(poster_cache.get(cache_identity), dict) else None
+    had_cache_entry = cache_entry is not None
 
     backups = backup_before_watched_delete(timestamp=timestamp)
 
     prepared_dataset = dict(dataset)
     prepared_meta = dict(meta)
     prepared_cache = dict(poster_cache)
+
+    deleted_poster_file = 0
+    try:
+        from posters.download_images import remove_local_poster_file
+
+        remove_result = remove_local_poster_file(title, year, cache_entry=cache_entry)
+        if remove_result.get("deleted") is True:
+            deleted_poster_file = 1
+    except OSError as error:
+        return {
+            "ok": False,
+            "message": f"Ошибка удаления локального постера: {error}",
+            "deleted_dataset": 0,
+            "deleted_meta": 0,
+            "deleted_poster_cache": 0,
+            "deleted_poster_file": 0,
+            "dataset_count": len(dataset),
+            "backups": backups,
+        }
 
     deleted_dataset = 0
     if dataset_key in prepared_dataset:
@@ -186,6 +207,7 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
             "deleted_dataset": 0,
             "deleted_meta": 0,
             "deleted_poster_cache": 0,
+            "deleted_poster_file": 0,
             "dataset_count": len(dataset),
             "backups": backups,
         }
@@ -198,6 +220,7 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
         "deleted_dataset": deleted_dataset,
         "deleted_meta": deleted_meta,
         "deleted_poster_cache": deleted_poster_cache if had_cache_entry else 0,
+        "deleted_poster_file": deleted_poster_file,
         "dataset_count": len(prepared_dataset),
         "backups": backups,
     }
@@ -232,6 +255,7 @@ def format_watched_delete_report(result: dict) -> str:
         f"Удалено из dataset: {result.get('deleted_dataset', 0)}",
         f"Удалено из meta: {result.get('deleted_meta', 0)}",
         f"Удалено из poster-cache: {result.get('deleted_poster_cache', 0)}",
+        f"Удалено локальных постеров: {result.get('deleted_poster_file', 0)}",
         f"Dataset теперь: {result.get('dataset_count', 0)} записей",
         "Backup:",
     ]

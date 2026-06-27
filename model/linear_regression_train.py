@@ -426,19 +426,152 @@ def print_weights_summary(weights: dict, top_n: int = 10) -> None:
             print(f"{index}. {name}: {weight:+.4f}")
 
 
+def validate_explicit_loo_training(data) -> dict:
+    """Check whether explicit LOO training can start on the current dataset."""
+    movies = model.iter_movies(data)
+    if len(movies) < 3:
+        return {
+            "ok": False,
+            "error_code": "insufficient_data",
+            "message": "Недостаточно данных для LOO обучения.",
+        }
+    if is_method_available(BENCHMARK_METHOD) is False:
+        return {
+            "ok": False,
+            "error_code": "method_unavailable",
+            "message": f"LOO обучение недоступно: не установлен метод {BENCHMARK_METHOD_LABEL}.",
+        }
+    return {
+        "ok": True,
+        "movies": movies,
+        "movie_count": len(movies),
+    }
+
+
+def execute_explicit_loo_training(
+    data,
+    weights,
+    *,
+    on_progress=None,
+    should_cancel=None,
+    verbose: bool = False,
+) -> dict:
+    """Run explicit LOO training on the current dataset and persist the result."""
+    from storage import data as storage_data
+
+    preflight = validate_explicit_loo_training(data)
+    if preflight["ok"] is False:
+        return preflight
+
+    movies = preflight["movies"]
+    movie_count = preflight["movie_count"]
+    previous_status = storage_data.get_model_metrics_status()
+    before_metrics = collect_loo_metrics(
+        data=movies,
+        weights=weights,
+        loo_mae=previous_status.get("loo_mae"),
+    )
+
+    results = []
+    total_alphas = len(LOO_TRAINING_ALPHAS)
+    total_progress_steps = max(total_alphas * movie_count, 1)
+
+    for alpha_index, alpha in enumerate(LOO_TRAINING_ALPHAS, start=1):
+        if should_cancel is not None and should_cancel() is True:
+            return {
+                "ok": False,
+                "error_code": "cancelled",
+                "message": "LOO обучение отменено.",
+            }
+
+        if verbose:
+            print(f"Проверка alpha={alpha} [{alpha_index}/{total_alphas}]")
+
+        def fold_progress(fold_index: int, fold_total: int, test_movie) -> None:
+            if on_progress is None and verbose is False:
+                return
+            title = model.get_movie_title(test_movie)
+            if on_progress is not None:
+                current_step = (alpha_index - 1) * movie_count + fold_index
+                on_progress(
+                    current_step,
+                    total_progress_steps,
+                    f"Alpha {alpha} [{alpha_index}/{total_alphas}]: {title}",
+                )
+            elif verbose:
+                print(f"Alpha {alpha} [{alpha_index}/{total_alphas}] — итерация {fold_index}/{fold_total}: {title}")
+
+        loo_mae = calculate_linear_loo_mae(
+            data=movies,
+            method=BENCHMARK_METHOD,
+            start_weights=weights,
+            alpha=alpha,
+            l1_ratio=0.5,
+            max_iter=5000,
+            verbose=False,
+            progress_callback=fold_progress,
+        )
+
+        if loo_mae is None:
+            if verbose:
+                print(f"LOO MAE для alpha={alpha} не рассчитан.\n")
+            continue
+
+        if verbose:
+            print(f"LOO MAE для alpha={alpha}: {loo_mae:.4f}\n")
+        results.append((loo_mae, alpha))
+
+    if len(results) == 0:
+        return {
+            "ok": False,
+            "error_code": "loo_failed",
+            "message": "LOO обучение не завершено: не удалось рассчитать LOO MAE.",
+        }
+
+    best_loo_mae, best_alpha = min(results, key=lambda item: item[0])
+    final_weights = train_ridge_for_benchmark(
+        data=movies,
+        start_weights=weights,
+        alpha=best_alpha,
+    )
+    save_result = model.save_weights_after_explicit_loo_training(
+        new_weights=final_weights,
+        new_loo_mae=best_loo_mae,
+        source_name="LOO обучение",
+    )
+    saved_weights = storage_data.load_weights()
+    after_metrics = collect_loo_metrics(
+        data=movies,
+        weights=saved_weights,
+        loo_mae=save_result["new_loo_mae"],
+    )
+
+    if on_progress is not None:
+        on_progress(total_progress_steps, total_progress_steps, "Сохранение завершено")
+
+    return {
+        "ok": True,
+        "previous_status": previous_status,
+        "before_metrics": before_metrics,
+        "after_metrics": after_metrics,
+        "save_result": save_result,
+        "best_alpha": best_alpha,
+        "best_loo_mae": best_loo_mae,
+        "alpha_results": results,
+        "movie_count": movie_count,
+    }
+
+
 def run_loo_training(data, weights) -> None:
     """Подбирает Ridge alpha по LOO, обучает финальную модель и сохраняет результат."""
     from storage import data as storage_data
 
-    movies = model.iter_movies(data)
-    if len(movies) < 3:
-        print("Недостаточно данных для LOO обучения.")
+    preflight = validate_explicit_loo_training(data)
+    if preflight["ok"] is False:
+        print(preflight["message"])
         return
 
-    if is_method_available(BENCHMARK_METHOD) is False:
-        print(f"LOO обучение недоступно: не установлен метод {BENCHMARK_METHOD_LABEL}.")
-        return
-
+    movies = preflight["movies"]
     previous_status = storage_data.get_model_metrics_status()
 
     print("LOO обучение")
@@ -456,65 +589,36 @@ def run_loo_training(data, weights) -> None:
     )
     print("")
 
-    results = []
-    for alpha_index, alpha in enumerate(LOO_TRAINING_ALPHAS, start=1):
-        print(f"Проверка alpha={alpha} [{alpha_index}/{len(LOO_TRAINING_ALPHAS)}]")
-        loo_mae = calculate_linear_loo_mae(
-            data=movies,
-            method=BENCHMARK_METHOD,
-            start_weights=weights,
-            alpha=alpha,
-            l1_ratio=0.5,
-            max_iter=5000,
-            verbose=True,
-        )
-
-        if loo_mae is None:
-            print(f"LOO MAE для alpha={alpha} не рассчитан.\n")
-            continue
-
-        print(f"LOO MAE для alpha={alpha}: {loo_mae:.4f}\n")
-        results.append((loo_mae, alpha))
-
-    if len(results) == 0:
-        print("LOO обучение не завершено: не удалось рассчитать LOO MAE.")
+    result = execute_explicit_loo_training(
+        data=data,
+        weights=weights,
+        verbose=True,
+    )
+    if result.get("ok") is not True:
+        print(result.get("message", "LOO обучение не выполнено."))
         return
 
-    best_loo_mae, best_alpha = min(results, key=lambda item: item[0])
+    best_loo_mae = result["best_loo_mae"]
+    best_alpha = result["best_alpha"]
+    save_result = result["save_result"]
+
     print(f"Лучший alpha: {best_alpha}")
     print(f"Лучший LOO MAE: {best_loo_mae:.4f}\n")
-
-    final_weights = train_ridge_for_benchmark(
-        data=movies,
-        start_weights=weights,
-        alpha=best_alpha,
-    )
-    save_result = model.save_weights_after_explicit_loo_training(
-        new_weights=final_weights,
-        new_loo_mae=best_loo_mae,
-        source_name="LOO обучение",
-    )
-
     print("LOO обучение завершено.")
     print(f"Лучший Ridge alpha: {best_alpha}")
     print(f"Лучший LOO MAE: {best_loo_mae:.4f}")
     print("Финальная модель обучена на всём датасете.")
     print("")
     saved_weights = storage_data.load_weights()
-    after_metrics = collect_loo_metrics(
-        data=movies,
-        weights=saved_weights,
-        loo_mae=save_result["new_loo_mae"],
-    )
     print_metrics_report(
         title="ПОСЛЕ LOO ОБУЧЕНИЯ",
-        metrics=after_metrics,
-        before_metrics=before_metrics,
+        metrics=result["after_metrics"],
+        before_metrics=result["before_metrics"],
         decision="веса и metrics сохранены (явное LOO обучение)",
     )
     print("")
     print_explicit_loo_training_save_report(save_result)
     print("")
-    print_baseline_comparison(after_metrics)
+    print_baseline_comparison(result["after_metrics"])
     print("")
     print_weights_summary(saved_weights)

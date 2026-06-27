@@ -122,7 +122,10 @@ add_dataset_record(
 5. очищает candidate pool:
    - если передан `pool_candidate`, удаляет именно его;
    - иначе делает best-effort cleanup просмотренных кандидатов;
-6. возвращает `AddRecordResult(ok=True, ..., reason="saved")`.
+6. синхронизирует poster-cache (`sync_poster_cache_from_meta_and_sources`) и **скачивает локальный файл постера** (`download_poster_for_title`) — best-effort, ошибки не откатывают сохранение записи;
+7. возвращает `AddRecordResult(ok=True, ..., reason="saved")`.
+
+Скачивание постера идёт в service-слое, не из UI. Batch «скачать недостающие постеры» в консоли (`Extra` → `download_poster_images_local`) остаётся для backfill старых записей.
 
 ## Источники добавления новой записи
 
@@ -374,6 +377,22 @@ Excel-поток сейчас служит для patch существующих
 - успешное добавление через перенос кандидата должно удалить кандидата из общего пула;
 - для этого caller передаёт `pool_candidate` в `storage_movie.add_movie()`;
 - cleanup выполняется в `add_dataset_record()`, а не вручную отдельным UI-шагом после сохранения.
+
+## Удаление watched
+
+Путь:
+
+```text
+delete_watched_record(dataset_key)
+```
+
+Файл: [dataset/delete_record.py](../dataset/delete_record.py).
+
+Service удаляет запись из dataset, meta и poster-cache **после backup**. Перед очисткой cache вызывается `remove_local_poster_file()` — локальный JPG в `data/cache/posters/images/` удаляется, если был.
+
+Результат содержит счётчики `deleted_dataset`, `deleted_meta`, `deleted_poster_cache`, `deleted_poster_file`. Ошибка удаления файла постера **блокирует** удаление записи (dataset/meta не меняются).
+
+Console и desktop GUI вызывают один и тот же service; UI не удаляет JSON напрямую.
 
 ## Печать сообщений
 

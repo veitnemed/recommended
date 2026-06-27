@@ -307,6 +307,13 @@ def add_dataset_record(
     except Exception as error:
         print(f"Предупреждение: не удалось обновить poster-cache: {error}")
 
+    try:
+        from posters.download_images import download_poster_for_title
+
+        download_poster_for_title(title, year)
+    except Exception as error:
+        print(f"Предупреждение: не удалось скачать постер: {error}")
+
     _cleanup_candidate_pool(pool_candidate)
     return AddRecordResult(
         ok=True,

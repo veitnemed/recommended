@@ -203,8 +203,10 @@ Layout-правила обязательны при GUI-polish. Точечные
 
 1. Вкладка **read-only**; данные из `storage/data.get_model_metrics_status()` и лёгкие baseline MAE через `model/`.
 2. KPI-карточки: LOO MAE, IMDb baseline, КП baseline, dataset size, статус fresh/stale.
-3. Без обучения, save weights, пересчёта LOO и кнопки «Посчитать отчёт» (этапы 2+).
-4. Стили — те же `#summaryCard`, root `#modelRoot`; QSS в `build_analytics_style()`.
+3. **Красный banner + карточка статуса**, если metrics stale — нужно повторное LOO обучение.
+4. Секция **«Обучение»**: кнопка «Запустить LOO обучение», progress bar, статус; расчёт в `QThread` через `execute_explicit_loo_training()`. Кнопка **«Подробнее»** — collapsible панель весов (`#modelWeightsPanel`).
+5. Без read-only «Посчитать отчёт» (этапы 2+).
+6. Стили — `#summaryCard`, `#summaryCardStale`, `#modelStaleBanner`, `#modelTrainButton`, `#modelDetailsButton`, `#modelTrainingProgress`, `#modelWeightsPanel`; QSS в `build_analytics_style()`.
 
 ### Analytics: «Полнота dataset»
 

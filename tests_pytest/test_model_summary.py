@@ -69,6 +69,33 @@ def test_baseline_mae_or_none_with_scores() -> None:
     assert baseline_mae_or_none(data, "kp_score") == 1.0
 
 
+def test_format_stale_retrain_message() -> None:
+    from desktop.model_summary import format_stale_retrain_message
+
+    assert "Оценки" in format_stale_retrain_message("user_score_changed")
+    assert "Dataset" in format_stale_retrain_message("dataset_changed")
+
+
+def test_format_metrics_status_kpi() -> None:
+    from desktop.model_summary import format_metrics_status_kpi
+
+    assert format_metrics_status_kpi(is_stale=False) == "Актуально"
+    assert format_metrics_status_kpi(is_stale=True) == "Устарело"
+
+
+def test_build_weights_summary() -> None:
+    from config import constant
+    from desktop.model_summary import build_weights_summary
+
+    weights = constant.DEFAULT_WEIGHTS.copy()
+    weights["bias"] = 0.5
+    summary = build_weights_summary(weights, top_n=3)
+
+    assert "bias: 0.5000" in summary["text_block"]
+    assert isinstance(summary["positive_lines"], list)
+    assert isinstance(summary["negative_lines"], list)
+
+
 def test_build_model_tab_summary_reads_saved_metrics(monkeypatch) -> None:
     import tempfile
     from pathlib import Path
@@ -107,4 +134,6 @@ def test_build_model_tab_summary_reads_saved_metrics(monkeypatch) -> None:
     assert summary["kp_baseline_display"] == "0.00"
     assert summary["dataset_size"] == 1
     assert summary["metrics_status_display"] == "Устарело после изменения оценки"
+    assert summary["metrics_status_kpi"] == "Устарело"
     assert summary["is_stale"] is True
+    assert "повторное LOO обучение" in summary["stale_retrain_message"]
