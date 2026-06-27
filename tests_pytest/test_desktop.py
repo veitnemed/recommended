@@ -1016,6 +1016,116 @@ def test_sort_entries_by_title() -> None:
     assert [entry[0] for entry in sorted_entries] == ["Alpha", "Bravo", "Charlie"]
 
 
+def test_poster_display_dimensions_are_scaled() -> None:
+    from desktop.watched_view import (
+        POSTER_BASE_HEIGHT,
+        POSTER_BASE_WIDTH,
+        POSTER_DISPLAY_SCALE,
+        POSTER_HEIGHT,
+        POSTER_WIDTH,
+    )
+
+    assert POSTER_WIDTH == int(POSTER_BASE_WIDTH * POSTER_DISPLAY_SCALE)
+    assert POSTER_HEIGHT == int(POSTER_BASE_HEIGHT * POSTER_DISPLAY_SCALE)
+    assert POSTER_WIDTH == 275
+    assert POSTER_HEIGHT == 412
+
+
+def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
+    from PyQt6.QtGui import QImage, QPixmap
+
+    from desktop.watched_view import POSTER_HEIGHT, POSTER_WIDTH, fit_poster_pixmap_for_display
+
+    small = QPixmap.fromImage(QImage(100, 150, QImage.Format.Format_RGB32))
+    result = fit_poster_pixmap_for_display(small, POSTER_WIDTH, POSTER_HEIGHT)
+
+    assert result.width() == 100
+    assert result.height() == 150
+
+
+def test_fit_poster_pixmap_for_display_downscales_large_image(qapp) -> None:
+    from PyQt6.QtGui import QImage, QPixmap
+
+    from desktop.watched_view import POSTER_HEIGHT, POSTER_WIDTH, fit_poster_pixmap_for_display
+
+    large = QPixmap.fromImage(QImage(800, 1200, QImage.Format.Format_RGB32))
+    result = fit_poster_pixmap_for_display(large, POSTER_WIDTH, POSTER_HEIGHT)
+
+    assert result.width() <= POSTER_WIDTH
+    assert result.height() <= POSTER_HEIGHT
+    assert result.width() < 800
+    assert result.height() < 1200
+
+
+def test_watched_detail_card_uses_sharp_poster_fit_helper() -> None:
+    import inspect
+
+    import desktop.watched_view as watched_view_module
+
+    source = inspect.getsource(watched_view_module.WatchedDetailCard._sync_poster_display)
+    assert "fit_poster_pixmap_for_display" in source
+    assert "_target_poster_height" not in source
+
+
+def test_format_poster_path_display() -> None:
+    from desktop.watched_view import format_poster_path_display
+
+    assert format_poster_path_display(None) == "Локальный файл не найден"
+    short = "D:/cache/posters/images/alpha.jpg"
+    assert format_poster_path_display(short) == short
+    long_path = "D:/very/long/cache/posters/images/" + ("a" * 40) + ".jpg"
+    display = format_poster_path_display(long_path, max_len=30)
+    assert len(display) <= 30
+    assert "…" in display
+    assert display.endswith(".jpg")
+
+
+def test_open_path_in_shell_opens_existing_file(monkeypatch) -> None:
+    from desktop.watched_view import open_path_in_shell
+
+    opened: list[str] = []
+
+    def fake_open_file(path: str) -> None:
+        opened.append(path)
+
+    monkeypatch.setattr("storage.files.open_file", fake_open_file)
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        target = Path(temp_root) / "poster.jpg"
+        target.write_bytes(b"x")
+        ok, error = open_path_in_shell(str(target))
+
+    assert ok is True
+    assert error is None
+    assert opened == [str(target)]
+
+
+def test_open_path_in_shell_missing_path() -> None:
+    from desktop.watched_view import open_path_in_shell
+
+    ok, error = open_path_in_shell("D:/missing/poster-cache/images/nope.jpg")
+
+    assert ok is False
+    assert error is not None
+
+
+def test_watched_detail_card_has_poster_context_menu() -> None:
+    import inspect
+
+    import desktop.watched_view as watched_view_module
+
+    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    assert "CustomContextMenu" in init_source
+    assert "_show_poster_context_menu" in init_source
+
+    menu_source = inspect.getsource(watched_view_module.WatchedDetailCard._show_poster_context_menu)
+    assert "Открыть постер" in menu_source
+    assert "Папка poster-cache" in menu_source
+
+    show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
+    assert "_set_local_poster_path" in show_source
+
+
 def test_resolve_local_poster_path_prefers_existing_file() -> None:
     from desktop.watched_view import resolve_local_poster_path
 

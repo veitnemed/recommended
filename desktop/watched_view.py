@@ -556,6 +556,15 @@ def format_watched_filters_label(
     return f"{arrow} Фильтры"
 
 
+def _local_path(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text == "" or text.startswith(("http://", "https://")):
+        return None
+    return text
+
+
 def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | None:
     """Return a local filesystem poster path when available. Never uses network."""
     display_card = card if card is not None else build_watched_movie_card(movie)
@@ -577,13 +586,37 @@ def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | No
     return None
 
 
-def _local_path(value) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if text == "" or text.startswith(("http://", "https://")):
-        return None
-    return text
+def get_poster_cache_directory() -> str:
+    """Return the default poster-cache directory path."""
+    from posters.cache import DEFAULT_POSTER_CACHE_DIR
+
+    return str(DEFAULT_POSTER_CACHE_DIR)
+
+
+def format_poster_path_display(path: str | None, *, max_len: int = 44) -> str:
+    """Build a compact read-only poster path line for the detail card."""
+    if path is None:
+        return "Локальный файл не найден"
+    text = str(path)
+    if len(text) <= max_len:
+        return text
+    head = max(8, max_len // 2 - 1)
+    tail = max(8, max_len - head - 1)
+    return f"{text[:head]}…{text[-tail:]}"
+
+
+def open_path_in_shell(path: str) -> tuple[bool, str | None]:
+    """Open a local file or folder with the OS default handler."""
+    target = Path(path)
+    if not target.exists():
+        return False, f"Путь не найден: {path}"
+    try:
+        from storage.files import open_file
+
+        open_file(str(target))
+        return True, None
+    except OSError as error:
+        return False, str(error)
 
 
 def _nested_poster_value(movie: dict, field: str) -> str | None:
@@ -593,8 +626,12 @@ def _nested_poster_value(movie: dict, field: str) -> str | None:
     return None
 
 
-POSTER_WIDTH = 220
-POSTER_HEIGHT = 330
+POSTER_BASE_WIDTH = 220
+POSTER_BASE_HEIGHT = 330
+POSTER_DISPLAY_SCALE = 1.25
+POSTER_WIDTH = int(POSTER_BASE_WIDTH * POSTER_DISPLAY_SCALE)
+POSTER_HEIGHT = int(POSTER_BASE_HEIGHT * POSTER_DISPLAY_SCALE)
+POSTER_TOP_ROW_SPACING = int(22 * POSTER_DISPLAY_SCALE)
 LIST_ITEM_HEIGHT = 72
 LIST_THUMB_WIDTH = 40
 LIST_THUMB_HEIGHT = 60
@@ -611,6 +648,33 @@ POSTER_IMAGE_STYLE = build_poster_image_style()
 DETAIL_CARD_STYLE = build_detail_card_style()
 
 _thumb_pixmap_cache: dict[str, object] = {}
+
+
+def fit_poster_pixmap_for_display(pixmap, max_width: int, max_height: int):
+    """Fit a poster into the display box without unnecessary upscale blur."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QPixmap
+
+    if pixmap.isNull():
+        return pixmap
+    source_size = pixmap.size()
+    if source_size.isEmpty():
+        return pixmap
+
+    target_size = source_size.scaled(max_width, max_height, Qt.AspectRatioMode.KeepAspectRatio)
+    if target_size.isEmpty():
+        return pixmap
+
+    needs_downscale = target_size.width() < source_size.width() or target_size.height() < source_size.height()
+    if not needs_downscale:
+        return pixmap
+
+    return pixmap.scaled(
+        target_size.width(),
+        target_size.height(),
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
 
 
 def _load_list_thumb_pixmap(poster_path: str | None):
@@ -894,6 +958,7 @@ class WatchedDetailCard:
         )
 
         self._poster_source_pixmap = None
+        self._local_poster_path: str | None = None
         card = self
 
         class DetailCardFrame(QFrame):
@@ -911,13 +976,15 @@ class WatchedDetailCard:
         root.setSpacing(OVERVIEW_SECTION_TOP_SPACING)
 
         top_row = QHBoxLayout()
-        top_row.setSpacing(22)
+        top_row.setSpacing(POSTER_TOP_ROW_SPACING)
 
         self._poster_label = QLabel("Нет постера")
         self._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._poster_label.setFixedWidth(POSTER_WIDTH)
+        self._poster_label.setFixedSize(POSTER_WIDTH, POSTER_HEIGHT)
         self._poster_label.setScaledContents(False)
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+        self._poster_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._poster_label.customContextMenuRequested.connect(self._show_poster_context_menu)
 
         self._info_column_widget = QWidget()
         self._info_column_widget.setStyleSheet(TRANSPARENT_STYLE)
@@ -1016,59 +1083,27 @@ class WatchedDetailCard:
         frame_width = self._frame.width()
         if frame_width <= 0:
             return 0
-        return max(120, frame_width - POSTER_WIDTH - 22 - (2 * CARD_PADDING))
+        return max(120, frame_width - POSTER_WIDTH - POSTER_TOP_ROW_SPACING - (2 * CARD_PADDING))
 
-    def _measure_info_column_height(self) -> int:
-        content_width = self._info_column_content_width()
-        if content_width > 0:
-            title_height = self._title_label.heightForWidth(content_width)
-        else:
-            title_height = self._title_label.sizeHint().height()
-        title_height = max(title_height, self._title_label.minimumHeight())
-
-        parts = [title_height]
-        if self._genre_section.isVisible():
-            self._genre_section.adjustSize()
-            parts.append(self._genre_section.sizeHint().height())
-        self._metrics_row_widget.adjustSize()
-        parts.append(self._metrics_row_widget.sizeHint().height())
-
-        layout = self._info_column_widget.layout()
-        spacing = layout.spacing() if layout is not None else 12
-        extra_spacing = 0
-        if len(parts) >= 2:
-            extra_spacing += 2
-        if self._genre_section.isVisible() and len(parts) >= 3:
-            extra_spacing += 2
-
-        gaps = max(0, len(parts) - 1)
-        return sum(parts) + gaps * spacing + extra_spacing
-
-    def _target_poster_height(self) -> int:
-        info_height = self._measure_info_column_height()
-        if info_height <= 0:
-            return POSTER_HEIGHT
-        return min(POSTER_HEIGHT, info_height)
-
-    def _sync_poster_height_to_info(self) -> None:
+    def _sync_poster_display(self) -> None:
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QPixmap
 
-        height = self._target_poster_height()
-        self._poster_label.setFixedSize(POSTER_WIDTH, height)
-
         if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
-            scaled = self._poster_source_pixmap.scaled(
+            display_pixmap = fit_poster_pixmap_for_display(
+                self._poster_source_pixmap,
                 POSTER_WIDTH,
-                height,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
+                POSTER_HEIGHT,
             )
+            width = max(display_pixmap.width(), 1)
+            height = max(display_pixmap.height(), 1)
+            self._poster_label.setFixedSize(width, height)
             self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
             self._poster_label.setText("")
-            self._poster_label.setPixmap(scaled)
+            self._poster_label.setPixmap(display_pixmap)
             return
 
+        self._poster_label.setFixedSize(POSTER_WIDTH, POSTER_HEIGHT)
         if self._poster_label.pixmap() is None or self._poster_label.pixmap().isNull():
             self._poster_label.setPixmap(QPixmap())
             if self._poster_label.text() == "":
@@ -1078,7 +1113,7 @@ class WatchedDetailCard:
     def _schedule_poster_height_sync(self) -> None:
         from PyQt6.QtCore import QTimer
 
-        QTimer.singleShot(0, self._sync_poster_height_to_info)
+        QTimer.singleShot(0, self._sync_poster_display)
 
     def _set_poster_placeholder(self) -> None:
         from PyQt6.QtGui import QPixmap
@@ -1096,11 +1131,50 @@ class WatchedDetailCard:
             return False
 
         self._poster_source_pixmap = pixmap
-        self._sync_poster_height_to_info()
+        self._sync_poster_display()
         return True
+
+    def _set_local_poster_path(self, local_path: str | None) -> None:
+        self._local_poster_path = local_path
+        self._poster_label.setToolTip(local_path or "")
+
+    def _show_poster_context_menu(self, position) -> None:
+        from PyQt6.QtWidgets import QMenu
+
+        menu = QMenu(self._poster_label)
+        open_action = menu.addAction("Открыть постер")
+        open_action.setEnabled(self._local_poster_path is not None)
+        cache_action = menu.addAction("Папка poster-cache")
+        chosen_action = menu.exec(self._poster_label.mapToGlobal(position))
+        if chosen_action is open_action:
+            self._open_local_poster()
+        elif chosen_action is cache_action:
+            self._open_poster_cache_directory()
+
+    def _open_local_poster(self) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        if self._local_poster_path is None:
+            return
+        ok, error = open_path_in_shell(self._local_poster_path)
+        if not ok:
+            QMessageBox.warning(self._frame, "Постер", error or "Не удалось открыть файл постера.")
+
+    def _open_poster_cache_directory(self) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        cache_dir = get_poster_cache_directory()
+        ok, error = open_path_in_shell(cache_dir)
+        if not ok:
+            QMessageBox.warning(
+                self._frame,
+                "Poster-cache",
+                error or "Не удалось открыть папку poster-cache.",
+            )
 
     def show_empty(self, title: str = "Выберите тайтл слева") -> None:
         self._set_poster_placeholder()
+        self._set_local_poster_path(None)
         self._title_label.setText(title)
         self._score_indicator.set_score(None)
         _fill_meta_pill_row(self._meta_pills_layout, [])
@@ -1134,4 +1208,5 @@ class WatchedDetailCard:
         poster_path = resolve_local_poster_path(movie, card)
         if poster_path is None or self._set_poster_image(poster_path) is False:
             self._set_poster_placeholder()
+        self._set_local_poster_path(poster_path)
         self._schedule_poster_height_sync()
