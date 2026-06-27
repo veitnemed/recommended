@@ -149,7 +149,7 @@ Delete проходит тот же service path, что и консоль; canc
 
 ### Задачи
 
-- [ ] **4.1** Вкладка «Модель» с read-only summary из `model_metrics`.
+- [x] **4.1** Вкладка «Модель» с read-only summary из `model_metrics` — done (`ModelView`, KPI: LOO MAE, IMDb/КП baseline, dataset size, fresh/stale).
 - [ ] **4.2** Кнопка «Посчитать» → фоновый поток + progress (не блокировать UI).
 - [ ] **4.3** Результат — текст/таблица; **ничего не сохранять**.
 
@@ -231,8 +231,9 @@ TMDb build, массовые операции, сложный import.
 | 4 | B1 Wizard «Добавить тайтл» (search + preview) | 3 | planned |
 | 5 | B2 Wizard save через service | 3 | planned |
 | 6 | C4 Вкладка «Рекомендации» read-only | 5 | planned |
-| 7 | C1 Вкладка «Модель» read-only | 4 | planned |
-| 8 | E1 Mark watched из pool | 6 | planned |
+| 7 | C1 Вкладка «Модель» read-only (этап 1: KPI) | 4 | done |
+| 8 | C1.2 Baseline comparison + «Коротко» | 4 | next |
+| 9 | E1 Mark watched из pool | 6 | planned |
 
 ---
 

@@ -637,6 +637,12 @@ QWidget#analyticsRoot {{
     font-family: {FONT_FAMILY_QSS};
     font-size: {font_base}px;
 }}
+QWidget#modelRoot {{
+    background-color: {COLOR_BG};
+    color: {COLOR_TEXT};
+    font-family: {FONT_FAMILY_QSS};
+    font-size: {font_base}px;
+}}
 QWidget#analyticsBarRow {{
     background: transparent;
 }}
@@ -646,7 +652,18 @@ QLabel#analyticsTitle {{
     font-size: {font_page_title}px;
     font-weight: 700;
 }}
+QLabel#modelTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_page_title}px;
+    font-weight: 700;
+}}
 QLabel#analyticsSubtitle {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_subtitle}px;
+}}
+QLabel#modelSubtitle {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_subtitle}px;

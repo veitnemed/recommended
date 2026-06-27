@@ -197,6 +197,15 @@ Layout-правила обязательны при GUI-polish. Точечные
 
 После п.8 новые секции — только по отдельному решению (см. `DESKTOP_GUI_ROADMAP.md`, Analytics MVP freeze).
 
+### Model: read-only summary (этап 1)
+
+Реализация: `desktop/model_view.py` (`ModelView`) + `desktop/model_summary.py`.
+
+1. Вкладка **read-only**; данные из `storage/data.get_model_metrics_status()` и лёгкие baseline MAE через `model/`.
+2. KPI-карточки: LOO MAE, IMDb baseline, КП baseline, dataset size, статус fresh/stale.
+3. Без обучения, save weights, пересчёта LOO и кнопки «Посчитать отчёт» (этапы 2+).
+4. Стили — те же `#summaryCard`, root `#modelRoot`; QSS в `build_analytics_style()`.
+
 ### Analytics: «Полнота dataset»
 
 Реализация: `dataset/score_analytics.py` (`build_dataset_completeness*`, `summarize_dataset_completeness`) + `AnalyticsView._fill_completeness`.

@@ -1269,6 +1269,16 @@ def test_delete_watched_entry_handles_cancel_and_missing_preview() -> None:
     assert "QDialog.DialogCode.Accepted" in source
 
 
+def test_refresh_after_user_score_save_wiring() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_user_score_save)
+    assert "_analytics_view.update_entries" in source
+    assert "_model_view.refresh" in source
+
+
 def test_refresh_after_delete_wiring() -> None:
     import inspect
 
@@ -1278,8 +1288,23 @@ def test_refresh_after_delete_wiring() -> None:
     assert "load_watched_entries" in source
     assert "_reload_genre_filter_options" in source
     assert "_analytics_view.update_entries" in source
+    assert "_model_view.refresh" in source
     assert "_show_empty_details" in source
     assert "format_delete_status_message" in source
+
+
+def test_model_tab_wiring() -> None:
+    import inspect
+
+    import desktop.app as app_module
+    import desktop.model_view as model_view_module
+
+    init_source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
+    assert "ModelView" in init_source
+    assert '"Модель"' in init_source
+
+    view_source = inspect.getsource(model_view_module.ModelView.refresh)
+    assert "build_model_tab_summary" in view_source
 
 
 def test_open_list_context_menu_includes_delete_action() -> None:
