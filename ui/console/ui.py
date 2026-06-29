@@ -32,20 +32,7 @@ def show_header(movies_counter: int, error: int):
         print(' ' * 4, f'Просмотрено записей: {movies_counter}\n')
 
 
-def format_loo_mae_display(loo_mae=None, model_metrics_status: dict | None = None) -> str:
-    if loo_mae is None and isinstance(model_metrics_status, dict):
-        loo_mae = model_metrics_status.get("loo_mae")
-
-    if loo_mae is None:
-        return "Сохранённый LOO MAE: не рассчитан"
-
-    suffix = ""
-    if isinstance(model_metrics_status, dict) and model_metrics_status.get("is_stale") is True:
-        suffix = " (устарело после изменения dataset)"
-    return f"Сохранённый LOO MAE: {float(loo_mae):.4f}{suffix}"
-
-
-def show_global_menu(movies_counter: int, error: int = 0, kp_error: int | None = None, loo_mae=None, model_metrics_status: dict | None = None):
+def show_global_menu(movies_counter: int, error: int = 0):
     """Печатает главное меню."""
     show_header(movies_counter, error)
     print(' 1 >> Просмотренное')
@@ -102,53 +89,8 @@ def show_candidate_pool_diagnostics_menu():
     print(' 0 >> Назад\n')
 
 
-def show_train_menu(movies_counter: int, error: int):
-    """Печатает меню обучения."""
-    show_header(movies_counter, error)
-    show_menu_title('ОБУЧЕНИЕ')
-    print(' 1 >> Линейная регрессия')
-    print(' 2 >> Проверка устойчивости к шуму')
-    print(' 3 >> LOO обучение')
-    print(' 0 >> Главное меню\n')
-
-
-def show_model_menu(movies_counter: int, error: int):
-    """Печатает меню модели."""
-    show_header(movies_counter, error)
-    show_menu_title('МОДЕЛЬ')
-    print(' 1 >> Признаки')
-    print(' 2 >> Тесты эффективности')
-    print(' 3 >> Сделать прогноз\n')
-    print(' 0 >> Главное меню\n')
-
-
-def show_feature_menu():
-    """Печатает меню признаков."""
-    show_menu_title('ПРИЗНАКИ')
-    print(' 1 >> Вайб-тэги')
-    print(' 2 >> Жанровая разметка')
-    print(' 3 >> Показать веса модели')
-    print(' 4 >> Сбросить веса модели')
-    print(' 0 >> Назад\n')
-
-
-def show_efficiency_menu(movies_counter: int, error: int):
-    """Печатает меню тестов эффективности."""
-    show_header(movies_counter, error)
-    show_menu_title('ТЕСТЫ ЭФФЕКТИВНОСТИ')
-    print(' 1 >> Оценить вклады')
-    print(' 2 >> Рассчитать ошибку для топ N')
-    print(' 3 >> Leave-one-out проверка')
-    print(' 4 >> Проверка устойчивости к шуму')
-    print(' 5 >> Показать влияние голосов')
-    print(' 6 >> Пересчитать raw оценки')
-    print(' 7 >> Диагностика признаков / feature ablation')
-    print(' 8 >> Эффективность жанровой разметки')
-    print(' 0 >> Назад\n')
-
-
 def show_genres_menu():
-    """Печатает меню жанров модели."""
+    """Печатает меню жанров."""
     show_menu_title('ЖАНРЫ')
     print(' 1 >> Показать все жанры')
     print(' 0 >> Главное меню\n')
@@ -180,14 +122,3 @@ def show_tags_menu():
     print(' 0 >> Назад\n')
 
 
-def show_result_train(new_weights: dict, old_error: float, new_error: float, delta_time: float):
-    """Печатает результат обучения модели."""
-    print('=' * 50)
-    print('Новые веса:\n')
-    for weight, value in new_weights.items():
-        print(f'{weight}: {round(value, 4)}')
-
-    print('\nОшибка до обучения:', round(old_error, 4))
-    print('Ошибка после обучения:', round(new_error, 4))
-    print(f'\nВремя подбора весов: {round(delta_time, 4)} сек.\n')
-    print('=' * 50)

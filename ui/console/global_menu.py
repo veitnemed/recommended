@@ -11,6 +11,7 @@ from ui.console import backup_menu
 from ui.console import interface_funcs
 from ui.console import menu_state
 from ui.console import request
+from ui.console import search_menu
 from ui.console import genre_menu
 from ui.console import tags_menu
 from ui.console import ui
@@ -48,28 +49,8 @@ def open_data_menu():
         ui.press_enter()
 
 
-def open_train_menu():
-    """Открывает меню обучения модели."""
-    print("Меню обучения отключено: проект работает как локальный поисковик сериалов.")
-
-
-def open_feature_menu():
-    """Открывает меню признаков модели."""
-    print("Меню признаков модели отключено.")
-
-
-def open_efficiency_menu():
-    """Открывает меню тестов эффективности модели."""
-    print("Меню эффективности модели отключено.")
-
-
-def open_model_menu():
-    """Открывает меню модели."""
-    print("Меню модели отключено: персональный прогноз больше не используется.")
-
-
 def open_genres_menu():
-    """Открывает меню жанров модели."""
+    """Открывает меню жанров."""
     while True:
         ui.clean_terminal()
         ui.show_genres_menu()
@@ -131,7 +112,7 @@ def open_candidate_pool_menu():
         elif command == "2":
             interface_funcs.show_candidate_pool()
         elif command == "3":
-            interface_funcs.show_global_candidate_top()
+            search_menu.show_global_candidate_search()
         elif command == "4":
             interface_funcs.mark_candidate_as_watched()
         elif command == "5":

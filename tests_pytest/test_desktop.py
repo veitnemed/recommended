@@ -467,22 +467,19 @@ def test_save_watched_user_score_uses_update_pipeline(monkeypatch) -> None:
     assert calls == [("Dataset Key", {"main_info": {"user_score": 8.5}}, "desktop_gui")]
 
 
-def test_save_watched_user_score_does_not_touch_model_artifacts(monkeypatch) -> None:
+def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch) -> None:
     from dataset.dataset_records import UpdateRecordResult
     from desktop.watched_view import save_watched_user_score
 
     def fail(_payload=None):
-        raise AssertionError("desktop score save must not touch model artifacts")
+        raise AssertionError("desktop score save must not touch unrelated artifacts")
 
     def fake_update(title, patch, source_name=""):
         return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
 
     monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
     monkeypatch.setattr("storage.data.save_weights", fail)
-    monkeypatch.setattr("storage.data.save_model_metrics", fail)
     monkeypatch.setattr("candidates.candidate_pool.save_candidate_pool", fail)
-    monkeypatch.setattr("model.model.save_weights_if_loo_improved", fail)
-    monkeypatch.setattr("model.linear_regression_train.train_ridge_for_benchmark", fail)
 
     result = save_watched_user_score("Dataset Key", 8.5)
 

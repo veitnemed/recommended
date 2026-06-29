@@ -204,14 +204,11 @@ def test_delete_watched_record_does_not_touch_weights_or_candidate_pool(monkeypa
         root = Path(temp_root)
         weights_path = root / "weights.json"
         pool_path = root / "candidate_pool.json"
-        metrics_path = root / "model_metrics.json"
         weights_path.write_text(json.dumps({"bias": 1.0}), encoding="utf-8")
         pool_path.write_text(json.dumps({"items": []}), encoding="utf-8")
-        metrics_path.write_text(json.dumps({"loo_mae": 1.23}), encoding="utf-8")
 
         original_weights = weights_path.read_text(encoding="utf-8")
         original_pool = pool_path.read_text(encoding="utf-8")
-        original_metrics = metrics_path.read_text(encoding="utf-8")
 
         dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
 
@@ -224,13 +221,11 @@ def test_delete_watched_record_does_not_touch_weights_or_candidate_pool(monkeypa
         monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: [])
         monkeypatch.setattr(module.constant, "WEIGHTS_JSON", str(weights_path))
         monkeypatch.setattr(module.constant, "CANDIDATE_POOL_JSON", str(pool_path))
-        monkeypatch.setattr(module.constant, "MODEL_METRICS_JSON", str(metrics_path))
 
         module.delete_watched_record("Alpha", timestamp="test")
 
         assert weights_path.read_text(encoding="utf-8") == original_weights
         assert pool_path.read_text(encoding="utf-8") == original_pool
-        assert metrics_path.read_text(encoding="utf-8") == original_metrics
 
 
 def test_delete_watched_record_ui_cancelled_without_delete(monkeypatch) -> None:

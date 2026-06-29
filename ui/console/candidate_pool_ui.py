@@ -71,7 +71,7 @@ def choose_genres_by_numbers(
     if current_genres is None:
         current_genres = []
 
-    genres = candidate_service.get_prediction_genre_options_view(criteria_name)["genres"]
+    genres = candidate_service.get_search_genre_options_view(criteria_name)["genres"]
     used_catalog_fallback = False
     if len(genres) == 0:
         genres = candidate_pool.get_available_genres()

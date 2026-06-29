@@ -9,7 +9,7 @@ from candidates import country_schema
 from candidates import genre_schema
 
 
-PREDICTION_REQUIRED_FIELDS = (
+COMPLETENESS_REQUIRED_FIELDS = (
     "kp_score",
     "kp_votes",
     "imdb_score",
@@ -96,7 +96,7 @@ def compute_completeness(candidate: dict) -> dict:
     current = _copy_candidate(candidate)
     missing_fields = [
         field_name
-        for field_name in PREDICTION_REQUIRED_FIELDS
+        for field_name in COMPLETENESS_REQUIRED_FIELDS
         if _has_value(current.get(field_name)) is False
     ]
     kp_status = _effective_kp_status(current)
@@ -134,8 +134,8 @@ def ensure_candidate_defaults(candidate: dict) -> dict:
     return updated
 
 
-def is_ready_for_predict(candidate: dict) -> bool:
-    """Returns True only when all model-required scores/votes are present."""
+def is_candidate_complete(candidate: dict) -> bool:
+    """Returns True only when all search-required scores/votes are present."""
     return compute_completeness(candidate)["is_complete"]
 
 

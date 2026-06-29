@@ -8,8 +8,6 @@ from difflib import SequenceMatcher
 
 from config import constant
 from config import genre_tags
-from common import format_score
-from candidates import to_dataset as candidate_to_dataset
 from apis import kp_api as api
 from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
 from candidates import country_schema
@@ -18,7 +16,7 @@ from candidates import genres as candidate_genres
 from candidates.schema import (
     coerce_candidate_number,
     compute_completeness as schema_compute_completeness,
-    is_ready_for_predict as schema_is_ready_for_predict,
+    is_candidate_complete as schema_is_candidate_complete,
     normalize_candidate_record,
 )
 
@@ -557,7 +555,7 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
     )
     ready_total = sum(
         1 for candidate in candidates
-        if schema_is_ready_for_predict(candidate)
+        if schema_is_candidate_complete(candidate)
     )
     incomplete_total = storage_total - ready_total
 
@@ -610,8 +608,8 @@ def _format_optional_filter_value(value) -> str:
     return str(value)
 
 
-def build_prediction_filter_defaults(criteria_name: str | None = None) -> dict:
-    """Возвращает defaults runtime-фильтров top prediction из candidate_criteria.json."""
+def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
+    """Возвращает defaults runtime-фильтров поиска из candidate_criteria.json."""
     defaults = {
         "criteria_name": criteria_name,
         "source": None,
@@ -648,8 +646,8 @@ def build_prediction_filter_defaults(criteria_name: str | None = None) -> dict:
     return defaults
 
 
-def format_prediction_filter_default_lines(defaults: dict) -> list[str]:
-    """Формирует краткую сводку defaults для экрана top prediction."""
+def format_search_filter_default_lines(defaults: dict) -> list[str]:
+    """Формирует краткую сводку defaults для экрана поиска."""
     return [
         f"country: {_format_optional_filter_value(defaults.get('country'))}",
         (
@@ -665,8 +663,8 @@ def format_prediction_filter_default_lines(defaults: dict) -> list[str]:
     ]
 
 
-def collect_prediction_genre_options(candidates: list) -> list[str]:
-    """Returns unique saved-pool genre labels for runtime top prediction filters."""
+def collect_search_genre_options(candidates: list) -> list[str]:
+    """Returns unique saved-pool genre labels for runtime search filters."""
     seen_keys = set()
     options = []
     for candidate in candidates:
@@ -750,8 +748,8 @@ def _matches_max_value(candidate: dict, field_name: str, max_value) -> bool:
     return current <= normalized_max
 
 
-def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> list:
-    """Фильтрует уже сохранённых кандидатов из общего пула перед prediction."""
+def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
+    """Фильтрует уже сохранённых кандидатов из общего пула перед поиском."""
     criteria_name = filters.get("criteria_name")
     source = filters.get("source")
     country = filters.get("country")
@@ -792,7 +790,7 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
         if _matches_min_value(candidate, "imdb_votes", min_imdb_votes) is False:
             continue
 
-        if only_complete and schema_is_ready_for_predict(candidate) is False:
+        if only_complete and schema_is_candidate_complete(candidate) is False:
             continue
 
         filtered.append(candidate)
@@ -800,13 +798,9 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
     return filtered
 
 
-def _has_prediction_value(value) -> bool:
-    return value is not None and str(value).strip() != ""
-
-
-def is_candidate_ready_for_prediction(candidate: dict) -> bool:
-    """Проверяет, можно ли безопасно считать обычный предикт для кандидата."""
-    return schema_is_ready_for_predict(candidate)
+def is_candidate_complete(candidate: dict) -> bool:
+    """Проверяет, достаточно ли у кандидата рейтинговых данных для строгого поиска."""
+    return schema_is_candidate_complete(candidate)
 
 
 def append_signal(candidate: dict, signal: str) -> None:
@@ -975,26 +969,6 @@ def remove_candidate_from_pool(target_candidate: dict) -> int:
     return removed
 
 
-def build_candidate_features(candidate: dict) -> dict:
-    """Собирает признаки модели для кандидата из пула без вайб-тегов."""
-    normalized = normalize_candidate_record(candidate)
-    year = int(normalized.get("year") or constant.NOW_YEAR)
-    raw_scores = {
-        "kp_score": float(normalized.get("kp_score") or 0),
-        "kp_votes": int(normalized.get("kp_votes") or 0),
-        "imdb_score": float(normalized.get("imdb_score") or 0),
-        "imdb_votes": int(normalized.get("imdb_votes") or 0),
-    }
-    main_info = {"year": year}
-    genre_features = candidate_to_dataset.candidate_genre_features_for_predict(normalized)
-
-    features = {constant.BIAS_FEATURE: 1.0}
-    features.update(format_score.raw_to_struct(raw_scores, main_info))
-    features.update({feature: 0 for feature in constant.TAGS_VIBE})
-    features.update(format_score.tags_to_features(genre_features, constant.GENRE_SECTION))
-    return features
-
-
 def find_suspicious_duplicates() -> list:
     """Ищет подозрительно похожие пары кандидатов в общем пуле."""
     candidates = get_all_candidates()
@@ -1040,34 +1014,6 @@ def find_suspicious_duplicates() -> list:
     return suspicious_pairs
 
 
-def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
-    """Ранжирует кандидатов по предикту модели без вайб-тегов."""
-    from model import model
-
-    no_vibe_features = [
-        feature for feature in constant.FEATURES
-        if feature not in constant.TAGS_VIBE
-    ]
-    prediction_weights = model.make_group_weights(weights, no_vibe_features)
-
-    scored_candidates = []
-    for candidate in candidates:
-        normalized_candidate = normalize_candidate_record(candidate)
-        features = build_candidate_features(normalized_candidate)
-        predict = model.predict_score(features, prediction_weights)
-        row = dict(normalized_candidate)
-        row.update({
-            "title": normalized_candidate.get("title") or "Без названия",
-            "year": normalized_candidate.get("year") or "?",
-            "predict": predict,
-            "predict_score": predict,
-        })
-        scored_candidates.append(row)
-
-    scored_candidates.sort(key=lambda item: item["predict"], reverse=True)
-    return scored_candidates
-
-
 def _safe_rank_float(value) -> float:
     try:
         if value in (None, ""):
@@ -1075,18 +1021,6 @@ def _safe_rank_float(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
-
-
-def _candidate_prediction_score(candidate: dict) -> float | None:
-    raw = candidate.get("predict")
-    if raw in (None, ""):
-        raw = candidate.get("predict_score")
-    if raw in (None, ""):
-        return None
-    try:
-        return float(raw)
-    except (TypeError, ValueError):
-        return None
 
 
 def _filled_score_votes_count(candidate: dict) -> int:
@@ -1097,44 +1031,37 @@ def _filled_score_votes_count(candidate: dict) -> int:
     return count
 
 
-def _prediction_duplicate_tiebreak_key(candidate: dict, order_index: int) -> tuple:
+def _candidate_quality_score(candidate: dict) -> float:
+    return _safe_rank_float(candidate.get("quality_score"))
+
+
+def _search_duplicate_tiebreak_key(candidate: dict, order_index: int) -> tuple:
     return (
-        1 if schema_is_ready_for_predict(candidate) else 0,
+        1 if schema_is_candidate_complete(candidate) else 0,
         1 if candidate.get("is_complete") is True else 0,
         _filled_score_votes_count(candidate),
-        _safe_rank_float(candidate.get("final_score")),
         _safe_rank_float(candidate.get("quality_score")),
+        _safe_rank_float(candidate.get("final_score")),
         _safe_rank_float(candidate.get("kp_score")),
         _safe_rank_float(candidate.get("imdb_score")),
         -order_index,
     )
 
 
-def _is_better_prediction_duplicate(
+def _is_better_search_duplicate(
     challenger: dict,
     incumbent: dict,
     challenger_index: int,
     incumbent_index: int,
 ) -> bool:
-    challenger_predict = _candidate_prediction_score(challenger)
-    incumbent_predict = _candidate_prediction_score(incumbent)
-
-    if challenger_predict is not None and incumbent_predict is not None:
-        if challenger_predict != incumbent_predict:
-            return challenger_predict > incumbent_predict
-    elif challenger_predict is not None:
-        return True
-    elif incumbent_predict is not None:
-        return False
-
-    return _prediction_duplicate_tiebreak_key(challenger, challenger_index) > _prediction_duplicate_tiebreak_key(
+    return _search_duplicate_tiebreak_key(challenger, challenger_index) > _search_duplicate_tiebreak_key(
         incumbent,
         incumbent_index,
     )
 
 
-def dedupe_ranked_predictions_by_title_identity(ranked_candidates: list) -> list:
-    """Keeps one best candidate per normalized title/year for top prediction display."""
+def dedupe_ranked_candidates_by_title_identity(ranked_candidates: list) -> list:
+    """Keeps one best candidate per normalized title/year for search display."""
     best_by_identity: dict[str, dict] = {}
     best_index_by_identity: dict[str, int] = {}
     order: list[str] = []
@@ -1151,7 +1078,7 @@ def dedupe_ranked_predictions_by_title_identity(ranked_candidates: list) -> list
             order.append(identity)
             continue
 
-        if _is_better_prediction_duplicate(
+        if _is_better_search_duplicate(
             candidate,
             current,
             index,
@@ -1162,7 +1089,7 @@ def dedupe_ranked_predictions_by_title_identity(ranked_candidates: list) -> list
 
     deduped = [best_by_identity[identity] for identity in order]
     deduped.sort(
-        key=lambda item: _candidate_prediction_score(item) if _candidate_prediction_score(item) is not None else float("-inf"),
+        key=_candidate_quality_score,
         reverse=True,
     )
     return deduped
@@ -1180,81 +1107,3 @@ def format_candidate_description(candidate: dict, limit: int = 200) -> str:
     return "нет данных"
 
 
-def select_ready_candidates_for_contributions(candidates: list) -> list:
-    """Возвращает кандидатов, безопасных для расчёта feature contributions."""
-    return [
-        candidate for candidate in candidates
-        if schema_is_ready_for_predict(candidate)
-    ]
-
-
-def candidate_not_ready_for_contributions_message(candidate: dict) -> str | None:
-    """Возвращает понятное сообщение, если кандидат не готов для contributions."""
-    if schema_is_ready_for_predict(candidate):
-        return None
-
-    missing_fields = schema_compute_completeness(candidate).get("missing_fields") or []
-    if len(missing_fields) == 0:
-        missing_text = "неизвестно"
-    else:
-        missing_text = ", ".join(missing_fields)
-
-    return (
-        "Кандидат ещё не готов для predict/contributions: не хватает данных. "
-        f"Не хватает: {missing_text}."
-    )
-
-
-def candidate_feature_contributions(candidate: dict, weights: dict) -> dict:
-    """Считает вклад каждого признака в предикт кандидата без вайб-тегов."""
-    from model import model
-
-    no_vibe_features = [
-        feature for feature in constant.FEATURES
-        if feature not in constant.TAGS_VIBE
-    ]
-    prediction_weights = model.make_group_weights(weights, no_vibe_features)
-    features = build_candidate_features(candidate)
-    predict = model.predict_score(features, prediction_weights)
-
-    contributions = []
-    for feature in no_vibe_features:
-        value = features.get(feature, 0)
-        weight = prediction_weights.get(feature, 0)
-        impact = value * weight
-        if impact == 0 and feature != constant.BIAS_FEATURE:
-            continue
-        contributions.append({
-            "feature": feature,
-            "label": constant.FIELD_LABELS.get(feature, feature),
-            "value": value,
-            "weight": weight,
-            "impact": impact,
-        })
-
-    positive = sorted(
-        [row for row in contributions if row["impact"] > 0],
-        key=lambda row: row["impact"],
-        reverse=True,
-    )
-    negative = sorted(
-        [row for row in contributions if row["impact"] < 0],
-        key=lambda row: row["impact"],
-    )
-
-    return {
-        "title": candidate.get("title") or "Без названия",
-        "year": candidate.get("year") or "?",
-        "criteria_name": candidate.get("criteria_name") or "",
-        "predict": predict,
-        "positive": positive,
-        "negative": negative,
-    }
-
-
-def build_contribution_reports_for_ready_candidates(candidates: list, weights: dict) -> list:
-    """Считает contributions только для prediction-ready кандидатов."""
-    return [
-        candidate_feature_contributions(candidate, weights)
-        for candidate in select_ready_candidates_for_contributions(candidates)
-    ]

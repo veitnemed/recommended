@@ -15,7 +15,7 @@
 ## Быстрая карта
 
 - `service.py` — facade для UI.
-- `candidate_pool.py` — общий saved pool, filters, stats, diagnostics, prediction helpers.
+- `candidate_pool.py` — общий saved pool, filters, stats, diagnostics, search helpers.
 - `tmdb_candidate_pool.py` — новый TMDb build snapshot.
 - `import_tmdb.py` — импорт TMDb snapshot в общий saved pool.
 - `schema.py` — нормализация кандидата, `kp_status`, completeness.

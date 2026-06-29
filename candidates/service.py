@@ -30,31 +30,7 @@ def get_pool_stats_view(criteria_name: str | None = None) -> dict:
     }
 
 
-def get_contribution_ready_view(candidates: list) -> dict:
-    """Prepares ready/incomplete split for contributions UI without model scoring."""
-    ready_candidates = candidate_pool.select_ready_candidates_for_contributions(candidates)
-    skipped_incomplete = [
-        candidate for candidate in candidates
-        if candidate_pool.candidate_not_ready_for_contributions_message(candidate) is not None
-    ]
-    not_ready_messages = [
-        {
-            "title": candidate.get("title"),
-            "year": candidate.get("year"),
-            "message": candidate_pool.candidate_not_ready_for_contributions_message(candidate),
-        }
-        for candidate in skipped_incomplete
-    ]
-
-    return {
-        "ready_candidates": ready_candidates,
-        "skipped_incomplete": skipped_incomplete,
-        "skipped_count": len(skipped_incomplete),
-        "not_ready_messages": not_ready_messages,
-    }
-
-
-def get_global_top_prediction_view() -> dict:
+def get_search_overview_view() -> dict:
     """Read-only pool overview for the local candidate search screen."""
     stats_view = get_pool_stats_view()
     candidates = get_pool_view()
@@ -67,7 +43,7 @@ def get_global_top_prediction_view() -> dict:
     }
 
 
-def get_prediction_filter_view(candidates: list, filters: dict) -> dict:
+def get_search_filter_view(candidates: list, filters: dict) -> dict:
     """Applies runtime filters for local search without model scoring."""
     search_view = search_core.search_candidates(candidates, filters)
     filtered_candidates = search_view["candidates"]
@@ -88,10 +64,10 @@ def get_prediction_filter_view(candidates: list, filters: dict) -> dict:
     }
 
 
-def get_prediction_filter_defaults_view(criteria_name: str | None = None) -> dict:
+def get_search_filter_defaults_view(criteria_name: str | None = None) -> dict:
     """Returns saved search filter defaults for UI without writing JSON."""
-    defaults = candidate_pool.build_prediction_filter_defaults(criteria_name)
-    lines = candidate_pool.format_prediction_filter_default_lines(defaults)
+    defaults = candidate_pool.build_search_filter_defaults(criteria_name)
+    lines = candidate_pool.format_search_filter_default_lines(defaults)
     return {
         "defaults": defaults,
         "lines": lines,
@@ -99,10 +75,10 @@ def get_prediction_filter_defaults_view(criteria_name: str | None = None) -> dic
     }
 
 
-def get_prediction_genre_options_view(criteria_name: str | None = None) -> dict:
+def get_search_genre_options_view(criteria_name: str | None = None) -> dict:
     """Returns saved-pool genres available for search filters without writing JSON."""
     candidates = get_pool_view(criteria_name)
-    genres = candidate_pool.collect_prediction_genre_options(candidates)
+    genres = candidate_pool.collect_search_genre_options(candidates)
     return {
         "criteria_name": criteria_name,
         "genres": genres,
@@ -388,11 +364,11 @@ def collect_candidates_legacy(criteria_name: str, criteria: dict) -> dict:
     return candidate_pool.collect_candidates(criteria_name, criteria)
 
 
-def rank_top_prediction_candidates(candidates: list, weights: dict) -> dict:
+def rank_search_candidates(candidates: list) -> dict:
     """Ranks and dedupes candidates by explainable quality score."""
     scored_candidates = search_ranking.rank_candidates(candidates)
     before_dedupe_count = len(scored_candidates)
-    scored_candidates = candidate_pool.dedupe_ranked_predictions_by_title_identity(scored_candidates)
+    scored_candidates = candidate_pool.dedupe_ranked_candidates_by_title_identity(scored_candidates)
     return {
         "candidates": scored_candidates,
         "before_dedupe_count": before_dedupe_count,
@@ -413,11 +389,6 @@ def add_candidate_to_watchlist(candidate: dict) -> dict:
 def hide_candidate(candidate: dict) -> dict:
     """Adds a candidate to the local hidden JSON."""
     return search_storage.add_to_hidden(candidate)
-
-
-def build_contribution_reports(candidates: list, weights: dict) -> list:
-    """Builds model contribution reports for ready pool candidates."""
-    return candidate_pool.build_contribution_reports_for_ready_candidates(candidates, weights)
 
 
 def format_candidate_description(candidate: dict, limit: int = 200) -> str:

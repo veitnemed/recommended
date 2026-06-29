@@ -77,3 +77,37 @@ def test_explain_candidate_returns_search_reasons() -> None:
     assert "Подходит по жанрам" in text
     assert "Не просмотрен" in text
     assert "Не скрыт" in text
+
+
+def test_candidate_service_exposes_search_named_views(monkeypatch) -> None:
+    from candidates import service
+
+    monkeypatch.setattr(service.candidate_pool, "get_pool_stats", lambda criteria_name=None: {"storage_total": 1})
+    monkeypatch.setattr(service.candidate_pool, "format_pool_stats_lines", lambda stats: ["В pool: 1"])
+    monkeypatch.setattr(service.candidate_pool, "format_pool_stats_summary", lambda stats: "В pool: 1")
+    monkeypatch.setattr(service, "get_pool_view", lambda criteria_name=None: [_candidate()])
+    monkeypatch.setattr(service.candidate_pool, "load_candidate_criteria", lambda: {})
+
+    overview = service.get_search_overview_view()
+    assert overview["is_empty"] is False
+    assert overview["candidates"][0]["title"] == "Метод"
+
+    filter_view = service.get_search_filter_view([_candidate(), _candidate(title="Комедия", genres=["комедия"])], {
+        "include_genres": ["Драма"],
+    })
+    assert filter_view["filtered_count"] == 1
+    assert filter_view["candidates"][0]["title"] == "Метод"
+
+    ranking_view = service.rank_search_candidates([_candidate(title="A", kp_score=7.0), _candidate(title="B", kp_score=8.5)])
+    assert ranking_view["candidates"][0]["title"] == "B"
+
+
+def test_search_menu_uses_search_named_service_api() -> None:
+    import inspect
+
+    from ui.console import search_menu
+
+    source = inspect.getsource(search_menu.show_global_candidate_search)
+    assert "get_search_overview_view" in source
+    assert "rank_search_candidates" in source
+    assert "top_prediction" not in source
