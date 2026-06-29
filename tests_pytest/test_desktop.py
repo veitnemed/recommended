@@ -478,7 +478,6 @@ def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch)
         return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
 
     monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
-    monkeypatch.setattr("storage.data.save_weights", fail)
     monkeypatch.setattr("candidates.candidate_pool.save_candidate_pool", fail)
 
     result = save_watched_user_score("Dataset Key", 8.5)

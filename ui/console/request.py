@@ -4,7 +4,6 @@ import copy
 
 from config import constant
 from config import scheme
-from common import format_score
 from common import valid
 from storage import data as storage_data
 from dataset import title_resolve
@@ -84,7 +83,7 @@ def short_text(value, limit: int = 50) -> str:
 
 
 def _available_genre_options() -> list[tuple[str, str]]:
-    """Возвращает доступные жанры модели в порядке текущей схемы."""
+    """Возвращает доступные жанры датасета в порядке текущей схемы."""
     options = []
     for feature in constant.GENRE:
         label = get_label(feature)
@@ -99,7 +98,7 @@ def choose_genre_names_by_numbers(
     prompt_hint: str = "Можно оставить пусто, тогда список жанров останется как есть.",
     input_label: str = "Номера жанров",
 ) -> list:
-    """Дает выбрать известные жанры модели по номерам."""
+    """Дает выбрать известные жанры датасета по номерам."""
     if current_genres is None:
         current_genres = []
 
@@ -161,7 +160,7 @@ def choose_genre_values_by_numbers(default_values: dict | None = None) -> dict:
 
     selected_genres = choose_genre_names_by_numbers(
         selected_labels,
-        prompt_title="Доступные жанры модели:",
+        prompt_title="Доступные жанры датасета:",
         prompt_hint="Выберите жанры по номерам через пробел. Пустой ввод оставит значения по умолчанию, 0 очистит выбор.",
         input_label="Номера жанров",
     )
@@ -195,8 +194,8 @@ def confirm_or_edit_api_genres(series: dict) -> list:
     )
 
 
-def confirm_or_edit_model_genres(series: dict) -> list:
-    """Показывает жанры для модели без автодобавления новых feature."""
+def confirm_or_edit_dataset_genres(series: dict) -> list:
+    """Показывает жанры для dataset без автодобавления новых feature."""
     genres = title_resolve.extract_api_genres(series)
     known_genres, unknown_genres = title_resolve.split_known_genres(genres)
     genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
@@ -204,11 +203,11 @@ def confirm_or_edit_model_genres(series: dict) -> list:
 
     print(f"Краткое описание: {short_text(series.get('description'), 80)}")
     print(f"Жанры из API: {genres_line}")
-    print(f"В модель попадут: {known_line}")
+    print(f"В dataset попадут: {known_line}")
     if len(unknown_genres) > 0:
         print(f"Игнор как подсказка: {', '.join(unknown_genres)}")
 
-    answer = input("Принять жанры для модели? yes / edit / off >> ").strip().lower()
+    answer = input("Принять жанры для dataset? yes / edit / off >> ").strip().lower()
     if answer in ("yes", "y", "да"):
         return known_genres
     if answer in ("off", "n", "no", "нет"):
@@ -216,7 +215,7 @@ def confirm_or_edit_model_genres(series: dict) -> list:
 
     return choose_genre_names_by_numbers(
         known_genres,
-        prompt_title="Выберите жанры для модели по номерам.",
+        prompt_title="Выберите жанры для dataset по номерам.",
         prompt_hint="Пустой ввод оставит текущий набор, 0 очистит жанры.",
         input_label="Номера жанров",
     )
@@ -313,7 +312,7 @@ def ask_manual_addition() -> bool:
     return answer in {"y", "yes", "да", "д"}
 
 
-def resolve_title_for_training(
+def resolve_title_for_add(
     title: str,
     country: str = "Россия",
     confirm_genres: bool = False,
@@ -326,17 +325,17 @@ def resolve_title_for_training(
     api_data = resolved["api_data"]
 
     if sql_data is not None:
-        title_presenters.print_sql_training_preview(sql_data)
+        title_presenters.print_sql_add_preview(sql_data)
     else:
         print(f"\nSQL не нашёл точный базовый объект: {resolved['sql_result'].get('details')}")
 
     api_defaults = {}
     if api_data is not None:
-        title_presenters.print_api_training_preview(api_data)
+        title_presenters.print_api_add_preview(api_data)
         api_genres = title_resolve.extract_api_genres(api_data)
         if confirm_genres:
             print("")
-            api_genres = confirm_or_edit_model_genres(api_data)
+            api_genres = confirm_or_edit_dataset_genres(api_data)
         api_defaults = title_resolve.build_api_defaults(api_data, api_genres)
     elif resolved["api_error"] is not None:
         error = resolved["api_error"]
@@ -356,7 +355,7 @@ def resolve_title_for_training(
         defaults[scheme.GENRE] = dict(api_defaults.get(scheme.GENRE, {}))
 
     print_autofill_status(resolved, manual_mode=api_data is None)
-    title_presenters.print_final_training_preview(defaults)
+    title_presenters.print_final_add_preview(defaults)
     answer = input("\nЭто нужный объект? Введи yes >> ").strip().lower()
     if answer != "yes":
         print("Операция отменена.")
@@ -372,61 +371,7 @@ def request_api_defaults(confirm_genres: bool = False) -> tuple[dict | None, dic
         funcs_list=[valid.is_correct_title]
     )
     country = tmdb_country_options.choose_single_country_label()
-    return resolve_title_for_training(title, country, confirm_genres)
-
-
-def request_predict_features(defaults: dict) -> dict:
-    """Запрашивает данные для прогноза и собирает признаки модели."""
-    funcs = get_request_schema()
-    main_info = {}
-    raw_scores = {}
-    tags_vibe = {}
-    genre_values = {}
-
-    print(f'\n--- {get_section_label(scheme.MAIN_INFO)} ---')
-    year_settings = funcs[scheme.MAIN_INFO]["year"]
-    year_default = defaults.get(scheme.MAIN_INFO, {}).get("year")
-    year_answer = loop_input_with_default(
-        text=f'>> {get_label("year")} [{year_default}]: ',
-        funcs_list=get_validators(year_settings["tag"]),
-        default_value=year_default
-    )
-    main_info["year"] = int(year_answer)
-
-    print(f'\n--- {get_section_label(scheme.RAW_SCORES)} ---')
-    for feature, field_settings in funcs[scheme.RAW_SCORES].items():
-        default_value = defaults.get(scheme.RAW_SCORES, {}).get(feature)
-        answer = loop_input_with_default(
-            text=f'>> {get_label(feature)} [{default_value}]: ',
-            funcs_list=get_validators(field_settings["tag"]),
-            default_value=default_value
-        )
-        if field_settings["type"] is float:
-            raw_scores[feature] = valid.parse_float(answer)
-        else:
-            raw_scores[feature] = field_settings["type"](answer)
-
-    print(f'\n--- {get_section_label(scheme.TAGS_VIBE)} ---')
-    for feature, field_settings in funcs[scheme.TAGS_VIBE].items():
-        show_score_help(feature)
-        default_value = defaults.get(scheme.TAGS_VIBE, {}).get(feature, 0)
-        answer = loop_input_with_default(
-            text=f'>> {get_label(feature)} [{default_value}]: ',
-            funcs_list=get_validators(field_settings["tag"], field_settings.get("max_value", 1)),
-            default_value=default_value
-        )
-        tags_vibe[feature] = int(answer)
-
-    print(f'\n--- {get_section_label(scheme.GENRE)} ---')
-    genre_values = choose_genre_values_by_numbers(defaults.get(scheme.GENRE, {}))
-
-    features = {
-        constant.BIAS_FEATURE: 1.0
-    }
-    features.update(format_score.raw_to_struct(raw_scores, main_info))
-    features.update(format_score.tags_to_features(tags_vibe))
-    features.update(format_score.tags_to_features(genre_values, scheme.GENRE))
-    return features
+    return resolve_title_for_add(title, country, confirm_genres)
 
 
 def show_score_help(feature: str) -> None:

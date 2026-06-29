@@ -529,8 +529,6 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         save_dataset(data)
         if raw_patch is not None:
             _sync_raw_scores_to_meta(dataset_title, new_main_info, new_raw_scores)
-        if "main_info.user_score" in changed_fields:
-            storage_data.mark_model_metrics_stale("user_score_changed")
     except Exception as error:
         return UpdateRecordResult(
             ok=False,

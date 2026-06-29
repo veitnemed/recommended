@@ -42,7 +42,7 @@ def show_global_menu(movies_counter: int, error: int = 0):
     print(' 0 >> Выход\n')
 
 
-def show_data_menu(movies_counter: int, error: int):
+def show_data_menu(movies_counter: int):
     """Печатает меню данных."""
     show_header(movies_counter, error)
     show_menu_title('ПРОСМОТРЕННОЕ')
@@ -57,7 +57,7 @@ def show_data_menu(movies_counter: int, error: int):
     print(' 0 >> Главное меню\n')
 
 
-def show_candidate_pool_menu(movies_counter: int, error: int, pool_stats_line: str):
+def show_candidate_pool_menu(movies_counter: int, pool_stats_line: str):
     """Печатает меню работы с общим пулом кандидатов."""
     show_header(movies_counter, error)
     show_menu_title('ПОИСК СЕРИАЛОВ')
@@ -92,11 +92,11 @@ def show_candidate_pool_diagnostics_menu():
 def show_genres_menu():
     """Печатает меню жанров."""
     show_menu_title('ЖАНРЫ')
-    print(' 1 >> Показать все жанры')
+    print(' 1 >> Показать жанровые поля dataset')
     print(' 0 >> Главное меню\n')
 
 
-def show_extra_menu(movies_counter: int, error: int):
+def show_extra_menu(movies_counter: int):
     """Печатает дополнительное меню."""
     show_header(movies_counter, error)
     show_menu_title('ДОПОЛНИТЕЛЬНО')

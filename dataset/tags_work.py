@@ -1,4 +1,4 @@
-"""Меняет пользовательские данные при работе с тегами: dataset, weights, backup.
+"""Меняет пользовательские данные при работе с тегами: dataset и backup.
 
 Чистое чтение/валидация каталога тегов живёт в config.tags_work и ре-экспортируется
 здесь для обратной совместимости старых импортов ``from dataset import tags_work``.
@@ -42,7 +42,7 @@ def move_edit_files_to_backup() -> None:
 
 
 def backup_tag_files() -> None:
-    """Создает backup файлов тегов и весов."""
+    """Создает backup файла тегов."""
     from config import constant
 
     backup_dir = os.path.join(constant.DIR_TXT, "tags_backup")
@@ -50,11 +50,10 @@ def backup_tag_files() -> None:
     os.makedirs(backup_dir, exist_ok=True)
 
     shutil.copy(TAGS_JSON, os.path.join(backup_dir, date_name + " tags.json"))
-    shutil.copy(constant.WEIGHTS_JSON, os.path.join(backup_dir, date_name + " weights.json"))
 
 
 def add_tag_to_data(feature: str) -> None:
-    """Добавляет новый тег в датасет и веса."""
+    """Добавляет новый тег в датасет."""
     from config import constant
 
     dataset = load_json(constant.FILE_NAME)
@@ -63,26 +62,16 @@ def add_tag_to_data(feature: str) -> None:
         movie[constant.TAGS_VIBE_SECTION][feature] = 0
     save_json(constant.FILE_NAME, dataset)
 
-    weights = load_json(constant.WEIGHTS_JSON)
-    weights[feature] = 0
-    save_json(constant.WEIGHTS_JSON, weights)
-
 
 def delete_tag_from_data(feature: str) -> None:
-    """Удаляет тег из датасета и весов."""
+    """Удаляет тег из датасета."""
     from config import constant
-    from model import model
 
     dataset = load_json(constant.FILE_NAME)
     for movie in dataset.values():
         movie.setdefault(constant.TAGS_VIBE_SECTION, {})
         movie[constant.TAGS_VIBE_SECTION].pop(feature, None)
     save_json(constant.FILE_NAME, dataset)
-
-    weights = load_json(constant.WEIGHTS_JSON)
-    weights.pop(feature, None)
-    weights = model.normalize_weights(weights)
-    save_json(constant.WEIGHTS_JSON, weights)
 
 
 def delete_all_tags() -> None:
@@ -96,10 +85,6 @@ def delete_all_tags() -> None:
         movie[constant.TAGS_VIBE_SECTION] = {}
     save_json(constant.FILE_NAME, dataset)
 
-    weights = load_json(constant.WEIGHTS_JSON)
-    for feature in old_tags.keys():
-        weights.pop(feature, None)
-    save_json(constant.WEIGHTS_JSON, weights)
     save_tags({})
 
 

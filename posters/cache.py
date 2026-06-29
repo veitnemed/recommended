@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from candidates.keys import title_identity_key
-from model import model
 from storage.data import get_meta_obj
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -223,17 +222,18 @@ def _movie_title_year(dataset_key: str, movie: dict) -> tuple[str, Any]:
     return title, year
 
 
+def _iter_dataset_items(data) -> list[tuple[str, dict]]:
+    if isinstance(data, dict):
+        return list(data.items())
+    return [(str(index), movie) for index, movie in enumerate(data or [])]
+
+
 def build_poster_cache_from_existing_data(data) -> dict:
     """Build poster cache entries from existing dataset records without API calls."""
     cache: dict[str, dict] = {}
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-    if isinstance(data, dict):
-        items = list(data.items())
-    else:
-        items = [(str(index), movie) for index, movie in enumerate(model.iter_movies(data))]
-
-    for dataset_key, movie in items:
+    for dataset_key, movie in _iter_dataset_items(data):
         movie_dict = _as_dict(movie)
         original = deepcopy(movie_dict)
         title, year = _movie_title_year(dataset_key, movie_dict)

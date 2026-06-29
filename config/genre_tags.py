@@ -1,4 +1,4 @@
-"""Работает с каталогом жанровых признаков модели."""
+"""Работает с каталогом жанровых признаков dataset."""
 
 import copy
 import json
@@ -83,7 +83,7 @@ def transliterate_to_ascii(text: str) -> str:
 
 
 def genre_to_feature_name(genre_name: str) -> str:
-    """Возвращает имя признака модели для жанра."""
+    """Возвращает имя признака dataset для жанра."""
     normalized = normalize_genre_name(genre_name)
     if normalized in GENRE_NAME_TO_FEATURE:
         return GENRE_NAME_TO_FEATURE[normalized]

@@ -197,17 +197,14 @@ def test_build_watched_delete_preview(monkeypatch) -> None:
     assert preview["poster_local_path"] == "C:/images/alpha.jpg"
 
 
-def test_delete_watched_record_does_not_touch_weights_or_candidate_pool(monkeypatch) -> None:
+def test_delete_watched_record_does_not_touch_candidate_pool(monkeypatch) -> None:
     from dataset import delete_record as module
 
     with tempfile.TemporaryDirectory() as temp_root:
         root = Path(temp_root)
-        weights_path = root / "weights.json"
         pool_path = root / "candidate_pool.json"
-        weights_path.write_text(json.dumps({"bias": 1.0}), encoding="utf-8")
         pool_path.write_text(json.dumps({"items": []}), encoding="utf-8")
 
-        original_weights = weights_path.read_text(encoding="utf-8")
         original_pool = pool_path.read_text(encoding="utf-8")
 
         dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
@@ -219,12 +216,10 @@ def test_delete_watched_record_does_not_touch_weights_or_candidate_pool(monkeypa
         monkeypatch.setattr(module.storage_data, "save_meta", lambda _payload: None)
         monkeypatch.setattr(module, "save_poster_cache", lambda _payload: None)
         monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: [])
-        monkeypatch.setattr(module.constant, "WEIGHTS_JSON", str(weights_path))
         monkeypatch.setattr(module.constant, "CANDIDATE_POOL_JSON", str(pool_path))
 
         module.delete_watched_record("Alpha", timestamp="test")
 
-        assert weights_path.read_text(encoding="utf-8") == original_weights
         assert pool_path.read_text(encoding="utf-8") == original_pool
 
 

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import constant
-from model import model
+from candidates.keys import title_identity_key
 from posters.cache import lookup_poster_cache_entry
 
 
@@ -26,6 +26,13 @@ def _as_list(value) -> list:
     if isinstance(value, set):
         return list(value)
     return []
+
+
+def iter_dataset_movies(data):
+    """Return dataset records from dict or list payloads without importing model code."""
+    if isinstance(data, dict):
+        return list(data.values())
+    return data if isinstance(data, list) else list(data or [])
 
 
 def _clean_text(value) -> str | None:
@@ -250,13 +257,29 @@ def _resolve_overview(
         if meta_text is not None:
             return meta_text
 
-    from model.train_report import resolve_movie_description
-
     pool_by_identity = lookup_cache["pool_by_identity"] if lookup_cache else {}
-    resolved_text = resolve_movie_description(title, year, resolved_meta, pool_by_identity)
-    if resolved_text == "нет описания":
+    resolved_text = resolve_watched_description(title, year, resolved_meta, pool_by_identity)
+    if resolved_text == "":
         return None
     return resolved_text
+
+
+def resolve_watched_description(title: str, year, meta_obj: dict | None, pool_by_identity: dict) -> str:
+    """Resolve watched-title description from meta and candidate pool only."""
+    if isinstance(meta_obj, dict):
+        meta_text = _clean_text(meta_obj.get("description"))
+        if meta_text is not None:
+            return meta_text
+
+    pool_candidate = pool_by_identity.get(title_identity_key({"title": title, "year": year}))
+    if isinstance(pool_candidate, dict):
+        from candidates import candidate_pool
+
+        pool_text = candidate_pool.format_candidate_description(pool_candidate)
+        if pool_text != "нет данных":
+            return pool_text
+
+    return ""
 
 
 def build_watched_movie_card(
@@ -309,7 +332,7 @@ def export_watched_movies_json(data, path=None) -> Path:
             poster_cache=poster_cache,
             lookup_cache=lookup_cache,
         )
-        for movie_obj in model.iter_movies(data)
+        for movie_obj in iter_dataset_movies(data)
     ]
     payload = {
         "report_type": "watched_movies",

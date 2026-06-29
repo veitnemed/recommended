@@ -1,4 +1,4 @@
-"""Maps candidate-pool canonical fields to dataset/model payload shapes."""
+"""Maps candidate-pool canonical fields to dataset payload shapes."""
 
 from __future__ import annotations
 

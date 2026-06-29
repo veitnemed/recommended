@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from model import train_report
+from types import SimpleNamespace
+
 from posters.cache import load_poster_cache, save_poster_cache, sync_poster_cache_from_meta_and_sources
 from storage import data as storage_data
-from web.export import build_export_lookup_cache
+from web.export import build_export_lookup_cache, resolve_watched_description
+
+
+train_report = SimpleNamespace(resolve_movie_description=resolve_watched_description)
 
 
 def _find_meta_entry(meta: dict, title: str) -> tuple[str | None, dict | None]:

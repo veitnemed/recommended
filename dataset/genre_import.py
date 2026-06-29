@@ -141,10 +141,6 @@ def apply_genre_markup(country: str = "Россия", prompt: Callable[[str], st
 
         storage_files.create_backup()
         storage_data.save_dataset(data)
-        weights = storage_data.load_weights()
-        for feature in constant.GENRE:
-            weights.setdefault(feature, 0)
-        storage_data.save_weights(weights)
         print("Жанровая разметка сохранена.")
     else:
         print("Подтвержденных изменений нет.")

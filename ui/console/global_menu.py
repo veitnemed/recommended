@@ -22,8 +22,8 @@ def open_data_menu():
     """Открывает меню работы с данными."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        ui.show_data_menu(movies_counter, round(abs_error, 2))
+        data, movies_counter = menu_state.get_menu_state()
+        ui.show_data_menu(movies_counter)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
         if command == "0":
@@ -59,7 +59,7 @@ def open_genres_menu():
         if command == "0":
             return
         if command == "1":
-            genre_menu.show_model_genres()
+            genre_menu.show_dataset_genre_catalog()
 
         ui.press_enter()
 
@@ -68,8 +68,8 @@ def open_extra_menu():
     """Открывает дополнительное меню."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        ui.show_extra_menu(movies_counter, round(abs_error, 2))
+        data, movies_counter = menu_state.get_menu_state()
+        ui.show_extra_menu(movies_counter)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 9)])
         if command == "0":
@@ -99,10 +99,10 @@ def open_candidate_pool_menu():
     """Открывает меню работы с общим пулом кандидатов."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
+        data, movies_counter = menu_state.get_menu_state()
         pool_stats_view = candidate_service.get_pool_stats_view()
         pool_stats_line = pool_stats_view["summary"]
-        ui.show_candidate_pool_menu(movies_counter, round(abs_error, 2), pool_stats_line)
+        ui.show_candidate_pool_menu(movies_counter, pool_stats_line)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":
@@ -160,11 +160,6 @@ def open_candidate_pool_diagnostics_menu():
             interface_funcs.show_tmdb_dataset_genre_diagnostics()
 
         ui.press_enter()
-
-
-def export_report():
-    """Выгружает отчет по текущему состоянию модели."""
-    print("Отчёт модели отключён: проект работает как локальный поисковик сериалов.")
 
 
 def open_tags_menu():

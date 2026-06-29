@@ -1,4 +1,4 @@
-"""Собирает и печатает жанры текущего датасета через API и каталог модели."""
+"""Собирает и печатает жанры текущего датасета через API и каталог dataset."""
 
 from collections import Counter
 
@@ -104,8 +104,8 @@ def show_dataset_genres(country: str = "Россия") -> None:
     print_genre_report(result)
 
 
-def build_model_genre_catalog() -> list[dict]:
-    """Возвращает жанровые признаки модели с русскими подписями из config/genre_tags.json."""
+def build_dataset_genre_catalog() -> list[dict]:
+    """Возвращает жанровые признаки dataset с русскими подписями из config/genre_tags.json."""
     tags = genre_tags.load_genre_tags()
     items = []
     for index, (feature, settings) in enumerate(sorted(tags.items()), start=1):
@@ -122,11 +122,11 @@ def build_model_genre_catalog() -> list[dict]:
     return items
 
 
-def show_model_genres() -> None:
-    """Печатает каталог жанровых признаков модели (has_*) с переводом на русский."""
-    items = build_model_genre_catalog()
+def show_dataset_genre_catalog() -> None:
+    """Печатает каталог жанровых признаков dataset (has_*) с переводом на русский."""
+    items = build_dataset_genre_catalog()
 
-    print("\nЖАНРЫ МОДЕЛИ")
+    print("\nЖАНРЫ DATASET")
     print("=" * 50)
     if len(items) == 0:
         print("Жанровые признаки не заданы.")

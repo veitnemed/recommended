@@ -1,8 +1,8 @@
-"""Интерактивное меню жанров модели."""
+"""Интерактивное меню жанров dataset."""
 
 from dataset import genre_stats
 
 
-def show_model_genres() -> None:
-    """Показывает все жанровые признаки модели."""
-    genre_stats.show_model_genres()
+def show_dataset_genre_catalog() -> None:
+    """Показывает все жанровые признаки dataset."""
+    genre_stats.show_dataset_genre_catalog()

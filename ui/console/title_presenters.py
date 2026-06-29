@@ -13,7 +13,7 @@ def short_text(value, limit: int = 50) -> str:
     return text[:limit] + "..."
 
 
-def print_sql_training_preview(sql_data: dict) -> None:
+def print_sql_add_preview(sql_data: dict) -> None:
     """Показывает краткую SQL-сводку перед API-обогащением."""
     genres_line = ", ".join(sql_data.get("genres", []) or []) or "нет данных"
     print("\nSQL нашёл базовый объект:")
@@ -24,7 +24,7 @@ def print_sql_training_preview(sql_data: dict) -> None:
     print(f"IMDb: {sql_data.get('imdb_rating') or '-'} / голосов {sql_data.get('imdb_votes') or '-'}")
 
 
-def print_api_training_preview(api_data: dict) -> None:
+def print_api_add_preview(api_data: dict) -> None:
     """Показывает краткую API-сводку для будущего сохранения."""
     countries = title_resolve.extract_api_countries(api_data)
     genres_line = ", ".join(title_resolve.extract_api_genres(api_data)) or "нет данных"
@@ -42,7 +42,7 @@ def print_api_training_preview(api_data: dict) -> None:
     )
 
 
-def print_final_training_preview(defaults: dict) -> None:
+def print_final_add_preview(defaults: dict) -> None:
     """Показывает итоговые значения, которые попадут в форму добавления."""
     genres = [
         constant.FIELD_LABELS.get(feature, feature)

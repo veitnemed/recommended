@@ -1,4 +1,4 @@
-"""Собирает константы проекта: пути, поля, подписи и веса по умолчанию."""
+"""Собирает константы проекта: пути, поля и подписи."""
 
 from config import genre_tags
 from config import scheme
@@ -6,11 +6,9 @@ from config import tags_work
 
 DATA_DIR = 'C:/DATA/movies-learn/'
 FILE_NAME = 'C:/DATA/movies-learn/dataset.json'
-WEIGHTS_JSON = 'C:/DATA/movies-learn/weights.json'
 CRITERIA_POOL_JSON = 'C:/DATA/movies-learn/candidate_criteria.json'
 CANDIDATE_POOL_JSON = 'C:/DATA/movies-learn/candidate_pool.json'
 RATING_ORDER_DRAFTS_DIR = 'data/rating_order_drafts'
-MODEL_METRICS_JSON = 'config/model_metrics.json'
 API_LOG_FILE = 'C:/DATA/movies-learn/api_requests.log'
 BACKUP_DIR = 'C:/BACKUP/movies-learn/BACKUP/'
 
@@ -79,7 +77,7 @@ def refresh_dynamic_fields() -> None:
     """Обновляет динамические списки признаков и связанные справочники."""
     global MAIN_INFO, RAW_SCORES, TAGS_VIBE, GENRE
     global COMPUTED_SCORES, CSV_FIELDS, FEATURES, RAW_META_FIELDS, FEATURES_CONST
-    global ONLY_SCORES, TAG_RULES, DEFAULT_WEIGHTS, FIELD_LABELS
+    global ONLY_SCORES, TAG_RULES, FIELD_LABELS
 
     MAIN_INFO = scheme.get_fields(scheme.MAIN_INFO)
     RAW_SCORES = scheme.get_fields(scheme.RAW_SCORES)
@@ -112,14 +110,6 @@ def refresh_dynamic_fields() -> None:
     FIELD_LABELS.update(genre_tags.get_genre_labels())
 
     TAG_RULES = tags_work.get_tag_rules()
-
-    if len(FEATURES) == 0:
-        DEFAULT_WEIGHTS = {}
-    else:
-        DEFAULT_WEIGHTS = {
-            feature: round(1 / len(FEATURES), 4)
-            for feature in FEATURES
-        }
 
     TRANSLATION["features"] = {
         BIAS_FEATURE: "Bias",

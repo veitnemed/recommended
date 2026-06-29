@@ -66,7 +66,7 @@ def _report_add_progress(
 
 
 def split_known_genres(genres: list) -> tuple[list, list]:
-    """Разделяет жанры на известные модели и неизвестные подсказки."""
+    """Разделяет жанры на известные dataset и неизвестные подсказки."""
     mapping = raw_genres_to_dataset_genres(genres)
     unmapped_keys = set(mapping["unmapped_genre_keys"])
     known: list[str] = []

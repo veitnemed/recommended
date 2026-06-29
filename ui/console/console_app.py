@@ -18,7 +18,7 @@ def run_console_app():
 
     while True:
         ui.clean_terminal()
-        _data, _weights, movies_counter, _abs_error = menu_state.get_menu_state()
+        _data, movies_counter = menu_state.get_menu_state()
         ui.show_global_menu(movies_counter)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])

@@ -111,3 +111,25 @@ def test_search_menu_uses_search_named_service_api() -> None:
     assert "get_search_overview_view" in source
     assert "rank_search_candidates" in source
     assert "top_prediction" not in source
+
+
+def test_console_add_flow_uses_add_named_helpers() -> None:
+    import inspect
+
+    from ui.console import request, title_presenters
+
+    request_source = inspect.getsource(request)
+    presenters_source = inspect.getsource(title_presenters)
+
+    assert hasattr(request, "resolve_title_for_add")
+    assert hasattr(request, "confirm_or_edit_dataset_genres")
+    assert hasattr(title_presenters, "print_sql_add_preview")
+    assert hasattr(title_presenters, "print_api_add_preview")
+    assert hasattr(title_presenters, "print_final_add_preview")
+
+    assert "resolve_title_for_training" not in request_source
+    assert "request_predict_features" not in request_source
+    assert "confirm_or_edit_model_genres" not in request_source
+    assert "print_sql_training_preview" not in presenters_source
+    assert "print_api_training_preview" not in presenters_source
+    assert "print_final_training_preview" not in presenters_source
