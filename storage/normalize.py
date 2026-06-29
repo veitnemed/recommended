@@ -57,6 +57,7 @@ def normalize_csv_row(row: dict) -> dict:
         normalized.setdefault(feature, "0")
     for feature in constant.GENRE:
         normalized.setdefault(feature, "0")
+    normalized.setdefault("country", "")
     return normalized
 
 
@@ -74,6 +75,8 @@ def normalize_main_info(main_info: dict) -> dict:
             normalized[feature] = str(main_info[feature]).strip()
         elif feature == "year":
             normalized[feature] = int(main_info[feature])
+        elif feature == "country":
+            normalized[feature] = str(main_info.get(feature, "") or "").strip()
         else:
             normalized[feature] = valid.parse_float(main_info[feature])
     return normalized

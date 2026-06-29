@@ -1,261 +1,154 @@
-﻿# ����: ������� ����������� � PyQt desktop GUI
+﻿# Desktop GUI Roadmap
 
-����: 2026-06-25  
-������: �������� ����  
-��������� ���������: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md), [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md), [PROJECT_MAP.md](PROJECT_MAP.md), [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md), [add_functions.md](add_functions.md)
+Roadmap описывает актуальный PyQt desktop для `Series List`: watched-база, карточка тайтла, аналитика и поиск кандидатов. Старые desktop-сценарии из `archive/legacy/` не возвращаются в активный GUI.
 
-������ �� polish: [DESKTOP_GUI_REPORT_2026-06-25.md](reports/DESKTOP_GUI_REPORT_2026-06-25.md), [DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md](reports/DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md)
+## Цель
 
-����������: ���������� � layout-�������� desktop GUI ������ � [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). ���� �������� ��������� **��� � � ����� �������** ���������� � GUI, �� �������� ������� ����������.
+Desktop должен быть рабочим интерфейсом для ежедневного сценария:
 
-## ����
+1. посмотреть watched-базу;
+2. найти тайтл или кандидата;
+3. проверить карточку, постер, рейтинги, жанры и описание;
+4. добавить/обновить watched-запись через documented services;
+5. использовать read-only аналитику для качества базы.
 
-PyQt desktop � **�������� ��������** ��� ������������ ������ � watched-�����, ���������� � (�����) ��������������.
+## Правила
 
-������� � **������� � fallback**: ������� �������, ��������, pool build, �������� ��������, �������.
+- GUI не пишет JSON напрямую.
+- Любой write идет через `dataset` или `candidates.service`.
+- TMDb/KP/IMDb SQL вызываются через `apis` и сервисы.
+- Generated JSON не добавляется в git.
+- Desktop не содержит старых legacy-вкладок.
 
-## ������������� ������
+## Текущее состояние
 
-```
-PyQt widget (desktop/*)
-  > desktop helper / dialog
-    > dataset/* | candidates/service | model reports
-      > storage / JSON / cache
-```
-
-Ƹ����� �������: GUI **�� ����� JSON ��������**. Write ������ ����� documented services:
-
-- `dataset/dataset_records.py` � add/update ������;
-- `dataset/delete_record.py` � �������� watched;
-- `candidates/service.py` � candidate pool � top prediction.
-
-���������: [add_functions.md](add_functions.md), [PROJECT_MAP.md](PROJECT_MAP.md).
-
-## ������� ���������
-
-| ������� | ����� | ������ |
+| Область | Файлы | Статус |
 | --- | --- | --- |
-| Watched list + �������� | [desktop/watched_view.py](../desktop/watched_view.py), [desktop/app.py](../desktop/app.py) | done |
-| Watched sidebar (�������, thumbnails, delete) | `app.py`, `watched_delete.py`, `delete_dialog.py` | done |
-| �������������� `user_score` | `app.py` > `update_dataset_record` | done |
-| �������� watched | `app.py` > `delete_record.delete_watched_record` | done |
-| Analytics KPI / dense / insights | [desktop/analytics_view.py](../desktop/analytics_view.py) | done |
-| Analytics �������� dataset� | `score_analytics.py` + `analytics_view.py` | done |
-| Analytics MVP (�����, ����, gaps, suspicious) | `score_analytics.py` + `plotly_charts.py` + `analytics_view.py` | done |
-| Bar �������������� ������ | `analytics_view.py` + [desktop/plotly_charts.py](../desktop/plotly_charts.py) + [dataset/score_analytics.py](../dataset/score_analytics.py) (`chart_distribution`) | done |
-| Layout-�������� | [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) | done |
+| Watched list + detail card | `desktop/app.py`, `desktop/watched_view.py` | done |
+| Poster display/actions | `desktop/watched_view.py`, `posters/` | done |
+| Edit `user_score` | `desktop/app.py`, `dataset.dataset_records` | done |
+| Delete watched | `desktop/watched_delete.py`, `desktop/delete_dialog.py` | done |
+| Add watched wizard | `desktop/add_title_dialog.py`, `dataset.storage_movie` | done |
+| Analytics read-only | `desktop/analytics_view.py`, `dataset/score_analytics.py` | done |
+| Plotly/fallback charts | `desktop/plotly_charts.py` | done |
+| Candidate search in GUI | `candidates.service`, desktop wiring | planned |
+| Candidate pool operations | `candidates.service` | planned |
 
----
+## Этап 1. Polish текущей watched-базы
 
-## ���� 1. Polish �������� GUI
+Статус: done.
 
-**����:** ���������� ������� ���, ��� ����� ������-������.  
-**�����:** `desktop/watched_view.py`, `desktop/analytics_view.py`, `desktop/plotly_charts.py`, `desktop/app.py`
+- watched sidebar: поиск, сортировка, фильтры, thumbnails;
+- detail card: poster, title, chips, ratings, overview;
+- context actions: открыть локальный постер, удалить watched;
+- стабильный layout при resize;
+- helper-тесты в `tests/test_desktop.py`.
 
-### ������
+## Этап 2. Read-only аналитика
 
-- [x] **1.1** Visual QA watched card � done (������� � [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md); helper-����� sparse card � `test_desktop.py`).
-- [x] **1.2** Polish ����� ������ ������ � done (sidebar: thumbnails, collapsible filters, sort row, counter, forest-green add button).
-- [x] **1.3** Plotly charts: ������ ������/�������, `#analyticsPlotlyChart`, ��� `COLOR_SURFACE` � done (`plotly_charts.py` helpers, `analytics_view.py`).
-- [x] **1.4** Analytics polish (KPI, ��������, spacing) � done (`ANALYTICS_*` ���������, completeness block layout).
+Статус: done.
 
-### �������� ����������
+Scope:
 
-��� ������� ����� �� [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) �������� �������; layout �� �������� ��� resize.
+- dataset completeness;
+- score distribution;
+- genre distribution;
+- average by year;
+- gaps against IMDb/KP;
+- suspicious records;
+- fallback без WebEngine.
 
-### �� ������ �� ���� �����
+Правило: analytics читает dataset/meta и ничего не сохраняет.
 
-����� write, ����� �������, pool, training.
+## Этап 3. Watched write-сценарии
 
----
+Статус: mostly done.
 
-## ���� 2. Read-only ����������
+- добавление записи через wizard;
+- редактирование `user_score`;
+- удаление watched с preview и подтверждением;
+- poster-cache side effects только через dataset/delete services.
 
-### 2.1 Watched (������ �����������)
+Осталось:
 
-- [x] **2.1.1** ������ �� ��������� `user_score` � done (`desktop.watched_view.filter_entries_by_user_score`, UI min/max � watched left panel).
-- [x] **2.1.2** ������ �� ���� � done (`desktop.watched_view.filter_entries_by_year`, UI `year_from/year_to` � watched left panel).
-- [x] **2.1.3** ������ �� ����� � done (`desktop.watched_view.get_available_genres`, `filter_entries_by_genre`, UI genre combo � watched left panel).
-- [x] **2.1.4** ������� �������� N� � done (`format_watched_list_counter` ��� ������� + status bar).
-- [x] **2.1.5** ������� ����� �������� � done (`�������� �������`, score/year/genre > defaults; ����� �� ������������).
+- ручное редактирование жанров и raw scores в GUI;
+- более понятные ошибки API/defaults;
+- UX для неполных данных перед сохранением.
 
-������: `load_watched_entries()` + filter/sort, ��� ������.
+## Этап 4. Поиск кандидатов
 
-### 2.2 Analytics (������� �� ������)
+Статус: planned.
 
-Pipeline ��� **�������** ������ �������:
+Цель: перенести основной поиск из console в desktop без дублирования core-логики.
 
-1. ������ � [dataset/score_analytics.py](../dataset/score_analytics.py);
-2. HTML � [desktop/plotly_charts.py](../desktop/plotly_charts.py);
-3. ������ � [desktop/analytics_view.py](../desktop/analytics_view.py) + Qt-fallback;
-4. smoke � [tests/test_desktop.py](../tests/test_desktop.py).
+Задачи:
 
-������� ����������:
+- criteria selector;
+- runtime-фильтры по стране, году, рейтингу, жанрам;
+- ready/incomplete split;
+- карточка candidate preview;
+- перенос candidate -> watched через существующий add flow;
+- понятная пустая выдача и причины incomplete.
 
-- [x] **2.2.0** Read-only �������� dataset� � done (`build_dataset_completeness*`, ��� ������ � ��������).
-- [x] **2.2.1** ������������� �� �������� � done (`score_count_points` + Plotly).
-- [x] **2.2.2** ���������� ������� �� ������ � done (`genre_count_rows`, horizontal bar).
-- [x] **2.2.3** ������� ��� ������ �� ����� � done (`year_average_points`, line chart; **���** count-by-year).
-- [x] **2.2.4** � ������ ���� IMDb � done (text list, ? ? 1.5, ������ IMDb).
-- [x] **2.2.5** � ������ ���� IMDb � done (text list, ? ? ?1.5, ������ IMDb).
-- [x] **2.2.6** �������������� ������ � done (text list + reason).
-- [x] **2.2.7** ������� ���� ������ �� IMDb � done (text top-10 + ��������� ����, ���������� �� |?|, �� 20).
+Запреты:
 
-**Analytics MVP freeze (2026-06-26):** ����� ����� ��������������� ������ **�� ���������** ����� analytics-������ ��� ���������� �������. ����������: **2.2.7** �������� �� �������. ��� scope: ������, pie charts, scatter, ������ ���������� ������ �� �����, �������, drill-down � watched.
+- не пересобирать pool при runtime-фильтре;
+- не писать candidate pool напрямую из widgets;
+- не вызывать KP/TMDb напрямую из desktop.
 
-�������� / ���������� �� ������� �����:
+## Этап 5. Candidate pool operations
 
-- ~~2.2.x ���� ������ �� ����� (count)�~~ � �� ������ � MVP;
-- ~~scatter/bar ���� vs IMDb/�ϻ~~ � �������� text lists 2.2.4�2.2.5.
+Статус: planned.
 
-### �������� ����������
+Read-only сначала:
 
-������ ������ �������� � Plotly/WebEngine � � Qt-fallback; analytics read-only � �� ������� weights, `model_metrics`, pool, dataset (����� ������).
+- список criteria;
+- stats по raw/watched/active/ready/incomplete;
+- suspicious duplicates;
+- incomplete candidates preview.
 
----
-
-## ���� 3. ���������� write � watched
-
-### ������
-
-- [x] **3.0** UI-stub �������� ���������� watched-������ � done (`+ �������� �����` > wizard: search, progress, card confirm, save ����� service).
-- [x] **3.1** �������� ������ � done (��� > �������� �������, preview dialog, ������������� `DELETE`, `delete_watched_record()` ����� `desktop/watched_delete.py`).
-- [x] **3.2** Read-only ��������� ������ (�����������): �������� ��������� ������, ��������� ���� poster-cache� � done (`WatchedDetailCard`, `open_path_in_shell`).
-
-### �����
-
-[tests/test_delete_watched_record.py](../tests/test_delete_watched_record.py) � service layer; wiring GUI � `tests/test_desktop.py` (`test_watched_delete_*`, context menu).
-
-### �� ������ �� ���� �����
-
-������ �������� ������ (title, genres, raw_scores).
-
-### �������� ����������
-
-Delete �������� ��� �� service path, ��� � �������; cancel �� ������� ������.
-
----
-
-## ���� 4. ������� ��������
-
-**Read-only KPI + ����� LOO-��������** ����� service; ��� ��������� �������� �� GUI.
-
-| ���� | �������� |
-| --- | --- |
-| LOO MAE summary | `config/model_metrics.json`, train reports |
-| IMDb / KP baseline | report helpers �� `model/` |
-| Feature ablation | [ui/console/train_menu.py](../ui/console/train_menu.py) / model diagnostics |
-| Top errors | read-only report |
-
-### ������
-
-- [x] **4.1** ������� �������� � read-only summary �� `model_metrics` � done (`ModelView`, KPI: LOO MAE, IMDb/�� baseline, dataset size, fresh/stale).
-- [x] **4.2** LOO-��������: ������, progress bar, `QThread` > `execute_explicit_loo_training()` � done (`model_loo_worker.py`); stale-banner + ���������� (����).
-- [ ] **4.3** Read-only ���������� ����� / ablation / top errors (��� save).
-
-### �� ������
-
-�������� �������� �� GUI, auto-update metrics ��� ������ LOO.
-
----
-
-## ���� 5. ������������� (read-only top prediction)
-
-- [ ] **5.1** ������� > ����� `criteria_name`.
-- [ ] **5.2** [candidates/service.py](../candidates/service.py) `get_global_top_prediction_view()` � ������������ �������� ranking (��� � console ~1638 `interface_funcs.py`).
-- [ ] **5.3** ������� (runtime, ready/incomplete) ����� service.
-- [ ] **5.4** �������� ���������� read-only.
-
-### �� ������
-
-�������� pool, import TMDb, retry KP, ������ `candidate_criteria.json`. Ranking �� ����������� � `desktop/`.
-
----
-
-## ���� 6. Candidate pool � GUI
-
-### Read-only (�������)
-
-- [ ] **6.1** ������ criteria.
-- [ ] **6.2** Stats (raw/watched/active/ready/incomplete).
-- [ ] **6.3** �������� ����������, ������ incomplete.
-
-### Write (�����, � confirmation dialogs)
+Write только с confirmation dialogs:
 
 - mark watched;
 - retry KP;
 - delete criteria;
 - import saved TMDb result.
 
-### �������� � �������
+TMDb build остается отдельным сложным сценарием и переносится позже.
 
-TMDb build, �������� ��������, ������� import.
+## Этап 6. Metadata и posters
 
----
+Статус: planned.
 
-## ���� 7. ������� � metadata
+- показать состояние poster-cache: local/missing/remote;
+- batch download missing posters;
+- refresh TMDb metadata для выбранной записи;
+- аккуратные сообщения по сети, SSL и отсутствию токена.
 
-### Backend (done)
+## Этап 7. Финальная структура GUI
 
-- [x] **7.0** ��� ���������� ������ � sync poster-cache + `download_poster_for_title()`; ��� �������� � `remove_local_poster_file()` (`add_dataset_record`, `delete_watched_record`).
+После переноса поиска desktop должен иметь понятные зоны:
 
-### Read-only (�������)
+- `Watched`;
+- `Search`;
+- `Candidates`;
+- `Analytics`;
+- `Settings/Tools` для редких действий.
 
-- [ ] **7.1** �����������: ������� �������� local / missing / ��� description.
+Console остается рабочим fallback и местом для редких maintenance-сценариев.
 
-### �����
+## Проверки
 
-- update metadata;
-- batch download missing posters (������� Extra ��� ���� ��� backfill).
+Для desktop-изменений:
 
-��������� ����-����: ����, TMDb, SSL.
+```powershell
+py -m compileall desktop dataset candidates apis storage ui tests
+py -m pytest tests/test_desktop.py
+```
 
----
+Для структурных изменений:
 
-## ���� 8. ���� �������
-
-������� **�� �������**. �������� ������� ���:
-
-- Excel import/export;
-- LOO training / weights;
-- rating comparison / drafts;
-- TMDb pool build;
-- backup/restore;
-- �������.
-
----
-
-## ��������� 8 �����
-
-| # | ��� | ���� | ������ |
-| --- | --- | --- | --- |
-| 1 | A1 Analytics Plotly/KPI polish | 1 | done |
-| 2 | A2 Read-only poster actions � �������� | 1 | done |
-| 3 | A3 Status bar LOO MAE | 1 | next |
-| 4 | B1 Wizard ��������� ����� (search + preview) | 3 | done |
-| 5 | B2 Wizard save ����� service | 3 | done |
-| 6 | C4 ������� ������������� read-only | 5 | planned |
-| 7 | C1 ������� �������� KPI + LOO �������� | 4 | done |
-| 8 | C1.2 Baseline comparison + �������� | 4 | next |
-| 9 | E1 Mark watched �� pool | 6 | planned |
-
----
-
-## ������� ����� GUI-PR
-
-- [x] ��� ������ ������ JSON �� PyQt (delete > `delete_watched_record`, score > `update_dataset_record`).
-- [x] Write ��� ����� documented service + `source_name` (score edit).
-- [x] Layout/size policy �� [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) (watched card + sidebar).
-- [x] Spacing/fonts ����� ����������� ��������� � `analytics_view.py`.
-- [x] Helper-����� edge cases watched card � `test_desktop.py`; ������ ������� � style contract.
-- [x] `tests/test_desktop.py` (+ smoke ��� plotly ��� ��������).
-- [x] �� �������: training, pool build, weights ��� ���������� �����.
-
-## ��� �� ������� ��� ���������� �������
-
-- ������ dataset / meta;
-- ������������ ����� ������ ������;
-- TMDb/KP pipeline, poster cache logic;
-- `candidate_pool` write �� GUI �� ������ ������;
-- web GUI;
-- console flows (����� reuse helpers).
+```powershell
+py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+py -m pytest
+```

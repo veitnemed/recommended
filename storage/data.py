@@ -19,6 +19,7 @@ def init_dataset():
 
 def load_dataset() -> dict:
     """Загружает датасет из JSON-файла."""
+    init_dataset()
     with open(constant.FILE_NAME, 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
     for movie in data.values():
@@ -73,6 +74,7 @@ def init_meta():
 
 def load_meta() -> dict:
     """Загружает meta из JSON-файла."""
+    init_meta()
     with open(constant.META_JSON, 'r', encoding='utf-8-sig') as file:
         return json.load(file)
 

@@ -13,7 +13,7 @@ from candidates.schema import normalize_candidate_record
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = ROOT_DIR / "data" / "candidate_pool"
+OUTPUT_DIR = ROOT_DIR / "data" / "exports" / "candidate_pool"
 
 
 def list_tmdb_result_files() -> list[Path]:

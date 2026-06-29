@@ -28,7 +28,7 @@ def init_candidate_criteria() -> None:
     """Создает JSON с критериями подбора, если его еще нет."""
     if os.path.exists(constant.CRITERIA_POOL_JSON):
         return
-    os.makedirs(constant.DATA_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(constant.CRITERIA_POOL_JSON), exist_ok=True)
     with open(constant.CRITERIA_POOL_JSON, "w", encoding="utf-8") as file:
         json.dump({}, file, ensure_ascii=False, indent=4)
 
@@ -37,7 +37,7 @@ def init_candidate_pool() -> None:
     """Создает JSON с пулом кандидатов, если его еще нет."""
     if os.path.exists(constant.CANDIDATE_POOL_JSON):
         return
-    os.makedirs(constant.DATA_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(constant.CANDIDATE_POOL_JSON), exist_ok=True)
     with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
         json.dump({}, file, ensure_ascii=False, indent=4)
 

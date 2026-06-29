@@ -21,6 +21,11 @@ recovered_edit_dataset.csv
 api_token.py
 .browser_profiles/
 data/cache/
+data/watched/*.json
+data/candidates/*.json
+data/logs/
+data/backups/
+data/exports/
 
 # Large local datasets and generated outputs
 datasets/
@@ -28,9 +33,10 @@ datasets/
 *.sqlite3
 *.db
 
-data/candidate_pool/
 data/diagnostics/
 config/model_metrics.json
+config/rating_comparison_last_snapshot.json
+data/rating_order_drafts/*.json
 /web/data/*.json
 /reports/
 _safety_audit/

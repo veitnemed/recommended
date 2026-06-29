@@ -1,446 +1,348 @@
-﻿# ARCHITECTURE_TARGET — целевая структура проекта
+﻿# Целевая архитектура
 
-Документ фиксирует **целевую** структуру папок Terminal Movies Learn и правила
-зависимостей между слоями.
+Документ описывает архитектуру, к которой должен постепенно прийти `Series List`.
 
-> Статус: **ДОСТИГНУТО**. Рефакторинг выполнен: структура и направление зависимостей
-> ниже соответствуют текущему коду. Реальную раскладку файлов по папкам см. в
-> [PROJECT_MAP.md](PROJECT_MAP.md); правила добавления функционала — в
-> [add_functions.md](add_functions.md). Разделы 4–5 ниже оставлены как история
-> миграции (какой старый модуль куда переехал).
+Проект должен стать чистым локальным поисковиком сериалов и тайтлов с личной watched-базой, candidate pool, внешним enrichment и удобным UI. Старые ML-эксперименты, временные JSON, diagnostics и ручные скрипты не должны определять активную структуру приложения.
 
-Проект: **Terminal Movies Learn** — консольная Python-программа для личной модели
-вкуса по фильмам/сериалам.
+## Главная Идея
 
----
+`Series List` - это не ML-проект и не набор разрозненных скриптов. Целевая форма:
 
-## 1. Целевая структура папок
-
-```
-recommended/
-│
-├─ main.py
-│
-├─ config/        # настройки, пути, схемы, теги, жанры, секреты, feature catalog
-├─ common/        # чистые утилиты: validation, normalize, formatting, text match
-├─ storage/       # низкоуровневое файловое хранилище: json, atomic save, backup, paths
-├─ dataset/       # пользовательский dataset: records, meta, excel, stats, rename
-├─ candidates/    # candidate_pool, TMDb pool, dedupe, filters, retry KP, ranking
-├─ model/         # features, predict, metrics (MAE/KP_MAE/IMDb_MAE), LOO, training, weights
-├─ apis/          # внешние источники: KP API, TMDb API, IMDb SQL, api logging, retry
-├─ ui/            # интерфейсные слои
-│  ├─ console/    # текущий консольный UI: input/print, меню, формы, маршрутизация
-│  └─ gui/        # место под будущий GUI
-├─ desktop/       # текущий PyQt desktop GUI: watched, analytics, read-only views
-├─ tests/         # тесты проекта, regression, тесты архитектурных правил
-└─ docs/          # архитектурные документы, карты, roadmap, заметки рефакторинга
+```text
+локальная watched-база
+        +
+поиск новых сериалов через candidate pool
+        +
+enrichment из TMDb / IMDb SQL / KP
+        +
+console и desktop UI поверх стабильных сервисов
 ```
 
-Порядок слоёв снизу вверх (нижние ничего не знают о верхних):
+Источник правды хранится локально в `data/`, код работает через сервисные слои, UI не пишет JSON напрямую.
 
+## Целевая Структура
+
+```text
+series-list/
+  start_console.py
+  start_app.py
+
+  app/                 # запуск и общая инициализация
+  ui/
+    console/           # консольные сценарии, меню, prompts
+    gui/               # будущие общие GUI-компоненты, если понадобятся
+  desktop/             # PyQt desktop-приложение
+
+  dataset/             # watched-записи, meta, add/update/delete
+  candidates/          # candidate pool, поиск, фильтры, dedupe
+  posters/             # poster-cache и локальные постеры
+
+  apis/                # TMDb, KP, IMDb SQL
+  storage/             # load/save/init/backup низкого уровня
+  config/              # схемы, константы, справочники
+  common/              # чистые утилиты
+
+  scripts/             # ручные utilities, миграции, diagnostics
+  assets/
+    desktop/           # desktop assets
+  web/                 # read-only экспорт
+  tests/               # активные pytest-тесты
+  docs/                # документация
+  archive/
+    legacy/            # история, не runtime
 ```
-common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <-  ui
+
+Корень репозитория должен быть почти пустым: entrypoint-файлы, README/config tooling и папки верхнего уровня. Новые одиночные скрипты в корень не добавляются.
+
+## Слои
+
+Нижние слои не знают про верхние:
+
+```text
+common
+  ↑
+config
+  ↑
+storage
+  ↑
+apis        dataset        posters
+  ↑           ↑              ↑
+  └──── candidates ──────────┘
+              ↑
+      ui/console, desktop, web
+              ↑
+        start_console.py / start_app.py
 ```
 
-(`common` — самый нижний; `ui/console` и `desktop` — верхние интерфейсные слои.)
+Практически:
 
----
+- `common` - функции без знания проекта и файлов.
+- `config` - схемы, справочники, пути, константы.
+- `storage` - чтение, запись, init, backup.
+- `apis` - только получение внешних данных.
+- `dataset` - watched-база и операции над ней.
+- `candidates` - общий пул кандидатов и поиск по нему.
+- `posters` - изображения и poster-cache.
+- `ui/console` и `desktop` - пользовательские сценарии.
+- `scripts` - ручные операции, не скрытый runtime.
+- `archive/legacy` - не импортируется активным кодом.
 
-## 2. Зоны ответственности, запреты и кандидаты на переезд
+## Правила Зависимостей
 
-### 2.1 `config/`
+Разрешено:
 
-**Отвечает за:** настройки проекта, пути, схемы, теги, жанры, constants,
-secrets / local API keys loader, feature catalogs.
+```text
+ui/console -> dataset, candidates, apis, storage, config, common
+desktop    -> dataset, candidates, storage, config, common, posters
+web        -> dataset, storage, config, common
+candidates -> dataset, apis, storage, config, common
+dataset    -> storage, apis, config, common, posters
+posters    -> storage, apis, config, common
+apis       -> config, common
+storage    -> config, common
+config     -> common, stdlib
+common     -> stdlib
+scripts    -> любой активный слой как ручной entrypoint
+```
 
-**Запрещено:**
-- импортировать `dataset` / `data_work` / `candidates` / `model` / `ui` / `apis`;
-- читать/писать `dataset.json`;
-- читать/писать `candidate_pool.json`;
-- делать API-запросы;
-- вызывать `input()` / `print()` как UI-сценарий.
+Запрещено:
 
-**Правило:** config — нижний слой. Он не зависит от пользовательских данных и
-бизнес-сценариев.
+- нижним слоям импортировать `ui`, `desktop` или `web`;
+- `apis` писать в watched dataset или candidate pool;
+- `candidates` напрямую вызывать `input()` / `print()` для бизнес-логики;
+- UI напрямую сохранять JSON вместо вызова service-функций;
+- активному runtime импортировать `archive/legacy`;
+- возвращать зависимости от старой ML-модели;
+- добавлять generated JSON в git без отдельного решения.
 
-**Текущие файлы, которые относятся сюда:**
-- `config/constant.py`
-- `config/scheme.py`
-- `config/tags.json`
-- `config/tags_work.py` *(после Шага 1 — чистый каталог тегов)*
-- `config/genre_tags.json`
-- `config/genre_tags.py`
+## Данные
 
----
+Целевая структура локальных данных:
 
-### 2.2 `common/`
+```text
+data/
+  watched/
+    titles.json        # пользовательские записи
+    meta.json          # enrichment/meta по watched-записям
 
-**Отвечает за:** чистые общие функции — validation, normalization, formatting,
-text matching, small helpers.
+  candidates/
+    pool.json          # общий candidate pool
+    criteria.json      # сохраненные критерии/дефолты
+    watchlist.json     # позже: посмотреть
+    hidden.json        # скрытые кандидаты
 
-**Будущие файлы:**
-- `common/validation.py`
-- `common/normalize.py`
-- `common/formatting.py`
-- `common/text_match.py`
+  cache/
+    posters/
+    tmdb/
+    kp/
 
-**Запрещено:**
-- импортировать `dataset` / `storage` / `candidates` / `model` / `apis` / `ui`;
-- работать с файлами;
-- делать API-запросы;
-- читать `dataset`;
-- читать `candidate_pool`;
-- вызывать `input()` / `print()`.
+  exports/
+    candidate_pool/
+    edit_dataset.xlsx
 
-**Правило:** common — чистый нижний слой, тестируется без файлов проекта.
+  logs/
+    api_requests.log
 
-**Текущие файлы, которые относятся сюда:**
-- `core/valid.py` *(после Шага 2 — без зависимости от storage)*
-- `core/format_score.py`
-- функции нормализации title/genre/text, если они не зависят от storage/dataset/API
-  (сейчас часть такой логики живёт в `data_work/storage_normalize.py` — переедет
-  только чистая её часть).
+  backups/
+```
 
----
+В git остаются только справочники:
 
-### 2.3 `storage/`
+- `config/tags.json`;
+- `config/genre_tags.json`;
+- `apis/sql_title_aliases.json`.
 
-**Отвечает за:** низкоуровневое файловое хранение — `load_json`, `save_json`,
-atomic save, backup, создание папок, paths, init files.
+Runtime JSON из `data/` не коммитятся. Их можно бэкапить, мигрировать и чистить отдельно от кода.
 
-**Будущие файлы:**
-- `storage/json_storage.py`
-- `storage/paths.py`
-- `storage/backup.py`
-- `storage/files.py`
+## Watched-База
 
-**Запрещено:**
-- пользовательские сценарии («добавить фильм», «собрать пулл», «обучить модель»);
-- `input()` / `print()` как UI.
+Watched-запись хранится в `data/watched/titles.json`.
 
-**Правило:** storage знает, *как* сохранить файл, но не решает, *зачем*.
+Минимальная модель:
 
-**Текущие файлы, которые относятся сюда:**
-- `data_work/storage_files.py`
-- `data_work/storage_data.py` — **только** низкоуровневая часть чтения/записи;
-- backup-логика (часть `data_work/tags_work.py` / прочих backup-функций).
+```text
+main_info:
+  title
+  user_score
+  year
+  country
 
----
+raw_scores:
+  kp_score
+  kp_votes
+  imdb_score
+  imdb_votes
+  kp_popularity
+  imdb_popularity
 
-### 2.4 `dataset/`
+tags_vibe:
+  пользовательские vibe-теги
 
-**Отвечает за:** пользовательский dataset, meta, add/update/rename records, Excel,
-dataset stats, genre/tag updates в пользовательских данных.
+genre:
+  has_* жанровые признаки
+```
 
-**Будущие файлы:**
-- `dataset/records.py`
-- `dataset/meta.py`
-- `dataset/excel.py`
-- `dataset/rename.py`
-- `dataset/stats.py`
-- `dataset/genre_import.py`
-- `dataset/tags_service.py`
+`data/watched/meta.json` хранит внешнее enrichment:
 
-**Запрещено:**
-- `input()` / `print()`;
-- прямые API-запросы из UI-сценариев;
-- логика `candidate_pool`;
-- обучение модели.
+- `tmdb_id`;
+- `imdb_id`;
+- `kp_id`;
+- description/overview;
+- poster hints;
+- source/raw metadata.
 
-**Правило:** dataset управляет тем, что пользователь **уже** посмотрел и оценил.
+Правило: пользовательская watched-запись не должна зависеть от доступности API. API помогает заполнить данные, но не является источником правды.
 
-**Текущие файлы, которые относятся сюда:**
-- `data_work/dataset_records.py`
-- `data_work/storage_movie.py`
-- `data_work/excel_work.py`
-- `data_work/storage_data.py` — частично (сценарии над dataset/meta);
-- `data_work/dataset_stats.py`
-- `data_work/genre_import.py`
-- `data_work/tags_work.py` — **только** мутационная часть (add/delete/backup тегов).
+## Candidate Pool
 
----
+`data/candidates/pool.json` - общий пул потенциальных тайтлов.
 
-### 2.5 `candidates/`
+Цель pool:
 
-**Отвечает за:** candidate_pool, TMDb pool, импорт TMDb result в общий пул, dedupe,
-filters, incomplete candidates, retry KP, top candidates, перенос кандидата в
-dataset через сервисы.
+- хранить кандидатов между запусками;
+- позволять фильтровать по стране, году, жанрам, рейтингам;
+- не показывать уже просмотренное;
+- поддерживать добор KP/IMDb/TMDb данных;
+- переносить выбранного кандидата в watched через ручное подтверждение.
 
-**Console facade (текущее):**
-- `candidates/service.py` — orchestration между `ui/console` и core; без `input()/print()`; делегирует в `candidate_pool`, `import_tmdb`, `tmdb_candidate_pool`. Не включает model scoring.
+Инварианты:
 
-**Будущие файлы:**
-- `candidates/pool.py`
-- `candidates/tmdb_pool.py`
-- `candidates/import_tmdb.py`
-- `candidates/filters.py`
-- `candidates/dedupe.py`
-- `candidates/retry_kp.py`
-- `candidates/ranking.py`
-- `candidates/criteria.py`
+- runtime-фильтр не пересобирает и не портит сохраненный pool;
+- read-path не удаляет кандидатов;
+- write-path после переноса в watched чистит watched-кандидата из pool;
+- incomplete-кандидаты можно видеть отдельно и добирать через enrichment;
+- dedupe должен быть централизован в `candidates`, а не размазан по UI.
 
-**Запрещено:**
-- `input()`;
-- `print()` как основной сценарий;
-- прямое сохранение dataset без dataset-service;
-- обучение модели;
-- UI-меню.
+## Add / Update / Delete
 
-**Правило:** candidates управляет тем, что пользователь **может** посмотреть, но
-ещё не добавил в dataset.
+Все изменения watched-базы проходят через service path:
 
-**Текущие файлы, которые относятся сюда:**
-- `candidates/service.py` — console facade (J1–J5)
-- `candidates/candidate_pool.py`, `candidates/import_tmdb.py`, `candidates/tmdb_candidate_pool.py`
-- `candidates/kp_enrichment.py`, `candidates/schema.py`, `candidates/keys.py`, `candidates/genres.py`
-- `data_work/candidate_pool.py` (legacy path name в migration table)
-- `data_work/tmdb_candidate_pool.py`
-- candidate-логика из `interface/interface_funcs.py` — **без** UI; в console UI вызывает `candidates/service.py`
+```text
+dataset.storage_movie.add_movie(...)
+  -> dataset.dataset_records.add_dataset_record(...)
 
----
+dataset.dataset_records.update_dataset_record(...)
 
-### 2.6 `model/`
+dataset.delete_record.delete_watched_record(...)
+```
 
-**Отвечает за:** features, predict, metrics, MAE, KP_MAE, IMDb_MAE, LOO, training,
-weights, reports.
+UI отвечает за:
 
-**Будущие файлы:**
-- `model/features.py`
-- `model/predict.py`
-- `model/metrics.py`
-- `model/loo.py`
-- `model/training.py`
-- `model/training_linear.py`
-- `model/weights.py`
-- `model/reports.py`
+- ввод;
+- preview;
+- подтверждение;
+- вывод результата.
 
-**Запрещено:**
-- импортировать `ui` / `interface`;
-- `input()`;
-- UI print-сценарии;
+Service отвечает за:
+
+- валидацию;
+- нормализацию;
+- backup;
+- запись dataset/meta;
+- cleanup candidate pool;
+- poster-cache side effects.
+
+Storage отвечает только за:
+
+- прочитать;
+- записать;
+- создать файл/папку;
+- сделать backup.
+
+## Внешние Источники
+
+`apis/` не должен становиться доменной логикой.
+
+TMDb, KP и IMDb SQL должны возвращать данные в предсказуемом формате, а решение “что с этим делать” принимают `dataset` или `candidates`.
+
+Токены и локальные базы:
+
+- `TMDB_TOKEN` не хранится в git;
+- IMDb SQLite лежит локально в `datasets/dataset_sql_light/imdb_light.sqlite3`;
+- API cache лежит в `data/cache/`.
+
+## UI
+
+Цель UI - быть тонким слоем сценариев.
+
+Console:
+
 - меню;
-- прямое изменение dataset/candidate_pool.
+- prompts;
+- подтверждения;
+- вызов service-функций;
+- человекочитаемый вывод.
 
-**Правило:** model считает, обучает и прогнозирует. Он не знает, как пользователь
-нажимает пункты меню.
+Desktop:
 
-**Текущие файлы, которые относятся сюда:**
-- `model_work/model.py`
-- `model_work/linear_regression_train.py`
-- `model_work/train_report.py`
-- `model_work/noise_experiment.py`
-- `model_work/train_modes.py` — **без** UI/input.
+- просмотр watched-базы;
+- карточка тайтла;
+- поиск и перенос кандидата;
+- read-only аналитика;
+- позже - удобное редактирование watched-записей.
 
-> Замечание по текущему долгу: сейчас `model_work/linear_regression_train.py` и
-> `model_work/train_modes.py` импортируют `interface`. Это нарушает правило
-> «model не импортирует ui» и будет развязано отдельным шагом.
+UI не должен:
 
----
+- знать формат всех JSON до мелочей;
+- вручную чистить pool;
+- обходить service layer;
+- содержать тяжелую бизнес-логику.
 
-### 2.7 `apis/`
+## Scripts
 
-**Отвечает за:** внешние источники — KP API, TMDb API, IMDb SQL, API logging, retry,
-timeout, raw external data.
+`scripts/` - место для ручных операций:
 
-**Будущие файлы:**
-- `apis/kp_api.py`
-- `apis/tmdb_api.py`
-- `apis/imdb_sql.py`
-- `apis/api_log.py`
+- миграции старых данных;
+- диагностика сети/API;
+- одноразовые build/export utilities;
+- отчеты для разработки.
 
-**Запрещено:**
-- сохранять dataset;
-- сохранять candidate_pool;
-- вызывать `input()` / `print()` как UI;
-- обучать модель;
-- принимать пользовательские решения.
+Скрипт может импортировать активные слои, но приложение не должно зависеть от скрипта как от runtime-модуля.
 
-**Правило:** apis только получает внешние данные и возвращает результат наверх.
+Если скрипт становится нужным для обычного пользовательского сценария, его логика переносится в `dataset`, `candidates`, `storage` или `apis`, а в `scripts` остается только CLI-обертка.
 
-**Текущие файлы, которые относятся сюда:**
-- `integrations/api.py`
-- `integrations/api_tmdb.py`
-- `data_work/sql_search.py`
-- secrets-loader `api_token.py` остаётся вне VCS; токен читает `config`-слой, сами
-  запросы — `apis`.
+## Archive
 
----
+`archive/legacy/` - кладбище старого кода, но не мусорная корзина активного проекта.
 
-### 2.8 `ui/`
+Правила:
 
-**Отвечает за:** интерфейсные слои приложения.
+- активный код не импортирует `archive/legacy`;
+- тесты из `archive/legacy` не входят в `pytest`;
+- старую ML-модель не возвращаем в runtime;
+- если из legacy нужна идея, переносим ее в активный слой явно и с тестами.
 
-**Текущая структура:**
-- `ui/console/` - текущий консольный интерфейс: меню, input, print, confirmations,
-  формы, красивый вывод, маршрутизация пользовательских действий.
-- `desktop/` - текущий PyQt desktop GUI: watched-список, карточка, dialog оценки и аналитика.
-- `ui/gui/` - место под будущий GUI.
+## Критерии Чистой Архитектуры
 
-**Запрещено:**
-- прямое сохранение dataset/candidate_pool;
-- прямые API-запросы;
-- сложный matching;
-- feature building;
-- обучение модели;
-- бизнес-логика candidate_pool.
+Проект считается близким к целевой структуре, когда:
 
-**Правило:** `ui/console` спрашивает пользователя и показывает результат. Работу делают
-`dataset` / `candidates` / `model` / `apis`.
+- в корне нет случайных `.py`-скриптов, кроме entrypoints;
+- runtime JSON лежат только в `data/` и игнорируются git;
+- active tests проходят без старых external paths;
+- UI не пишет JSON напрямую;
+- candidate pool работает через `candidates.service`;
+- watched mutations работают через `dataset`;
+- `archive/legacy` не импортируется;
+- новые функции добавляются в правильный слой, а не в самый удобный файл;
+- `docs/PROJECT_MAP.md` совпадает с реальной структурой.
 
-**Текущие файлы, которые относятся сюда:**
-- `ui/console/console_app.py`
-- `ui/console/ui.py`
-- `ui/console/request.py`
-- `ui/console/global_menu.py`
-- `ui/console/interface_funcs.py` — **только** UI/оркестрация;
-- `ui/console/candidate_pool_ui.py`
-- `ui/console/tags_menu.py`
-- `ui/console/backup_menu.py`
-- `ui/console/menu_state.py`, `ui/console/title_presenters.py`.
+## Ближайшие Этапы
 
----
+1. Дочистить runtime-артефакты в `data/exports/` и `data/diagnostics/`.
+2. Укрепить границу `ui -> service -> storage`: убрать прямые записи из UI, если они еще остались.
+3. Разделить крупные UI-сценарии в `ui/console/interface_funcs.py` на тематические модули.
+4. Уточнить model/schema для watched title и candidate record.
+5. Сделать единый слой миграций/инициализации данных.
+6. Подтянуть desktop к тем же service-сценариям, что и console.
+7. Обновлять этот документ после каждого крупного структурного шага.
 
-### 2.9 `tests/`
+## Проверки
 
-**Отвечает за:** тесты проекта, regression checks, тесты архитектурных правил
-(если будут добавлены). Точка входа — `py -m pytest`.
+Перед завершением структурного шага:
 
-### 2.10 `docs/`
-
-**Отвечает за:** архитектурные документы, карты проекта, правила добавления записей,
-roadmap, notes для рефакторинга. Этот файл живёт здесь.
-
----
-
-## 3. Разрешённые зависимости слоёв
-
-Стрелка `A → B` означает «`A` может импортировать `B`». Импорт в обратную сторону
-запрещён.
-
-```
-ui/console  → dataset, candidates, model, apis, storage, config, common
-desktop     → dataset, storage, config, common
-ui/gui      → пока не используется
-dataset     → storage, config, common
-candidates  → dataset, model, apis, storage, config, common
-model       → config, common, storage (только чтобы читать weights); НЕ ui/console или ui/gui
-apis        → config, common; НЕ dataset / candidates / ui/console / ui/gui / model
-storage     → config, common
-config      → common или stdlib only; НЕ dataset/candidates/model/apis/ui/storage
-common      → stdlib only (очень нижние безопасные зависимости); НЕ верхние слои
+```powershell
+py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+py -m pytest
 ```
 
-### Главные архитектурные запреты
-
-1. `ui/console` не сохраняет dataset/candidate_pool напрямую (pool writes — через `candidates/service.py` или `dataset` add flow).
-2. `ui/console` не вызывает API напрямую.
-3. `apis` не пишут в dataset/candidate_pool.
-4. Нижние слои не импортируют `ui/console` или `ui/gui`.
-5. `model` не импортирует `ui`.
-6. `common` не импортирует dataset/storage/candidates/model/apis/ui.
-7. `config` не импортирует dataset/candidates/model/apis/ui/storage.
-8. `candidates` не вызывает `input()` / `print()`.
-9. `storage` не содержит пользовательские сценарии.
-9. `dataset` не содержит меню.
-10. `integrations` / `apis` не принимают пользовательские решения.
-
-Desktop GUI относится к UI-слою. Его visual-polish должен следовать [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md), этапы миграции — [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md); не менять dataset, model, candidate_pool, poster cache или console UI.
-
----
-
-## 4. Соответствие текущих папок целевым
-
-Целевая структура заменяет текущие «рабочие» папки. Переименование/переезд —
-постепенный, отдельными шагами.
-
-| Текущая папка   | Куда уходит (целевые зоны)                              | Судьба            |
-|-----------------|--------------------------------------------------------|-------------------|
-| `core/`         | `common/`                                              | переименование    |
-| `integrations/` | `apis/`                                                | переименование    |
-| `interface/`    | `ui/`                                                  | переименование    |
-| `model_work/`   | `model/`                                               | переименование    |
-| `data_work/`    | `storage/` + `dataset/` + `candidates/` + `apis/`      | **разделение**    |
-| `config/`       | `config/` (+ чистые helpers в `common/`)               | остаётся          |
-| `tests/`        | `tests/`                                               | остаётся          |
-| `docs/`         | `docs/`                                                | остаётся          |
-
-`data_work/` — единственная папка, которая не переименовывается, а **раскладывается**
-по нескольким зонам:
-- `storage_files.py`, низкоуровневое чтение/запись из `storage_data.py` → `storage/`;
-- `dataset_records.py`, `storage_movie.py`, `excel_work.py`, `dataset_stats.py`,
-  `genre_import.py`, мутации тегов из `tags_work.py`, сценарии над dataset из
-  `storage_data.py` → `dataset/`;
-- `candidate_pool.py`, `tmdb_candidate_pool.py` → `candidates/`;
-- `sql_search.py` → `apis/`.
-
----
-
-## 5. Текущие папки, которые исчезнут или переименуются
-
-- `data_work/` — **исчезает как единая папка**, разделяется на `storage/`,
-  `dataset/`, `candidates/` и `apis/` (часть `sql_search.py`).
-- `model_work/` — **переименуется** в `model/`.
-- `interface/` — **переименуется** в `ui/`.
-- `integrations/` — **переименуется** в `apis/`.
-- `core/` — **переименуется** в `common/` (см. раздел 6).
-
----
-
-## 6. Почему `common/`, а не `core/`
-
-- `core` в Python-экосистеме часто означает «ядро/движок бизнес-логики». Здесь же
-  слой содержит только **бесстатусные утилиты** (validation, normalize, formatting,
-  text match), без какой-либо доменной логики — название `common` точнее передаёт
-  «общие переиспользуемые helpers».
-- `common` визуально и семантически в одном ряду с `config`/`storage`/`dataset` —
-  все они звучат как «зоны», а `core` выбивается и создаёт ложное ощущение
-  центральности/важности.
-- Снижается риск, что в `core` со временем «накидают» бизнес-логику (эффект имени).
-  `common` явно сигналит: сюда только чистые мелкие функции.
-- Имя свободно от текущего модуля `core/` и его истории, что упрощает чистый
-  переезд `core/ → common/` без двусмысленности.
-
----
-
-## 7. Первый безопасный шаг переноса (после фиксации документа)
-
-**Предложение:** начать с самого нижнего и наименее связанного слоя — переименовать
-`core/ → common/`.
-
-Почему именно он первым:
-- `core/` после Шага 2 уже **чистый** (импортирует только `config.constant`),
-  поэтому риск минимальный;
-- у него мало входящих рёбер по сравнению с `data_work/`;
-- это переименование, а не разделение, — механически проще и безопаснее.
-
-Как сделать безопасно (поэтапно, без изменения поведения):
-1. Создать пакет `common/` и перенести `core/valid.py`, `core/format_score.py`.
-2. Обновить импорты `from core import ...` → `from common import ...` во всех
-   потребителях.
-3. На переходный период допустимо оставить тонкий re-export `core/` → `common/`,
-   **но** правило задачи запрещает compatibility wrappers, поэтому импорты
-   обновляются сразу и полностью, а старая папка удаляется тем же шагом.
-4. Прогон проверок:
-   ```powershell
-   py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
-   py -m pytest
-   ```
-
-Дальнейшие шаги (ориентир, не часть первого шага): `integrations/ → apis/`,
-`interface/ → ui/`, `model_work/ → model/`, и в самом конце — самое сложное:
-разделение `data_work/` на `storage` / `dataset` / `candidates`.
-
----
-
-## 8. Статус выполнения
-
-Рефакторинг завершён по шагам, без изменения поведения, JSON-форматов и меню:
-
-- `core/ → common/`, `integrations/ → apis/` (+ `kp_api`/`tmdb_api`/`imdb_sql`),
-  `interface/ → ui/`, `model_work/ → model/`;
-- выделены пакеты `candidates/`, `storage/`, `dataset/`; `data_work/` удалён;
-- разорваны грязные зависимости: `model ≠> ui`, `dataset ≠> ui`, UI не вызывает API
-  и не сохраняет данные напрямую, `candidates` не использует `print()/input()`.
-
-Актуальная раскладка файлов — в [PROJECT_MAP.md](PROJECT_MAP.md).
-
+Для точечной правки можно запускать узкие тесты, но перед крупным коммитом нужен полный прогон.

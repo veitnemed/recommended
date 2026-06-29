@@ -89,7 +89,7 @@ def normalize_text(value) -> str:
 def write_api_log(event: str, **fields) -> None:
     """Пишет строку лога API в JSONL-файл."""
     try:
-        os.makedirs(constant.DATA_DIR, exist_ok=True)
+        os.makedirs(os.path.dirname(constant.API_LOG_FILE), exist_ok=True)
         payload = {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "event": event,

@@ -63,7 +63,7 @@ py start_app.py
 
 ## Candidate Pool
 
-Общий пул хранится в `C:/DATA/movies-learn/candidate_pool.json`.
+Общий пул хранится в `data/candidates/pool.json`.
 
 TMDb candidate pool v1:
 
@@ -116,26 +116,25 @@ py -m pytest
 
 | Назначение | Путь |
 | --- | --- |
-| Dataset | `C:/DATA/movies-learn/dataset.json` |
-| Criteria | `C:/DATA/movies-learn/candidate_criteria.json` |
-| Общий candidate pool | `C:/DATA/movies-learn/candidate_pool.json` |
-| Rating comparison snapshot | `config/rating_comparison_last_snapshot.json` |
-| Rating order drafts | `data/rating_order_drafts/rating_order_draft_*.json` |
-| API log | `C:/DATA/movies-learn/api_requests.log` |
-| Meta | `C:/META/meta-movies-learn/meta_data.json` |
-| Backup | `C:/BACKUP/movies-learn/BACKUP/` |
-| Excel | `C:/TXT_FILES/movies-learn/edit_dataset.xlsx` |
+| Watched titles | `data/watched/titles.json` |
+| Watched meta | `data/watched/meta.json` |
+| Общий candidate pool | `data/candidates/pool.json` |
+| Criteria | `data/candidates/criteria.json` |
+| API log | `data/logs/api_requests.log` |
+| Backup | `data/backups/` |
+| Excel/export | `data/exports/` |
+| Cache | `data/cache/` |
 
 ## Документация
 
 - [PROJECT_MAP.md](PROJECT_MAP.md) - карта активных модулей.
 - [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
 - [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - целевая архитектура и правила зависимостей.
+- [DATA_STORAGE_PLAN.md](DATA_STORAGE_PLAN.md) - структура локального хранения данных.
 - [add_functions.md](add_functions.md) - правила добавления нового функционала.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
 - [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
-- `docs/reports/` - исторические отчёты по сессиям.
 
 ## Важно
 

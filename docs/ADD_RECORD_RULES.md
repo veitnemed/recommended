@@ -1,63 +1,64 @@
-﻿# ������� ���������� � ��������� ������� dataset
+﻿# Add Record Rules
 
-���� ���� ��������� ������� �������� ���������� � ��������� �������. �� ������ �������� �������� ��������� ����, � �� �������� ����������� "�� �������".
+Документ фиксирует контракт добавления, обновления и удаления watched-записей в `Series List`.
 
-## ������� �������
+## Главный путь сохранения
 
-����� ������ ������ ����������� ����� ������������ ���������� ����:
+Новая watched-запись сохраняется только через service path:
 
-```python
-storage_movie.add_movie(...)
-    -> add_dataset_record(...)
+```text
+dataset.storage_movie.add_movie(...)
+-> dataset.dataset_records.add_dataset_record(...)
 ```
 
-������ ��������� dataset �������� �� UI-���������.
+UI не пишет dataset/meta JSON напрямую.
 
-## ���� ���������������
+## UI-Слой
 
-### UI-����
+UI отвечает за:
 
-�����:
+- ввод пользователя;
+- preview перед сохранением;
+- подтверждения;
+- вывод результата;
+- передачу defaults в форму;
+- обработку отмены.
 
-- [ui/console/interface_funcs.py](../ui/console/interface_funcs.py)
-- [ui/console/request.py](../ui/console/request.py)
-- [desktop/app.py](../desktop/app.py)
-- [desktop/watched_view.py](../desktop/watched_view.py)
+UI не отвечает за:
 
-�������� ��:
+- запись dataset/meta;
+- cleanup candidate pool;
+- poster-cache side effects;
+- прямые API-запросы;
+- формат JSON.
 
-- ����� ��������;
-- ����� �������� � ��������������;
-- ���� defaults;
-- �������� ����� �������������;
-- ������ ���� `user_score`, `raw_scores`, `tags_vibe`, `genre`;
-- ������ ���������� ��������� ������������.
+Relevant files:
 
-UI �� ������ ����� ��������� ������ � dataset.
+- `ui/console/interface_funcs.py`;
+- `ui/console/request.py`;
+- `desktop/app.py`;
+- `desktop/watched_view.py`.
 
-Desktop GUI ���������� ��� �� �������: ��������� `user_score` ��� ����� `dataset.dataset_records.update_dataset_record()` � helper `save_watched_user_score()`, � �� ����� ������ ������ JSON �� PyQt.
+## Service-Слой
 
-### Storage / service-����
+Service отвечает за:
 
-�����:
+- валидацию payload;
+- нормализацию `main_info`, `raw_scores`, `tags_vibe`, `genre`;
+- сохранение dataset;
+- сохранение/обновление meta;
+- backup перед опасными операциями;
+- best-effort poster-cache sync;
+- cleanup candidate pool после переноса кандидата.
 
-- [dataset/storage_movie.py](../dataset/storage_movie.py)
-- [dataset/dataset_records.py](../dataset/dataset_records.py)
+Relevant files:
 
-�������� ��:
+- `dataset/storage_movie.py`;
+- `dataset/dataset_records.py`;
+- `dataset/delete_record.py`;
+- `dataset/title_resolve.py`.
 
-- ��������� payload;
-- �������� ������;
-- ������������ �����;
-- ��������/���������� meta;
-- �������� `computed_scores`;
-- ���������� dataset;
-- ������� candidate pool ����� ��������� ����������;
-- ������� ������������������ ����������.
-
-Storage ���������� `AddRecordResult`, � �� ��������� UX �������.
-
-## ������� �������� `add_movie()`
+## `add_movie()`
 
 ```python
 add_movie(
@@ -65,24 +66,20 @@ add_movie(
     *,
     meta_payload=None,
     pool_candidate=None,
+    poster_hints=None,
     print_message: bool = True,
 )
 ```
 
-### ��� ������ `add_movie()`
+Правила:
 
-- �������� `add_dataset_record(...)`;
-- ����������� `meta_payload`;
-- ����������� `pool_candidate`;
-- �� ��������� ����� ���������� `result.message`;
-- ���������� `AddRecordResult`.
+- вызывает `add_dataset_record(...)`;
+- принимает optional `meta_payload`;
+- принимает optional `pool_candidate`;
+- возвращает `AddRecordResult`;
+- для UI-сценариев используется `print_message=False`, чтобы финальное сообщение печатал UI.
 
-### ��� ����� ������
-
-- ��� UI-���������, ��� ��������� ��� ���������� �������, ����� �������� `print_message=False`;
-- ��� ������� ������� ����� `����� ������ ���������!`.
-
-## ������� �������� `add_dataset_record()`
+## `add_dataset_record()`
 
 ```python
 add_dataset_record(
@@ -90,316 +87,175 @@ add_dataset_record(
     meta_payload=None,
     source_name: str = "",
     pool_candidate=None,
+    poster_hints=None,
 ) -> AddRecordResult
 ```
 
-### ������������ ������ `record_payload`
+Минимальный payload:
 
-- `main_info.title`
-- `main_info.user_score`
-- `main_info.year`
-- `raw_scores`
-- `tags_vibe`
-- `genre`
+- `main_info.title`;
+- `main_info.user_score`;
+- `main_info.year`;
+- `raw_scores`;
+- `tags_vibe`;
+- `genre`.
 
-### ��� ��������� service
+После сохранения service:
 
-- ���������� `title`;
-- ����� �� title ��� ����� ��������;
-- ���������� `user_score`;
-- ���������� `year`;
-- ���������� `raw_scores`;
-- ���������� `tags_vibe`;
-- ���������� `genre`;
-- ������� ��������� ������ ���������.
+1. валидирует title/year/user_score;
+2. нормализует поля;
+3. считает computed fields;
+4. сохраняет dataset;
+5. сохраняет/обновляет meta;
+6. синхронизирует poster-cache best-effort;
+7. если передан `pool_candidate`, удаляет watched-кандидата из pool через service cleanup.
 
-### ��� ������ ��� ������
+## Defaults Для Формы
 
-1. ����������� `main_info`, `raw_scores`, `tags_vibe`, `genre`;
-2. �������� `computed_scores`;
-3. ��������� ������ � dataset;
-4. ��� ������������� ��������������/������ meta;
-5. ������� candidate pool:
-   - ���� ������� `pool_candidate`, ������� ������ ���;
-   - ����� ������ best-effort cleanup ������������� ����������;
-6. �������������� poster-cache (`sync_poster_cache_from_meta_and_sources`) � **��������� ��������� ���� �������** (`download_poster_for_title`) � best-effort, ������ �� ���������� ���������� ������;
-7. ���������� `AddRecordResult(ok=True, ..., reason="saved")`.
+Defaults собираются через `dataset.title_resolve`.
 
-���������� ������� ��� � service-����, �� �� UI. Batch �������� ����������� �������� � ������� (`Extra` > `download_poster_images_local`) ������� ��� backfill ������ �������.
+Источники:
 
-## ��������� ���������� ����� ������
+- IMDb SQL;
+- KP API/cache;
+- TMDb;
+- candidate pool record.
 
-### 1. ������ ����������
+UI показывает defaults пользователю, но пользователь всё равно подтверждает форму перед сохранением.
 
-����:
+## Перенос Candidate -> Watched
+
+Путь:
 
 ```text
-interface_funcs.request_object()
--> request.request_api_defaults(confirm_genres=True)
--> request.request_all_scores(defaults)
--> storage_movie.add_movie(movie_request, print_message=False)
+ui.console.interface_funcs.mark_candidate_as_watched()
+-> dataset.title_resolve.build_candidate_transfer_payload(candidate)
+-> ui.console.request.request_all_scores(defaults)
+-> dataset.storage_movie.add_movie(..., pool_candidate=candidate, print_message=False)
 ```
 
-�����������:
+Правила:
 
-- defaults ���������� ����� SQL/API flow;
-- ����� ����������� ������ ����������� �����;
-- �������� ��������� �������� UI.
+- incomplete-кандидат можно сохранить только после явного UI-warning;
+- жанры показываются как preview перед формой;
+- cleanup pool выполняет service, не UI.
 
-### 2. ������� ��������� �� ����
+## Genres
 
-����:
+Dataset хранит жанры как `has_*` поля из `config/genre_tags.json`.
 
-```text
-interface_funcs.mark_candidate_as_watched()
--> title_resolve.build_candidate_transfer_payload(candidate)
--> request.request_all_scores(defaults)
--> storage_movie.add_movie(
-       movie_request,
-       meta_payload=meta_payload,
-       pool_candidate=candidate,
-       print_message=False,
-   )
-```
+Кандидаты могут приходить с:
 
-�����������:
+- `genre_keys`;
+- TMDb genres;
+- IMDb genres;
+- raw labels.
 
-- ������ �� ����������� ������������� ��� �����;
-- ����� ������ UI �������� read-only preview ������ (`build_candidate_genre_transfer_preview`);
-- ����� ������ �������� ��������� �� ������ ����;
-- ��� incomplete-��������� UI ���������� ��������������, �� �� ��������� �������.
+Маппинг выполняется через candidates/dataset helpers, а не вручную в UI.
 
-## ��� TMDb-�������� ������������ � defaults
+Новые `has_*` нельзя добавлять по ходу пользовательского сценария. Расширение жанрового каталога - отдельная структурная задача.
 
-������ ���� �:
+## Meta
 
-- [dataset/title_resolve.py](../dataset/title_resolve.py)
+`meta_payload` может содержать дополнительные поля помимо `main_info` и `raw_scores`.
 
-`build_candidate_transfer_payload(candidate)` �������:
+Типичные поля:
 
-- `defaults` ��� �����;
-- `meta_payload` ��� ���������� meta.
+- `tmdb_id`;
+- `imdb_id`;
+- `kp_id`;
+- `description`;
+- `source`;
+- poster hints.
 
-### ��� TMDb-��������� ������������ common-����
+Service сохраняет дополнительные поля в meta, если они не конфликтуют с базовой структурой.
 
-- `title`
-- `year`
-- `kp_score`
-- `kp_votes`
-- `imdb_score`
-- `imdb_votes`
-- `genres`
-- `description`
-- `tmdb_id`
-- `imdb_id`
-- `kp_id`
-- `source`
+## Duplicate Policy
 
-### ���������� `raw_scores`
+Запись не добавляется, если в dataset уже есть title с тем же нормализованным названием.
 
-� ����� ������ ��������:
-
-- `kp_score <- candidate["kp_score"]`
-- `kp_votes <- candidate["kp_votes"]`
-- `imdb_score <- candidate["imdb_score"]`
-- `imdb_votes <- candidate["imdb_votes"]`
-
-���� ���� ���, ��� ������ �������� ������/`None`, � �� ������������ � `0`.
-
-## �����
-
-�������� �������� � dataset � ��� ������������� ����� �������� `has_*` �� [config/genre_tags.json](../config/genre_tags.json). ����� `has_*` ��� ������������ ������ �� �����������.
-
-����� mapper ���� � [candidates/to_dataset.py](../candidates/to_dataset.py):
-
-- `candidate_genre_keys_to_dataset_genres(genre_keys)` � canonical pool keys > `has_*`;
-- `raw_genres_to_dataset_genres(raw_genres)` � EN/RU raw labels > pool keys > `has_*`.
-
-������ �������: pool key `mystery` � raw labels `Mystery` / `��������` > `has_detective`, � �� `has_mystery`.
-
-### ������ ����������
-
-`build_genre_defaults()` � [dataset/title_resolve.py](../dataset/title_resolve.py) ���������� `raw_genres_to_dataset_genres()`.
-
-`split_known_genres()` ��� confirm UI � [ui/console/request.py](../ui/console/request.py) ���������� ��� �� mapper: � known �������� ������ raw-�����, ������� ������� �������� � ������� `has_*`.
-
-### ������� candidate > dataset
-
-`build_candidate_transfer_genre_defaults()` �������� �������� ���:
-
-1. ���� ���� �������� `candidate["genre_keys"]` � mapper status �� `missing` > `candidate_genre_keys_to_dataset_genres()`;
-2. ����� fallback ����� `extract_candidate_fallback_genres()` (`imdb_genres`, `genres_tmdb`, `genres`) � `build_genre_defaults()`.
-
-����� ������ `mark_candidate_as_watched()` �������� read-only preview:
-
-- pool `genre_keys` > �������� `has_*`;
-- fallback / partial / empty warning � ��� ���������� ��������.
-
-������������ �� ����� ������������ ��� ������ ����� � ����� `request_all_scores()`.
-
-## Meta ��� ����������
-
-`meta_payload` ����� ��������� �������������� ���� ������ `main_info` / `raw_scores`.
-
-������ � meta ��� TMDb-�������� �� ����������� ����������:
-
-- `tmdb_id`
-- `imdb_id`
-- `kp_id`
-- `description`
-- `source`
-
-`add_dataset_record()` ��������� ��� �������������� ���� ��� extra meta.
-
-## Duplicate policy
-
-����� ������ �����������, ���� � dataset ��� ���� title � ��� �� ������� ��� ����� ��������.
-
-��������� ��� �����:
+Типовой результат:
 
 ```python
 AddRecordResult(
     ok=False,
-    message="������ ����������! ����� ������ ��� ��������",
     reason="duplicate_title",
 )
 ```
 
-��� ����� ��� callers � ������: current contract ���������� ������ ����������, � �� `False`.
+UI печатает человекочитаемое сообщение из result.
 
-## ���������� ������������ ������
+## Update Record
 
-��� patch ������������ ������ ������������:
+Изменение watched-записи выполняется через:
 
 ```python
 update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResult
 ```
 
-### ��������� ������
+Разрешенные patch-поля:
 
-- `main_info.user_score`
-- `main_info.year`
-- `raw_scores`
-- `tags_vibe`
-- `genre`
+- `main_info.user_score`;
+- `main_info.year`;
+- `raw_scores`;
+- `tags_vibe`;
+- `genre`.
 
-### ��������� ������ ����� update
+Запрещено через patch:
 
-- key ������;
-- `main_info.title` ��� ������ ��������������.
+- менять key записи;
+- менять `main_info.title`.
 
-�������������� ������ ���� ��������� ���� ����� `rename_movie_title()`.
+Переименование выполняется отдельным путем через `storage.data.rename_movie_title()`.
 
-## ���������� ������ � �������
+## Delete Watched
 
-`user_score` ����� ������ ����������� UI-����������, �� ��� ��� ������ ���� ����� ����� update-service:
-
-- ������ ��������� ����� ������ �� `�������� ��� ������`;
-- ��������� ������ � desktop GUI ����� ��� -> dialog;
-- �������� ��������� ������� ������ (`rating_comparison`);
-- ���������� draft ��������� ������������� ������.
-
-### Rating comparison
-
-����:
+Удаление выполняется через:
 
 ```text
-global_menu.open_data_menu()
--> rating_comparison.start_rating_comparison()
--> rating_comparison.apply_rating_comparison_scores()
--> update_dataset_record(title, {"main_info": {"user_score": new_score}}, source_name="rating_comparison")
+dataset.delete_record.delete_watched_record(dataset_key)
 ```
 
-����� ����������� ����������� preview snapshot:
+Service:
 
-```text
-config/rating_comparison_last_snapshot.json
+- создает backup;
+- удаляет запись из dataset;
+- удаляет meta;
+- чистит poster-cache;
+- удаляет локальный poster file best-effort.
+
+Console и desktop используют один service path.
+
+## Generated JSON Policy
+
+В git не добавляются generated preview/snapshot JSON.
+
+Игнорируются:
+
+- `config/rating_comparison_last_snapshot.json`;
+- старые legacy metrics/snapshots;
+- `data/exports/candidate_pool/`;
+- `data/diagnostics/`;
+- `data/cache/`.
+
+Активные JSON-справочники в репозитории:
+
+- `config/tags.json`;
+- `config/genre_tags.json`;
+- `apis/sql_title_aliases.json`.
+
+## Проверки
+
+Для правок add/update/delete:
+
+```powershell
+py -m compileall dataset ui desktop storage candidates tests
+py -m pytest tests/test_add_title_service.py tests/test_delete_watched_record.py tests/test_smoke.py
 ```
 
-���� ������������ �������� ����������, snapshot ������� ��� preview, � dataset �� ��������.
+Для структурных шагов:
 
-### Draft ��������� �������������
-
-�������� draft:
-
-```text
-interface_funcs.show_all_movies()
--> interface_funcs.open_scores_actions_menu()
--> interface_funcs.create_linear_distribution_draft(rows)
+```powershell
+py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+py -m pytest
 ```
-
-Draft ����������� �:
-
-```text
-data/rating_order_drafts/rating_order_draft_YYYY-MM-DD_HH-MM-SS.json
-```
-
-�������� draft �� ������ dataset.
-
-���������� draft:
-
-```text
-interface_funcs.apply_rating_order_draft_flow()
--> validate_rating_order_draft(draft, data)
--> build_rating_order_draft_preview(...)
--> storage_files.create_backup()
--> update_dataset_record(title, {"main_info": {"user_score": proposed_score}}, source_name="rating_order_draft")
-```
-
-��������� draft ������ ���������� ����������, ����:
-
-- `method` �� ����� `linear_distribution`;
-- ����������� `items`;
-- ������ �� draft ����������� � ������� dataset;
-- ������� `user_score` ���������� �� `old_score` � draft;
-- `proposed_score` �� �������� `valid.is_correct_score`.
-
-LOO-preview ��� draft ������� `current_loo_mae` � `draft_loo_mae` �� ����� dataset. ���� preview �� ������ ��������� ���� � �� ������ ������ `config/model_metrics.json`.
-
-����� ���������� draft ������������ ��������� LOO �������� ��������, ���� ����� �������� ���� � ���������� `LOO MAE`.
-
-## Excel-�������
-
-Excel-����� ������ ������ ��� patch ������������ �������, � �� ��� �������� �����.
-
-��� ������:
-
-- Excel �� ������ ��������� ����� ������;
-- Excel �� ������ ������� ������;
-- Excel �� ������ ��������������� ������;
-- ���� ����� title �� ��������� � dataset, ������ ������ ���������������;
-- `raw_scores` patch ������ ������������������ � meta ����� update-service.
-
-## Candidate pool cleanup
-
-������� �������:
-
-- �������� ���������� ����� ������� ��������� ������ ������� ��������� �� ������ ����;
-- ��� ����� caller ������� `pool_candidate` � `storage_movie.add_movie()`;
-- cleanup ����������� � `add_dataset_record()`, � �� ������� ��������� UI-����� ����� ����������.
-
-## �������� watched
-
-����:
-
-```text
-delete_watched_record(dataset_key)
-```
-
-����: [dataset/delete_record.py](../dataset/delete_record.py).
-
-Service ������� ������ �� dataset, meta � poster-cache **����� backup**. ����� �������� cache ���������� `remove_local_poster_file()` � ��������� JPG � `data/cache/posters/images/` ���������, ���� ���.
-
-��������� �������� �������� `deleted_dataset`, `deleted_meta`, `deleted_poster_cache`, `deleted_poster_file`. ������ �������� ����� ������� **���������** �������� ������ (dataset/meta �� ��������).
-
-Console � desktop GUI �������� ���� � ��� �� service; UI �� ������� JSON ��������.
-
-## ������ ���������
-
-������� ���������� ���������������:
-
-- service ���������� `AddRecordResult` / `UpdateRecordResult`;
-- UI ������, ��� �������� ������������;
-- ��� ��������� � ������ ������� ����� ������������ `print_message=False`.
-
-��� ��������� ������-������ ��� ���������, �� ������� ������� success-output.

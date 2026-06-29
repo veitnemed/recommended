@@ -190,6 +190,13 @@ def add_dataset_record(
             message="Error add movie! Incorrect year",
             reason="invalid_payload",
         )
+    if valid.is_correct_country(str(main_info.get("country", ""))) is False:
+        return AddRecordResult(
+            ok=False,
+            title=title,
+            message="Error add movie! Incorrect country",
+            reason="invalid_payload",
+        )
 
     if is_valid_tags_vibe(tags_vibe) is False:
         return AddRecordResult(
@@ -391,7 +398,7 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
                     changed_fields=[],
                 )
 
-        allowed_main_fields = {"title", "user_score", "year"}
+        allowed_main_fields = {"title", "user_score", "year", "country"}
         unsupported_main = [field for field in main_patch.keys() if field not in allowed_main_fields]
         if len(unsupported_main) > 0:
             return UpdateRecordResult(
@@ -402,7 +409,7 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
                 changed_fields=[],
             )
 
-        for field in ("user_score", "year"):
+        for field in ("user_score", "year", "country"):
             if field in main_patch and main_info.get(field) != main_patch[field]:
                 main_info[field] = main_patch[field]
                 changed_fields.append(f"main_info.{field}")
@@ -499,6 +506,8 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректное значение user_score", "invalid_patch", [])
     if valid.is_correct_year(str(new_main_info["year"])) is False:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректный год", "invalid_patch", [])
+    if valid.is_correct_country(str(new_main_info.get("country", ""))) is False:
+        return UpdateRecordResult(False, dataset_title, "Error update record! Incorrect country", "invalid_patch", [])
     if valid.is_valid_raw_meta(new_raw_scores) is False:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректные raw_scores", "invalid_patch", [])
     if is_valid_tags_vibe(new_tags_vibe) is False:

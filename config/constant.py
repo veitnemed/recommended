@@ -4,19 +4,25 @@ from config import genre_tags
 from config import scheme
 from config import tags_work
 
-DATA_DIR = 'C:/DATA/movies-learn/'
-FILE_NAME = 'C:/DATA/movies-learn/dataset.json'
-CRITERIA_POOL_JSON = 'C:/DATA/movies-learn/candidate_criteria.json'
-CANDIDATE_POOL_JSON = 'C:/DATA/movies-learn/candidate_pool.json'
-RATING_ORDER_DRAFTS_DIR = 'data/rating_order_drafts'
-API_LOG_FILE = 'C:/DATA/movies-learn/api_requests.log'
-BACKUP_DIR = 'C:/BACKUP/movies-learn/BACKUP/'
+APP_DATA_DIR = 'data'
+WATCHED_DIR = 'data/watched'
+CANDIDATES_DIR = 'data/candidates'
+CACHE_DIR = 'data/cache'
+EXPORTS_DIR = 'data/exports'
+LOGS_DIR = 'data/logs'
 
-DIR_META = 'C:/META/meta-movies-learn/'
-META_JSON = 'C:/META/meta-movies-learn/meta_data.json'
+DATA_DIR = WATCHED_DIR
+FILE_NAME = WATCHED_DIR + '/titles.json'
+CRITERIA_POOL_JSON = CANDIDATES_DIR + '/criteria.json'
+CANDIDATE_POOL_JSON = CANDIDATES_DIR + '/pool.json'
+API_LOG_FILE = LOGS_DIR + '/api_requests.log'
+BACKUP_DIR = 'data/backups/'
 
-DIR_TXT = 'C:/TXT_FILES/movies-learn/'
-EDIT_EXCEL = 'C:/TXT_FILES/movies-learn/edit_dataset.xlsx'
+DIR_META = WATCHED_DIR
+META_JSON = WATCHED_DIR + '/meta.json'
+
+DIR_TXT = EXPORTS_DIR
+EDIT_EXCEL = EXPORTS_DIR + '/edit_dataset.xlsx'
 
 MAIN_INFO = []
 RAW_SCORES = []
@@ -93,6 +99,7 @@ def refresh_dynamic_fields() -> None:
     ONLY_SCORES = CSV_FIELDS.copy()
     ONLY_SCORES.remove("title")
     ONLY_SCORES.remove("year")
+    ONLY_SCORES.remove("country")
 
     FIELD_LABELS = {
         "title": "Название",

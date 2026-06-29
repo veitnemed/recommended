@@ -18,7 +18,6 @@ Current structure
 - `app/`, `dataset/`, `candidates/`, `desktop/`, `posters/`, `ui/`, `storage/`, `config/`, `common/`, `apis/` are active runtime packages.
 - `datasets/` holds local IMDb SQLite resources and builder scripts.
 - `data/` is runtime drafts/cache.
-- `reports/` stores historical script reports.
 - `scripts/` contains diagnostic/build utilities.
 
 Next transfers

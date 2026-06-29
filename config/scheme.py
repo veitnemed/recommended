@@ -25,6 +25,10 @@ SHEME_VALIDATORS = {
         "year": {
             "tag": ["year"],
             "type": int
+        },
+        "country": {
+            "tag": ["country"],
+            "type": str
         }
     },
     RAW_SCORES: {

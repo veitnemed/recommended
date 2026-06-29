@@ -78,7 +78,9 @@ def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict, g
     main_info["title"] = title
     main_info["user_score"] = user_score
     main_info["year"] = raw_scores.get("year", constant.NOW_YEAR)
+    main_info["country"] = raw_scores.get("country", "")
     raw_scores.pop("year", None)
+    raw_scores.pop("country", None)
 
     movie = {}
     movie["main_info"] = main_info
@@ -95,6 +97,7 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
     title = row["title"].strip()
     user_score = row["user_score"].strip()
     year = row["year"].strip()
+    country = row.get("country", "").strip()
 
     if valid.is_correct_title(title) is False:
         print(f'Строка {row_number}: некорректное название')
@@ -151,6 +154,7 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
     main_info["title"] = title
     main_info["user_score"] = valid.parse_float(user_score)
     main_info["year"] = int(year)
+    main_info["country"] = country
 
     movie = {}
     movie["main_info"] = main_info

@@ -139,7 +139,7 @@ Runtime normalization/matching жанров уже сохранённого pool
 
 - `constant.CANDIDATE_POOL_JSON` -> общий `candidate_pool.json`;
 - `constant.CRITERIA_POOL_JSON` -> `candidate_criteria.json`;
-- TMDb snapshots -> `data/candidate_pool/*.json`;
+- TMDb snapshots -> `data/exports/candidate_pool/*.json`;
 - diagnostics -> `data/diagnostics`;
 - KP cache -> `data/cache/kp`.
 

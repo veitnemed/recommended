@@ -347,6 +347,7 @@ def resolve_title_for_add(
             return None, None, None
 
         defaults = build_manual_defaults(resolved["title"])
+        defaults[scheme.MAIN_INFO]["country"] = country
         print_autofill_status(resolved, manual_mode=True)
         return defaults, meta_payload, poster_hints
 

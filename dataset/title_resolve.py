@@ -392,6 +392,38 @@ def build_genre_defaults(genres: list) -> dict:
     return dict(raw_genres_to_dataset_genres(genres)["dataset_genre"])
 
 
+def extract_country_value(source: dict | None) -> str:
+    """Returns a display country string from API/SQL/candidate data."""
+    if not isinstance(source, dict):
+        return ""
+    for field_name in (
+        "country_display",
+        "country",
+        "countries",
+        "title_region_countries",
+        "tmdb_production_countries",
+        "tmdb_origin_countries",
+        "origin_country",
+    ):
+        value = source.get(field_name)
+        if isinstance(value, list):
+            parts = []
+            for item in value:
+                if isinstance(item, dict):
+                    text = str(item.get("name") or item.get("iso_3166_1") or "").strip()
+                else:
+                    text = str(item or "").strip()
+                if text and text not in parts:
+                    parts.append(text)
+            if parts:
+                return ", ".join(parts)
+            continue
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
 def build_empty_add_defaults(input_title: str) -> dict:
     """Собирает минимальные defaults для ручного добавления без внешних данных."""
     return {
@@ -399,6 +431,7 @@ def build_empty_add_defaults(input_title: str) -> dict:
             "title": input_title,
             "user_score": None,
             "year": None,
+            "country": "",
         },
         scheme.RAW_SCORES: {
             "kp_score": None,
@@ -421,6 +454,7 @@ def build_sql_defaults(series: dict) -> dict:
             "title": series.get("title") or series.get("original_title"),
             "user_score": None,
             "year": series.get("year"),
+            "country": extract_country_value(series),
         },
         scheme.RAW_SCORES: {
             "kp_score": None,
@@ -478,6 +512,7 @@ def build_api_defaults(series: dict, genres: list | None = None) -> dict:
             "title": extract_api_title(series),
             "user_score": None,
             "year": series.get("year"),
+            "country": extract_country_value(series),
         },
         scheme.RAW_SCORES: {
             "kp_score": raw_scores.get("kp_score"),
@@ -668,6 +703,7 @@ def build_poster_hints_from_candidate(candidate: dict) -> dict:
 def build_candidate_transfer_payload(candidate: dict) -> dict:
     """Собирает defaults и meta для переноса кандидата из общего пула в dataset."""
     defaults = build_api_defaults(candidate)
+    defaults[scheme.MAIN_INFO]["country"] = extract_country_value(candidate)
     defaults[scheme.GENRE] = build_candidate_transfer_genre_defaults(candidate)
     meta_payload = build_candidate_meta_payload(candidate)
     return {
@@ -750,6 +786,7 @@ def build_add_defaults_by_priority(
     sources = {
         "title": None,
         "year": None,
+        "country": None,
         "imdb_score": None,
         "imdb_votes": None,
         "kp_score": None,
@@ -785,6 +822,11 @@ def build_add_defaults_by_priority(
         ((effective_sql_data or {}).get("year"), sql_source),
         ((tmdb_data or {}).get("year"), "tmdb_api"),
     )
+    country_value, country_source = first_value(
+        (extract_country_value(api_data), "kp_api"),
+        (extract_country_value(tmdb_data), "tmdb_api"),
+        (extract_country_value(effective_sql_data), sql_source),
+    )
     imdb_score, imdb_score_source = first_value(
         ((effective_sql_data or {}).get("imdb_rating"), sql_source),
         (api_scores.get("imdb_score"), "kp_api"),
@@ -807,6 +849,7 @@ def build_add_defaults_by_priority(
 
     defaults[scheme.MAIN_INFO]["title"] = title_value or input_title
     defaults[scheme.MAIN_INFO]["year"] = year_value
+    defaults[scheme.MAIN_INFO]["country"] = country_value
     defaults[scheme.RAW_SCORES]["imdb_score"] = imdb_score
     defaults[scheme.RAW_SCORES]["imdb_votes"] = imdb_votes
     defaults[scheme.RAW_SCORES]["kp_score"] = kp_score
@@ -815,6 +858,7 @@ def build_add_defaults_by_priority(
 
     sources["title"] = title_source
     sources["year"] = year_source
+    sources["country"] = country_source
     sources["imdb_score"] = imdb_score_source
     sources["imdb_votes"] = imdb_votes_source
     sources["kp_score"] = kp_score_source
@@ -954,7 +998,11 @@ def resolve_title_data_for_add(
     if found:
         built = build_add_defaults_by_priority(title, sql_merge_data, api_data, tmdb_data, sql_merge_source)
         defaults = built["defaults"]
+        if defaults[scheme.MAIN_INFO].get("country") in (None, ""):
+            defaults[scheme.MAIN_INFO]["country"] = country
         sources = built["sources"]
+        if sources.get("country") is None:
+            sources["country"] = "input"
         source_values = built["source_values"]
         sql_identity = sql_first_identity or built["sql_identity"]
 

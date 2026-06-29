@@ -22,7 +22,7 @@ from apis import tmdb_api as api_tmdb
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = ROOT_DIR / "data" / "candidate_pool"
+OUTPUT_DIR = ROOT_DIR / "data" / "exports" / "candidate_pool"
 DIAGNOSTICS_DIR = ROOT_DIR / "data" / "diagnostics"
 KP_CACHE_DIR = ROOT_DIR / "data" / "cache" / "kp"
 

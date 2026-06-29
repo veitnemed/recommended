@@ -1,275 +1,173 @@
-﻿# �������� ����� desktop GUI
+﻿# Desktop Style Contract
 
-���� �������� ��������� ������� ���������� � layout-�������� PyQt desktop GUI. �� ��������� ������� ���, ������� ���������� � ������� ���������, � �� ������-������ ����������. ��������� ���� �������� ����������� � � [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md).
+Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Series List`. Он относится к watched/search/analytics интерфейсу и не описывает legacy-сценарии из `archive/legacy/`.
 
-## ����
+## Принципы
 
-Desktop GUI ������ ��������� ��������, �������������� � ������: ����� ���������� ���, ������ ��������, ������������ �����, �������� ����������� � ��������� �����-��������� ������.
+- Интерфейс рабочий и плотный, без декоративных hero-блоков.
+- Основной пользовательский сценарий должен быть виден сразу: watched list, поиск, карточка.
+- Карточки используются для отдельных объектов, не для вложенных секций.
+- Text overflow недопустим: длинные названия должны переноситься.
+- GUI-polish не меняет dataset, pool, API pipeline и формат JSON.
 
-## Code-level contract
+## Theme Tokens
 
-�������� ������� style values � ���� � `desktop/theme.py`.
+Основные значения живут в `desktop/theme.py`.
 
-� `theme.py` ����� ����� design tokens:
+Правила:
 
-- ����� ����, ��������, ��������� ������, �����, ������ � �������;
-- ��������� ������� IMDb/��;
-- ������� ������� �������;
-- ������� ��������, �����, input/button � fallback-bars;
-- ����� spacing/padding tokens;
-- builder-������� QSS ��� main app, score dialog, watched detail card � analytics.
+- новые цвета, spacing, radius и font-size добавляются через theme tokens;
+- hardcoded visual values в widgets не добавляются без причины;
+- layout-правки не смешиваются с feature-wiring;
+- geometry-значения допустимы рядом с layout-кодом, если это не visual token.
 
-�������:
+## Палитра
 
-- ����� hardcoded �����, `font-size`, `border-radius` � ������������� spacing values � GUI-���� �� ��������� ��� �������;
-- ���� �������� ��������� � ����� �������/�����������/������� � ������� �������� ��� ���������������� token �� `desktop/theme.py`;
-- layout-������ �� ��������� � theme-refactor: `addStretch`, `QSizePolicy`, `setFixedSize`, poster sync � resize logic ������ ��������� �������;
-- feature-������ �� ������ ������� QSS/layout, ����� ������������ wiring ������ �������;
-- ��������� geometry-��������� ����������� ������� ����� ���������� ����� � ��������, ���� ��� �� ����� visual token.
-
-## �������
-
-| ���������� | ���� |
+| Назначение | Значение |
 | --- | --- |
-| ��� ���������� | `#0f0f10` / `#111113` |
-| �������� | `#171719` |
-| ��������� ����� | `#1c1c1f` |
-| ����� | `#2a2a2e` |
-| �������� ����� | `#f4f4f5` |
-| ��������� ����� | `#a1a1aa` |
-| ������������ ����� | `#71717a` |
-| �������� ������ | `#10a37f` |
+| App background | `#0f0f10` / `#111113` |
+| Surface | `#171719` |
+| Elevated surface | `#1c1c1f` |
+| Border | `#2a2a2e` |
+| Text | `#f4f4f5` |
+| Secondary text | `#a1a1aa` |
+| Muted text | `#71717a` |
+| Accent | `#10a37f` |
 
-Ƹ���� � ��������� ����� ��� IMDb/�� �� ������������ ��� ����� �������. ������� �������� ������ ���� ��������� ������ ������.
+Дополнительные цвета для IMDb/KP не должны превращать интерфейс в пеструю витрину. Они используются только как небольшие semantic accents.
 
-## �����������
+## Typography
 
-- �������� �����: `Segoe UI`;
+- основной шрифт: `Segoe UI`;
 - fallback: `Arial`, `sans-serif`;
-- ��������� ���������� ������: 22-26 px, ����������;
-- ��������: 14-16 px, ������-����� �����;
-- ��������� ������� � ����: ����������, ��� ������������ ��������.
+- page/section headings: 20-26px;
+- обычный текст: 14-16px;
+- compact labels: 12-13px;
+- letter spacing: 0.
 
-## �������� ���������� ������
+## Watched Layout
 
-�������� ������ ���� ������ ������:
+Основная карточка watched:
 
-1. ������� ������:
-   - ����� ������������� ������;
-   - ������ ��������, ���������� � ��������.
-2. ���� ������� ������:
-   - ��������� ������ �������� �������� �� ��� ������.
+```text
+[ poster ] [ title / chips / ratings / actions ]
+[ overview full width                      ]
+```
 
-�������� �������� ������� ��������� ��������� ��������. ������� �������� ������ ������������ ��� �������������� ��� ������� layout.
+Правила:
 
-## ����������
+- poster имеет стабильный размер и не растягивается от текста;
+- title переносится и не перекрывает chips/ratings;
+- ratings остаются read-only;
+- overview идет отдельным full-width блоком ниже верхней строки;
+- если overview пустой, блок скрывается;
+- card root не должен прыгать по высоте при hover/action states.
 
-���, ����� � ������ ������������ ���������� ������:
+## Sidebar
 
-- ��� ������;
-- ��� ������;
-- ��� ���������;
-- ��� rich HTML-��������;
-- � ����������� ��������� � ������ ������.
+Структура:
 
-���� ������ ���, ������������ ������ ��������� ��������. Layout �� ������ �������� ��-�� ���������� ����, ������, ������, IMDb ��� ��.
+```text
+[ + add title ]
+[ search input ]
+[ sort / filters ]
+[ counter ]
+[ watched list with thumbnails ]
+```
 
-## ��������
+Правила:
 
-�������� ������������ read-only ��������� ������������:
+- sidebar width примерно 300-400px;
+- filters collapsible;
+- counter показывает `N из M`;
+- list item содержит thumbnail, title, year, score;
+- selected state должен быть заметным, но спокойным.
 
-- `���` � �������� ������ `#10a37f`;
-- `IMDb` � `��` � ������������ �������;
-- ������ �����: ����� � �������;
-- ������� ������ ���������� �������� �� 0 �� 10;
-- ������ �� ������������� � ������ �� ���������.
+## Poster Actions
 
-��������� ������������ �������� IMDb/�� � ��������. ���� � ������� ���� ����� ���������, ��� �� �������� ������ �������� style contract.
+Read-only actions:
 
-## ��������
+- открыть локальный poster file;
+- показать missing/local/remote state;
+- не менять poster-cache без отдельного write-сценария.
 
-�������� � **������� ������** ������ `#detailCard`, �� ��������� ����� ��������:
+## Analytics Layout
 
-- ��������� `��������` � **20px**, bold;
-- ���� ������ divider `#overviewDivider` (1px, `COLOR_BORDER`);
-- ����� overview � **16px**, `COLOR_TEXT_SECONDARY`, `line-height: 155%`;
-- ������ ������ �� ������� ������ � `OVERVIEW_SECTION_TOP_SPACING` (36px);
-- ��� ������ ���������.
+Analytics read-only.
 
-���� ������ overview ���, ���� �������� **����������** (`_overview_frame.setVisible(False)`), placeholder �� ������������.
+Порядок секций:
 
-### Visual QA watched card (������ �������)
+1. KPI summary;
+2. dataset completeness;
+3. score distribution;
+4. genre distribution;
+5. average by year;
+6. gaps/suspicious records;
+7. fallback text blocks.
 
-����� merge GUI-polish ��������� �������:
+Правила:
 
-| ���� | �������� |
+- `QScrollArea` с `widgetResizable=True`;
+- текстовые секции имеют vertical policy `Minimum`;
+- Plotly chart живет в отдельном контейнере;
+- fallback должен быть полноценным, а не пустым placeholder;
+- analytics не пишет dataset/pool/cache.
+
+## Search Layout
+
+Search screen должен быть пригоден для повторного использования:
+
+- filters сверху или слева;
+- results list плотная, с быстрым сравнением rating/year/genres;
+- selected candidate показывает detail preview;
+- incomplete status виден сразу;
+- action `add to watched` требует confirmation и идет через service.
+
+## Candidate Pool Layout
+
+Read-only состояние:
+
+- criteria list;
+- pool stats;
+- ready/incomplete counts;
+- duplicates/incomplete diagnostics.
+
+Write actions:
+
+- mark watched;
+- retry KP;
+- delete criteria;
+- import saved result.
+
+Каждый write требует preview и confirmation dialog.
+
+## Запреты Для GUI-Polish
+
+GUI-polish не должен менять:
+
+- dataset/meta форматы;
+- candidate pool форматы;
+- API pipeline;
+- poster-cache логику;
+- console flows;
+- generated JSON policy;
+- файлы в `archive/legacy/`.
+
+## Visual QA
+
+Перед merge desktop-правок проверить:
+
+| Watched | Search/Analytics |
 | --- | --- |
-| �������� title + �������� �������� | overview ����� ��� info, ��� ������ ������� ����� title � ��������� |
-| ������� title (2�3 ������) | `wordWrap`, ������ �������������� �� ������ info |
-| ��� IMDb/�� | �������� ���������� IMDb/�� ������, layout �� �������� |
-| ��� ������� | placeholder ���� �������, info-������� ������� |
-| ��� overview | ���� ��������� ����� ��������� |
+| long title wraps | filters do not resize layout |
+| missing poster state | empty results are explicit |
+| missing IMDb/KP values | incomplete candidates are visible |
+| overview hidden when empty | Plotly fallback works |
+| sidebar counter stable | text blocks do not overflow |
 
-## Layout-��������
+Минимальные проверки:
 
-Layout-������� ����������� ��� GUI-polish. �������� ������ ������ label ��� ���������� ���� ������ ����� ������ �������� ����� ��-�� ��������� `QScrollArea`, `sizeHint()` � `QSizePolicy`.
-
-### Watched: �������� ���������� ������
-
-����������: `desktop/watched_view.py` (`WatchedDetailCard`).
-
-������� ����:
-
+```powershell
+py -m compileall desktop dataset candidates storage ui tests
+py -m pytest tests/test_desktop.py
 ```
-[ poster (�����) ] [ title > chips > ratings (������) ]
-[ =========== overview �� ��� ������ =========== ]
-```
-
-�������:
-
-1. ������� ������: ������ �����, info-������� ������ (`title`, ��������� chips, read-only ��������).
-2. �������� � ������ **����** ������� ������, �� **��� ������** �������� (��������� + divider + �����).
-3. � info-������� **���** `addStretch()` � ������� �� �������������� �� ���������.
-4. ������: ������ �� `275px` (1.25? ������� `220px`), ������ �� `412px` (1.25? `330px`); **��** ������� ��� info-������� � ������� ������ ����, ��� upscale blur.
-5. ���� �������� � info-�������: vertical size policy **`Minimum`** � �� ��������� ������ ������ viewport.
-6. ������ ������ scroll-������� ������ **����** ��������: ���� `addStretch(1)` � **�����** root-layout ��������, �� ����� info � overview.
-7. ������� ��������: `wordWrap`, ��� ������� `maximumHeight`, ����������� �����.
-
-���������:
-
-- `addStretch()` ����� ���������� � ����� info-�������;
-- ������������ `_overview_frame` �� ������ viewport;
-- �������� �������� � ���� ������� �������������� max-height, ����� info-������� ����.
-
-### Watched: sidebar (������ � �������)
-
-����������: `desktop/app.py` (`_build_left_panel`).
-
-```
-[ + �������� ����� ]
-[ ����� ]
-[ ���������� | combo ]
-[ ? ������� / ? ������� ������� ]
-[ collapsible filters panel ]
-[ N �� M ]
-[ list with thumbnails ]
-```
-
-�������:
-
-1. ����� ������� `#watchedSidebar`: min ~300px, max ~400px; splitter ����� ~340px.
-2. ������� ������� �� ���������; �������� ��������� � ����� �������� ��������, �� `(N)`.
-3. ��������� �������� ���������� score/year/genre; ����� � ���������� �� �������.
-4. ������ � `WatchedListItemDelegate`: ��������� + title/year/score; selected � ������ �����.
-5. ���: ��������� ������, �������� �������.
-
-### Watched: poster actions (read-only)
-
-����������: `WatchedDetailCard` + `resolve_local_poster_path`, `open_path_in_shell`.
-
-1. **��� �� �������** > �������� ������ (���� ���� ��������� ����), ������ poster-cache�.
-2. ������ ���� � ����� � tooltip �� ������� ��� ���������.
-3. ��� ���� � ��� write; �������� ����� `storage.files.open_file`.
-
-### Analytics: scroll � ������
-
-����������: `desktop/analytics_view.py` (`AnalyticsView`).
-
-�������:
-
-1. ������� read-only; ������� � `dataset/score_analytics.py`, PyQt ������ ��������.
-2. `QScrollArea` � `widgetResizable=True`: ������� analytics **��** ������������� �� ��� ������ viewport.
-3. Read-only ��������� ����� (insights, overview-�������� ������, fallback): vertical size policy **`Minimum`**.
-4. ���� `addStretch(1)` � **�����** root-layout analytics � ������� **���** ���������, �� ������ ����� ��������.
-5. ������ (`�������`, `�������������`, �) � � `#analyticsSection`; Plotly � `#analyticsPlotlyChart` ������ ������; padding/spacing ������ **������** (root > section > row), �� ������� � ����� �����.
-
-������� ������ (Analytics MVP freeze):
-
-1. KPI-��������
-2. �������� (+ ������� dataset, insights)
-3. �������������� ������
-4. ����������� ������� �� ������
-5. �������� ��� ������ �� �����
-6. �������� ���� ������ �� IMDb�
-7. �� ������ ���� IMDb�
-8. �� ������ ���� IMDb�
-9. ��������������� ������
-
-����� �.8 ����� ������ � ������ �� ���������� ������� (��. `DESKTOP_GUI_ROADMAP.md`, Analytics MVP freeze).
-
-### Model: read-only summary (���� 1)
-
-����������: `desktop/model_view.py` (`ModelView`) + `desktop/model_summary.py`.
-
-1. ������� **read-only**; legacy model flows ���������� � `archive/legacy/model/`.
-2. KPI-��������: LOO MAE, IMDb baseline, �� baseline, dataset size, ������ fresh/stale.
-3. **������� banner + �������� �������**, ���� metrics stale � ����� ��������� LOO ��������.
-4. ������ **���������**: ������ ���������� LOO ��������, progress bar, ������; ������ � `QThread` ����� `execute_explicit_loo_training()`. ������ **����������** � collapsible ������ ����� (`#modelWeightsPanel`).
-5. ��� read-only ���������� ����� (����� 2+).
-6. ����� � `#summaryCard`, `#summaryCardStale`, `#modelStaleBanner`, `#modelTrainButton`, `#modelDetailsButton`, `#modelTrainingProgress`, `#modelWeightsPanel`; QSS � `build_analytics_style()`.
-
-### Analytics: �������� dataset�
-
-����������: `dataset/score_analytics.py` (`build_dataset_completeness*`, `summarize_dataset_completeness`) + `AnalyticsView._fill_completeness`.
-
-1. ��� ������ ������ ������ ��������: `#completenessHeadline`, `#completenessSubline`.
-2. ������: `������� dataset: 86%` + `����� ���������: �� 43/51 � ...` (�� 4 ������ �����).
-3. ���� �� ���������: `���� ����� ������.` ��� ����������� ���� �������.
-4. Read-only; ��� Plotly; ��� write � JSON.
-
-### Analytics: KPI-�������� (����� / ������� / �)
-
-�������:
-
-1. ������������� ������ �������� (������ `88px` ������, expanding width).
-2. ������� � �������� **�� ������** �������� (`AlignCenter`).
-3. **���** `addStretch()` ����� label � value (�� �������� value ����, �� ��������� ��������).
-4. �������� ������� ������� (������ `26px` vs `13px`).
-
-### Analytics: ����������� ������
-
-�������:
-
-1. ������ � � badge `#denseScoreBadge`, ������������� ������ **56?56**, ��� `#1c1c1f`, ����������.
-2. ����� ������ badge: **�� ������** (`AlignCenter`), ������� ����� (������ `22px`), ������ `#10a37f`.
-3. Badge � ������: **`AlignVCenter`** ������������ ������ �������.
-4. ������: ������ `N �������` (`#denseCount`), ���� ������ �������� (`#sameScoreTitles`, wrap).
-5. **��** ������������ ����� `QLabel` �� ��� ������ ������ ������ badge � ��� ��� ������� ������������ ������������.
-
-### Analytics: �������� (insights)
-
-1. ����� insights (`#insightText`) � **14px**, ���� ������� �������� KPI (`#d4d4d8`).
-2. ����� �������� insights � ���������� spacing (������ `4px` � `_insights_layout`).
-3. ��������� ������ `#sectionTitle` � **16px**, ������ ��������� > ������� ������ outer padding ������.
-
-## �������
-
-��� GUI-polish ������ ������:
-
-- dataset � ������ JSON;
-- meta;
-- model/training;
-- weights/model_metrics;
-- candidate_pool/top prediction;
-- poster cache � TMDb/KP pipeline;
-- web GUI;
-- console UI;
-- ����� � ����������;
-- ��������� �������� � ��������.
-
-## ��� ������
-
-- watched-�������� � layout ���������� ������: `desktop/watched_view.py`;
-- watched sidebar, context menu, delete flow: `desktop/app.py`, `desktop/watched_delete.py`, `desktop/delete_dialog.py`;
-- analytics layout � ����������� �������: `desktop/analytics_view.py`;
-- Plotly-������ (������ HTML/CSS �������): `desktop/plotly_charts.py`.
-
-˸���� helper-����� ��� desktop GUI ��������� � `tests/test_desktop.py`. ������ GUI-����� ��� ���������� ������ �� �����������.
-
-����� merge GUI-polish ��������� ������� ��� ������� �����:
-
-| Watched | Analytics |
-| --- | --- |
-| �������� title + �������� �������� | KPI: ����� � ������� �������� |
-| ������� title (2�3 ������) | dense row � ������� ������� ������� |
-| ��� IMDb/�� / ��� ������� | fallback ��� Plotly/WebEngine |

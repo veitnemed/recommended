@@ -46,6 +46,14 @@ def is_correct_year(year: str) -> bool:
         return False
 
 
+def is_correct_country(country: str) -> bool:
+    """Validate country input."""
+    country = str(country or "").strip()
+    if country == "":
+        return True
+    return has_control_characters(country) is False
+
+
 def is_correct_main_menu_command(command: str):
     """Check main menu command."""
     return command in constant.COMMANDS
@@ -137,4 +145,5 @@ VALIDATORS = {
     "votes": is_correct_votes,
     "tags_score": is_tags_score,
     "title": is_correct_title,
+    "country": is_correct_country,
 }

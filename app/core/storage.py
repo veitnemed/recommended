@@ -12,8 +12,8 @@ from config import constant
 from storage import data as storage_data
 
 
-WATCHLIST_JSON = os.path.join(constant.DATA_DIR, "watchlist.json")
-HIDDEN_JSON = os.path.join(constant.DATA_DIR, "hidden.json")
+WATCHLIST_JSON = os.path.join(constant.CANDIDATES_DIR, "watchlist.json")
+HIDDEN_JSON = os.path.join(constant.CANDIDATES_DIR, "hidden.json")
 
 
 def _init_json(path: str) -> None:
