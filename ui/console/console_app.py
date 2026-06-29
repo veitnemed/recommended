@@ -4,8 +4,6 @@ from functools import partial
 
 from candidates.tmdb_candidate_pool import set_progress_reporter
 from common import valid
-from model import model
-from storage import data as storage_data
 from storage import files as storage_files
 from ui.console import global_menu
 from ui.console import menu_state
@@ -20,26 +18,17 @@ def run_console_app():
 
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        kp_error = model.kp_mean_absolute_error(data)
-        model_metrics_status = storage_data.get_model_metrics_status()
-        ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error, model_metrics_status.get("loo_mae"), model_metrics_status)
+        _data, _weights, movies_counter, _abs_error = menu_state.get_menu_state()
+        ui.show_global_menu(movies_counter)
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
         if command == "0":
             break
         elif command == "1":
             global_menu.open_data_menu()
         elif command == "2":
-            global_menu.open_train_menu()
-        elif command == "3":
-            global_menu.open_model_menu()
-        elif command == "4":
-            global_menu.open_genres_menu()
-        elif command == "5":
-            global_menu.open_extra_menu()
-        elif command == "6":
             global_menu.open_candidate_pool_menu()
-        elif command == "7":
-            global_menu.export_report()
-            ui.press_enter()
+        elif command == "3":
+            global_menu.open_genres_menu()
+        elif command == "4":
+            global_menu.open_extra_menu()

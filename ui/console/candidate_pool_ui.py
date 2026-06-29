@@ -63,8 +63,8 @@ def prompt_optional_score(label: str, default=None) -> float | None:
 def choose_genres_by_numbers(
     current_genres: list | None = None,
     criteria_name: str | None = None,
-    prompt_title: str = "Жанры для top prediction (по сохранённым данным pool): выберите по номерам через пробел.",
-    prompt_hint: str = "Это фильтр по уже сохранённым кандидатам для top prediction; он не запускает TMDb Discover.",
+    prompt_title: str = "Жанры для поиска (по сохранённым данным pool): выберите по номерам через пробел.",
+    prompt_hint: str = "Это фильтр по уже сохранённым кандидатам; он не запускает TMDb Discover.",
     input_label: str = "Номера жанров",
 ) -> list:
     """Дает выбрать жанры по номерам из списка pool (fallback — общий каталог)."""
@@ -205,7 +205,7 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
     excluded_genres = choose_genres_by_numbers(
         excluded_genres_default,
         criteria_name=criteria_name,
-        prompt_title="Жанры для top prediction (по сохранённым данным pool): выберите исключаемые жанры.",
+        prompt_title="Жанры для поиска (по сохранённым данным pool): выберите исключаемые жанры.",
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров для исключения",
     )
@@ -233,14 +233,14 @@ def update_criteria_filters(criteria_name: str, current: dict) -> dict:
     genres = choose_genres_by_numbers(
         current.get("genres", []),
         criteria_name=criteria_name,
-        prompt_title="Жанры для top prediction (по сохранённым данным pool): выберите обязательные жанры.",
+        prompt_title="Жанры для поиска (по сохранённым данным pool): выберите обязательные жанры.",
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров",
     )
     excluded_genres = choose_genres_by_numbers(
         current.get("excluded_genres", []),
         criteria_name=criteria_name,
-        prompt_title="Жанры для top prediction (по сохранённым данным pool): выберите исключаемые жанры.",
+        prompt_title="Жанры для поиска (по сохранённым данным pool): выберите исключаемые жанры.",
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров для исключения",
     )

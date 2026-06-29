@@ -25,12 +25,11 @@ def show_menu_title(title: str):
 
 def show_header(movies_counter: int, error: int):
     """Печатает общий заголовок приложения."""
-    print('======= TERMINAL MOVIES LEARN =======')
+    print('======= SERIES LIST =======')
     if movies_counter == 0:
-        print('Датасет пуст!\n')
+        print('Список просмотренного пуст!\n')
     else:
-        print(' ' * 7, f'Количество записей: {movies_counter}')
-    print(' ' * 12, f"MAE: {round(error * 10, 2)} %\n")
+        print(' ' * 4, f'Просмотрено записей: {movies_counter}\n')
 
 
 def format_loo_mae_display(loo_mae=None, model_metrics_status: dict | None = None) -> str:
@@ -46,57 +45,51 @@ def format_loo_mae_display(loo_mae=None, model_metrics_status: dict | None = Non
     return f"Сохранённый LOO MAE: {float(loo_mae):.4f}{suffix}"
 
 
-def show_global_menu(movies_counter: int, error: int, kp_error: int, loo_mae=None, model_metrics_status: dict | None = None):
+def show_global_menu(movies_counter: int, error: int = 0, kp_error: int | None = None, loo_mae=None, model_metrics_status: dict | None = None):
     """Печатает главное меню."""
     show_header(movies_counter, error)
-    print(' ' * 9, f"KP_MAE: {round(kp_error * 10, 2)} %\n")
-    print(' ' * 8, f"{format_loo_mae_display(loo_mae, model_metrics_status)}\n")
-    print(' 1 >> Данные')
-    print(' 2 >> Обучение')
-    print(' 3 >> Модель')
-    print(' 4 >> Жанры')
-    print(' 5 >> Дополнительно')
-    print(' 6 >> Пулл кандидатов')
-    print(' 7 >> Выгрузить отчёт')
+    print(' 1 >> Просмотренное')
+    print(' 2 >> Поиск сериалов')
+    print(' 3 >> Жанры')
+    print(' 4 >> Дополнительно')
     print(' 0 >> Выход\n')
 
 
 def show_data_menu(movies_counter: int, error: int):
     """Печатает меню данных."""
     show_header(movies_counter, error)
-    show_menu_title('ДАННЫЕ')
+    show_menu_title('ПРОСМОТРЕННОЕ')
     print(' 1 >> Открыть Excel')
     print(' 2 >> Загрузить Excel')
     print(' 3 >> Добавить запись')
-    print(' 4 >> Показать мои оценки')
+    print(' 4 >> Показать просмотренное')
     print(' 5 >> Данные о датасете')
     print(' 6 >> Бэкап')
     print(' 7 >> Переименовать запись')
-    print(' 8 >> Уточнить порядок оценок')
-    print(' 9 >> Удалить просмотренную запись')
+    print(' 8 >> Удалить просмотренную запись')
     print(' 0 >> Главное меню\n')
 
 
 def show_candidate_pool_menu(movies_counter: int, error: int, pool_stats_line: str):
     """Печатает меню работы с общим пулом кандидатов."""
     show_header(movies_counter, error)
-    show_menu_title('ПУЛЛ КАНДИДАТОВ')
+    show_menu_title('ПОИСК СЕРИАЛОВ')
     print(f'{pool_stats_line}\n')
-    print(' 1 >> Собрать новый пулл')
-    print(' 2 >> Посмотреть пуллы кандидатов')
-    print(' 3 >> Собрать топ из общего пула')
-    print(' 4 >> Отметить просмотренные из пулла')
-    print(' 5 >> Управление пуллами')
+    print(' 1 >> Собрать новый пул кандидатов')
+    print(' 2 >> Посмотреть сохранённые пулы')
+    print(' 3 >> Найти сериалы в общем пуле')
+    print(' 4 >> Отметить просмотренные из пула')
+    print(' 5 >> Управление пулами')
     print(' 6 >> Диагностика и обслуживание')
     print(' 0 >> Главное меню\n')
 
 def show_candidate_pool_management_menu():
     """Печатает подменю управления сохранёнными пулами."""
-    show_menu_title('УПРАВЛЕНИЕ ПУЛЛАМИ')
-    print(' 1 >> Удалить пулл')
-    print(' 2 >> Defaults фильтров top prediction')
+    show_menu_title('УПРАВЛЕНИЕ ПУЛАМИ')
+    print(' 1 >> Удалить пул')
+    print(' 2 >> Defaults фильтров поиска')
     print(' 3 >> Импортировать TMDb result в общий пул')
-    print(' 4 >> Собрать пулл через KP API (legacy)')
+    print(' 4 >> Собрать пул через KP API (legacy)')
     print(' 0 >> Назад\n')
 
 
@@ -105,8 +98,7 @@ def show_candidate_pool_diagnostics_menu():
     show_menu_title('ДИАГНОСТИКА И ОБСЛУЖИВАНИЕ')
     print(' 1 >> Показать подозрительные дубли')
     print(' 2 >> Добрать KP для неполных кандидатов')
-    print(' 3 >> Показать вклады для кандидатов')
-    print(' 4 >> Показать TMDb жанры по dataset')
+    print(' 3 >> Показать TMDb жанры по dataset')
     print(' 0 >> Назад\n')
 
 

@@ -21,10 +21,6 @@ from dataset import genre_stats
 from dataset.dataset_records import update_dataset_record
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
-from model import feature_ablation
-from model import genre_markup_efficiency
-from model import linear_regression_train
-from model import model
 from ui.console import candidate_pool_ui
 from ui.console import request
 from ui.console import title_presenters
@@ -217,6 +213,8 @@ def validate_rating_order_draft(draft: dict, data: dict) -> tuple[bool, str, lis
 
 def calculate_rating_order_loo_mae(data: dict) -> float | None:
     """Считает LOO MAE для draft-сценария без сохранения весов и metrics."""
+    from model import linear_regression_train
+
     if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
         return None
     return linear_regression_train.calculate_linear_loo_mae(
@@ -388,8 +386,6 @@ def show_all_movies():
         year_text = f" | год: {row['year']}" if row.get("year") not in (None, "") else ""
         print(f"{idx}) {row['title']} | user_score: {row['score']}{year_text}")
 
-    open_scores_actions_menu(rows)
-
 
 def open_scores_actions_menu(rows: list[dict]) -> None:
     """Открывает действия после просмотра оценок."""
@@ -436,6 +432,8 @@ def change_user_score_from_rows(rows: list[dict]) -> None:
 
 def get_predict(weights: dict) -> None:
     """Запрашивает признаки и показывает прогноз модели."""
+    from model import model
+
     defaults, _, _ = request.request_api_defaults()
     if defaults is None:
         return
@@ -1598,14 +1596,14 @@ def import_tmdb_result_to_common_pool_flow() -> None:
 
 
 def edit_candidate_pool_filters() -> None:
-    """Обновляет saved defaults фильтров top prediction для набора criteria."""
+    """Обновляет saved defaults фильтров поиска для набора criteria."""
     ui.clean_terminal()
     selected = candidate_pool_ui.choose_existing_criteria()
     if selected is None:
         return
 
     criteria_name, criteria = selected
-    print(f"\nDefaults фильтров top prediction: {criteria_name}")
+    print(f"\nDefaults фильтров поиска: {criteria_name}")
     print("Жанры берутся из сохранённых кандидатов pool. Это не запускает TMDb Discover.")
     print(f"Текущий KP: {criteria.get('min_kp', 'не важно')}")
     print(f"Текущие жанры (saved pool): {', '.join(criteria.get('genres', [])) or 'не важно'}")
@@ -1613,8 +1611,8 @@ def edit_candidate_pool_filters() -> None:
 
     updated = candidate_pool_ui.update_criteria_filters(criteria_name, criteria)
     print("\nDefaults обновлены в candidate_criteria.json.")
-    print("Filters сохраняются как defaults для top prediction по уже сохранённым кандидатам (Enter = default).")
-    print("Ручной ввод в top prediction действует только на текущий запуск.")
+    print("Filters сохраняются как defaults поиска по уже сохранённым кандидатам (Enter = default).")
+    print("Ручной ввод в поиске действует только на текущий запуск.")
     print("Filters не пересобирают pool, не делают новый TMDb-запрос и не удаляют кандидатов из candidate_pool.json.")
     print(f"KP: {updated.get('min_kp', 'не важно')}")
     print(f"Жанры (saved pool): {', '.join(updated.get('genres', [])) or 'не важно'}")
@@ -1667,7 +1665,7 @@ def show_candidate_pool() -> None:
 
 
 def show_global_candidate_top() -> None:
-    """Показывает топ кандидатов из общего пула по предикту без вайб-тегов."""
+    """Показывает топ кандидатов из общего пула по понятной формуле качества."""
     ui.clean_terminal()
     top_view = candidate_service.get_global_top_prediction_view()
     if top_view["is_empty"]:
@@ -1679,39 +1677,21 @@ def show_global_candidate_top() -> None:
         print(line)
 
     filters = _request_prediction_candidate_filters(top_view["candidates"])
-    filter_view = candidate_service.get_prediction_filter_view(top_view["candidates"], filters)
-    if filter_view["filtered_count"] == 0:
+    search_view = candidate_service.search_candidate_pool(top_view["candidates"], filters)
+    ranked_candidates = search_view["candidates"]
+    if search_view["filtered_count"] == 0:
         print("\nПо выбранным фильтрам кандидатов не найдено.")
         return
 
-    ready_candidates = filter_view["ready_candidates"]
-    incomplete_candidates = filter_view["incomplete_candidates"]
-    skipped_incomplete = filter_view["skipped_incomplete_count"]
-
-    print(f"\nПосле выбранного фильтра: {filter_view['filtered_count']}")
-    print(f"Готовых к предикту: {filter_view['ready_count']}")
-    print(f"Пропущено неполных: {skipped_incomplete}")
-    if skipped_incomplete > 0:
-        print("\nНеполные кандидаты не участвовали в обычном предикте.")
-        print("Причина: нет части KP/IMDb данных или is_complete=false.")
-        print("Чтобы попробовать добрать KP-данные, запусти:")
-        print("Пулл кандидатов -> 6 >> Диагностика -> 2 >> Добрать KP для неполных кандидатов")
-        print("\nНеполные кандидаты:\n")
-        _print_incomplete_candidates_preview(incomplete_candidates, limit=5)
-
-    if len(ready_candidates) == 0:
-        print("\nНет готовых кандидатов для предикта.")
-        print("Можно изменить фильтры или запустить добор KP для неполных кандидатов.")
-        return
+    print(f"\nПосле выбранного фильтра: {search_view['filtered_count']}")
 
     top_n_value = request.loop_input(
         text="\nТоп N из общего пула >> ",
         funcs_list=[valid.is_correct_top_n]
     )
-    top_n = min(int(top_n_value), len(ready_candidates))
+    top_n = min(int(top_n_value), len(ranked_candidates))
 
-    weights = storage_data.load_weights()
-    ranking_view = candidate_service.rank_top_prediction_candidates(ready_candidates, weights)
+    ranking_view = candidate_service.rank_top_prediction_candidates(ranked_candidates, {})
     scored_candidates = ranking_view["candidates"]
     hidden_duplicates = ranking_view["hidden_duplicates"]
     if hidden_duplicates > 0:
@@ -1721,6 +1701,7 @@ def show_global_candidate_top() -> None:
     print(f"\nТоп {top_n} из общего пула:\n")
     for index, row in enumerate(scored_candidates[:top_n], start=1):
         _print_prediction_candidate_card(index, row)
+    _open_candidate_result_actions(scored_candidates[:top_n])
 
 
 def _print_candidate_contribution_group(title: str, rows: list, limit: int) -> None:
@@ -1779,18 +1760,52 @@ def _print_prediction_candidate_card(index: int, candidate: dict) -> None:
     countries = country_schema.candidate_country_for_display(candidate)
     genres = genre_schema.candidate_genres_for_display(candidate)
     description = candidate_service.format_candidate_description(candidate, limit=200)
-    predict = candidate.get("predict_score", candidate.get("predict"))
+    quality = candidate.get("quality_score")
     try:
-        predict_label = f"{float(predict):.2f}"
+        quality_label = f"{float(quality):.2f}"
     except (TypeError, ValueError):
-        predict_label = "-"
+        quality_label = "-"
 
     print(f"{index}. {title} ({year})")
     print(f"   Рейтинг: KP: {_format_card_score(candidate.get('kp_score'))} / IMDb: {_format_card_score(candidate.get('imdb_score'))}")
     print(f"   Страна: {_format_card_list(countries)}")
     print(f"   Жанр: {_format_card_list(genres)}")
     print(f"   Описание: {description}")
-    print(f"   Прогноз: {predict_label}\n")
+    print(f"   Качество: {quality_label}")
+    explanation = candidate.get("explanation") or []
+    if explanation:
+        print("   Почему в выдаче:")
+        for reason in explanation[:6]:
+            print(f"   - {reason}")
+    print("")
+
+
+def _open_candidate_result_actions(candidates: list[dict]) -> None:
+    if len(candidates) == 0:
+        return
+    selected = input("Номер кандидата для действия или Enter, чтобы вернуться >> ").strip()
+    if selected == "":
+        return
+    if selected.isdigit() is False or not (1 <= int(selected) <= len(candidates)):
+        print("Такого кандидата нет.")
+        return
+
+    candidate = candidates[int(selected) - 1]
+    title = candidate.get("title") or "Без названия"
+    print(f"\n{title}")
+    print(" 1 >> Добавить в хочу посмотреть")
+    print(" 2 >> Скрыть / не показывать")
+    print(" 0 >> Назад")
+    command = request.loop_input(
+        text=">> ",
+        funcs_list=[lambda value: value in {"0", "1", "2"}],
+    )
+    if command == "1":
+        result = candidate_service.add_candidate_to_watchlist(candidate)
+        print(f"Добавлено в хочу посмотреть. Всего в списке: {result['count']}")
+    elif command == "2":
+        result = candidate_service.hide_candidate(candidate)
+        print(f"Кандидат скрыт. Всего скрытых: {result['count']}")
 
 
 def _parse_optional_csv_list(value: str) -> list[str]:
@@ -1926,8 +1941,8 @@ def _choose_prediction_criteria_name() -> str | None:
 
 
 def _request_prediction_candidate_filters(candidates: list) -> dict:
-    print("\nФильтр кандидатов перед предиктом:")
-    print("Жанры для top prediction (по сохранённым данным pool).")
+    print("\nФильтр кандидатов перед поиском:")
+    print("Жанры для поиска (по сохранённым данным pool).")
     print("Жанры (saved pool / KP-IMDb-TMDb data).")
     print("Это не пересобирает pool и не делает новый TMDb-запрос.")
     print("Enter в списках стран/жанров = не важно; в числовых полях = saved default.\n")
@@ -1998,6 +2013,11 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
     else:
         only_complete = only_complete_answer in {"y", "yes", "д", "да"}
 
+    only_unwatched_answer = input("Скрывать просмотренные? [Y/n] >> ").strip().casefold()
+    only_unwatched = only_unwatched_answer not in {"n", "no", "н", "нет"}
+    hide_hidden_answer = input("Скрывать hidden? [Y/n] >> ").strip().casefold()
+    hide_hidden = hide_hidden_answer not in {"n", "no", "н", "нет"}
+
     return {
         "criteria_name": criteria_name,
         "source": None,
@@ -2011,6 +2031,8 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
         "min_imdb_score": min_imdb_score,
         "min_imdb_votes": min_imdb_votes,
         "only_complete": only_complete,
+        "only_unwatched": only_unwatched,
+        "hide_hidden": hide_hidden,
     }
 
 

@@ -1279,7 +1279,7 @@ def test_refresh_after_user_score_save_wiring() -> None:
 
     source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_user_score_save)
     assert "_analytics_view.update_entries" in source
-    assert "_model_view.refresh" in source
+    assert "_model_view.refresh" not in source
 
 
 def test_refresh_after_delete_wiring() -> None:
@@ -1291,38 +1291,21 @@ def test_refresh_after_delete_wiring() -> None:
     assert "load_watched_entries" in source
     assert "_reload_genre_filter_options" in source
     assert "_analytics_view.update_entries" in source
-    assert "_model_view.refresh" in source
+    assert "_model_view.refresh" not in source
     assert "_show_empty_details" in source
     assert "format_delete_status_message" in source
 
 
-def test_model_tab_wiring() -> None:
+def test_desktop_has_no_model_tab_wiring() -> None:
     import inspect
 
     import desktop.app as app_module
-    import desktop.model_view as model_view_module
 
     init_source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
-    assert "ModelView" in init_source
-    assert '"Модель"' in init_source
-
-    view_source = inspect.getsource(model_view_module.ModelView.refresh)
-    assert "build_model_tab_summary" in view_source
-
-    training_source = inspect.getsource(model_view_module.ModelView._start_loo_training)
-    assert "validate_explicit_loo_training" in training_source
-    assert "LooTrainingWorker" in training_source
-
-    details_source = inspect.getsource(model_view_module.ModelView._refresh_weights_panel)
-    assert "build_weights_summary" in details_source
-    assert "Подробнее" in inspect.getsource(model_view_module.ModelView.__init__)
-
-    model_source = inspect.getsource(model_view_module.ModelView)
-    assert "modelStaleBanner" in model_source
-    assert "modelTrainingProgress" in model_source
-    assert "modelWeightsPanel" in model_source
-    init_block = inspect.getsource(model_view_module.ModelView.__init__)
-    assert "root_layout.addStretch" not in init_block
+    module_source = inspect.getsource(app_module)
+    assert "ModelView" not in module_source
+    assert '"Модель"' not in init_source
+    assert "_model_view.refresh" not in module_source
 
 
 def test_open_list_context_menu_includes_delete_action() -> None:

@@ -31,7 +31,6 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.analytics_view import AnalyticsView
-from desktop.model_view import ModelView
 from desktop.delete_dialog import WatchedDeleteDialog
 from desktop.theme import (
     COLOR_ACCENT,
@@ -324,8 +323,6 @@ class WatchedMoviesWindow(QMainWindow):
         tabs.addTab(watched_tab, "Watched")
         self._analytics_view = AnalyticsView(self._entries)
         tabs.addTab(self._analytics_view.widget, "Аналитика")
-        self._model_view = ModelView()
-        tabs.addTab(self._model_view.widget, "Модель")
 
         self._refresh_list()
         if self._list_widget.count() > 0:
@@ -602,7 +599,6 @@ class WatchedMoviesWindow(QMainWindow):
         added_key = result.title
         self._entries = load_watched_entries()
         self._analytics_view.update_entries(self._entries)
-        self._model_view.refresh()
         self._refresh_list()
 
         for index, (key, _, _) in enumerate(self._visible_entries):
@@ -640,7 +636,6 @@ class WatchedMoviesWindow(QMainWindow):
     def _refresh_after_user_score_save(self, current_key: str, result) -> None:
         self._entries = load_watched_entries()
         self._analytics_view.update_entries(self._entries)
-        self._model_view.refresh()
         self._refresh_list()
 
         for index, (key, _, _) in enumerate(self._visible_entries):
@@ -719,7 +714,6 @@ class WatchedMoviesWindow(QMainWindow):
         previous_row = self._list_widget.currentRow()
         self._entries = load_watched_entries()
         self._analytics_view.update_entries(self._entries)
-        self._model_view.refresh()
         self._reload_genre_filter_options()
         self._refresh_list()
 

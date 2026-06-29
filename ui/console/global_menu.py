@@ -11,14 +11,9 @@ from ui.console import backup_menu
 from ui.console import interface_funcs
 from ui.console import menu_state
 from ui.console import request
-from ui.console import rating_comparison
 from ui.console import genre_menu
 from ui.console import tags_menu
 from ui.console import ui
-from model import linear_regression_train
-from model import model
-from model import train_report
-from ui.console import train_menu
 from common import valid
 
 
@@ -29,7 +24,7 @@ def open_data_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_data_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 9)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
         if command == "0":
             return
         if command == "1":
@@ -48,8 +43,6 @@ def open_data_menu():
         elif command == "7":
             interface_funcs.rename_movie_record()
         elif command == "8":
-            rating_comparison.start_rating_comparison()
-        elif command == "9":
             interface_funcs.delete_watched_record()
 
         ui.press_enter()
@@ -57,117 +50,22 @@ def open_data_menu():
 
 def open_train_menu():
     """Открывает меню обучения модели."""
-    while True:
-        ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        ui.show_train_menu(movies_counter, round(abs_error, 2))
-
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
-        if command == "0":
-            return
-        if command == "1":
-            train_menu.train_linear_model(
-                data=data,
-                weights=weights,
-            )
-        elif command == "2":
-            train_menu.run_noise_sensitivity(
-                data=data,
-                weights=weights,
-            )
-        elif command == "3":
-            linear_regression_train.run_loo_training(
-                data=data,
-                weights=weights,
-            )
-
-        ui.press_enter()
+    print("Меню обучения отключено: проект работает как локальный поисковик сериалов.")
 
 
 def open_feature_menu():
     """Открывает меню признаков модели."""
-    while True:
-        ui.clean_terminal()
-        ui.show_feature_menu()
-
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
-        if command == "0":
-            return
-        if command == "1":
-            open_tags_menu()
-        elif command == "2":
-            interface_funcs.load_genre_markup()
-            ui.press_enter()
-        elif command == "3":
-            data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-            interface_funcs.show_weights_model(weights)
-            ui.press_enter()
-        elif command == "4":
-            interface_funcs.reset_weights_model()
-            ui.press_enter()
+    print("Меню признаков модели отключено.")
 
 
 def open_efficiency_menu():
     """Открывает меню тестов эффективности модели."""
-    while True:
-        ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        ui.show_efficiency_menu(movies_counter, round(abs_error, 2))
-
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
-        if command == "0":
-            return
-        if command == "1":
-            interface_funcs.show_feature_importance(weights, abs_error)
-        elif command == "2":
-            top_n = request.loop_input(
-                text="Топ N ошибок >> ",
-                funcs_list=[valid.is_correct_top_n]
-            )
-            model.top_prediction_errors(data, weights, int(top_n))
-        elif command == "3":
-            top_n = request.loop_input(
-                text="Топ N ошибок >> ",
-                funcs_list=[valid.is_correct_top_n]
-            )
-            model.one_to_one_error(data, int(top_n))
-        elif command == "4":
-            train_menu.run_noise_sensitivity(
-                data=data,
-                weights=weights,
-            )
-        elif command == "5":
-            interface_funcs.votes_impact()
-        elif command == "6":
-            updated_count = storage_movie.rework_formated_scores()
-            print(f'Пересчитано записей: {updated_count}')
-        elif command == "7":
-            interface_funcs.show_feature_ablation_report(data)
-            continue
-        elif command == "8":
-            interface_funcs.show_genre_markup_efficiency_report(data)
-            continue
-
-        ui.press_enter()
+    print("Меню эффективности модели отключено.")
 
 
 def open_model_menu():
     """Открывает меню модели."""
-    while True:
-        ui.clean_terminal()
-        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
-        ui.show_model_menu(movies_counter, round(abs_error, 2))
-
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
-        if command == "0":
-            return
-        if command == "1":
-            open_feature_menu()
-        elif command == "2":
-            open_efficiency_menu()
-        elif command == "3":
-            interface_funcs.get_predict(weights)
-            ui.press_enter()
+    print("Меню модели отключено: персональный прогноз больше не используется.")
 
 
 def open_genres_menu():
@@ -278,8 +176,6 @@ def open_candidate_pool_diagnostics_menu():
         elif command == "2":
             interface_funcs.retry_kp_for_incomplete_candidates()
         elif command == "3":
-            interface_funcs.show_candidate_contributions()
-        elif command == "4":
             interface_funcs.show_tmdb_dataset_genre_diagnostics()
 
         ui.press_enter()
@@ -287,7 +183,7 @@ def open_candidate_pool_diagnostics_menu():
 
 def export_report():
     """Выгружает отчет по текущему состоянию модели."""
-    train_report.export_train_report()
+    print("Отчёт модели отключён: проект работает как локальный поисковик сериалов.")
 
 
 def open_tags_menu():

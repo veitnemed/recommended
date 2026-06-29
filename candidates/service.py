@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.core import candidates as search_core
+from app.core import ranking as search_ranking
+from app.core import storage as search_storage
 from candidates import candidate_pool
 from candidates import import_tmdb as tmdb_import
 from candidates import tmdb_candidate_pool as tmdb_build
@@ -52,7 +55,7 @@ def get_contribution_ready_view(candidates: list) -> dict:
 
 
 def get_global_top_prediction_view() -> dict:
-    """Read-only pool overview for global top prediction screen."""
+    """Read-only pool overview for the local candidate search screen."""
     stats_view = get_pool_stats_view()
     candidates = get_pool_view()
     return {
@@ -65,12 +68,10 @@ def get_global_top_prediction_view() -> dict:
 
 
 def get_prediction_filter_view(candidates: list, filters: dict) -> dict:
-    """Applies runtime filters and splits ready/incomplete without model scoring."""
-    filtered_candidates = candidate_pool.filter_saved_candidates_for_prediction(candidates, filters)
-    ready_candidates = [
-        candidate for candidate in filtered_candidates
-        if candidate_pool.is_candidate_ready_for_prediction(candidate)
-    ]
+    """Applies runtime filters for local search without model scoring."""
+    search_view = search_core.search_candidates(candidates, filters)
+    filtered_candidates = search_view["candidates"]
+    ready_candidates = filtered_candidates
     incomplete_candidates = [
         candidate for candidate in filtered_candidates
         if candidate_pool.is_candidate_incomplete(candidate)
@@ -82,12 +83,13 @@ def get_prediction_filter_view(candidates: list, filters: dict) -> dict:
         "incomplete_candidates": incomplete_candidates,
         "filtered_count": len(filtered_candidates),
         "ready_count": len(ready_candidates),
-        "skipped_incomplete_count": len(filtered_candidates) - len(ready_candidates),
+        "skipped_incomplete_count": 0,
+        "candidates": filtered_candidates,
     }
 
 
 def get_prediction_filter_defaults_view(criteria_name: str | None = None) -> dict:
-    """Returns saved top prediction filter defaults for UI without writing JSON."""
+    """Returns saved search filter defaults for UI without writing JSON."""
     defaults = candidate_pool.build_prediction_filter_defaults(criteria_name)
     lines = candidate_pool.format_prediction_filter_default_lines(defaults)
     return {
@@ -98,14 +100,14 @@ def get_prediction_filter_defaults_view(criteria_name: str | None = None) -> dic
 
 
 def get_prediction_genre_options_view(criteria_name: str | None = None) -> dict:
-    """Returns saved-pool genres available for top prediction filters without writing JSON."""
+    """Returns saved-pool genres available for search filters without writing JSON."""
     candidates = get_pool_view(criteria_name)
     genres = candidate_pool.collect_prediction_genre_options(candidates)
     return {
         "criteria_name": criteria_name,
         "genres": genres,
         "count": len(genres),
-        "label": "Доступные жанры для top prediction (по сохранённым данным pool)",
+        "label": "Доступные жанры для поиска (по сохранённым данным pool)",
     }
 
 
@@ -387,8 +389,8 @@ def collect_candidates_legacy(criteria_name: str, criteria: dict) -> dict:
 
 
 def rank_top_prediction_candidates(candidates: list, weights: dict) -> dict:
-    """Ranks and dedupes candidates for top prediction UI."""
-    scored_candidates = candidate_pool.rank_candidates_by_predict(candidates, weights)
+    """Ranks and dedupes candidates by explainable quality score."""
+    scored_candidates = search_ranking.rank_candidates(candidates)
     before_dedupe_count = len(scored_candidates)
     scored_candidates = candidate_pool.dedupe_ranked_predictions_by_title_identity(scored_candidates)
     return {
@@ -396,6 +398,21 @@ def rank_top_prediction_candidates(candidates: list, weights: dict) -> dict:
         "before_dedupe_count": before_dedupe_count,
         "hidden_duplicates": before_dedupe_count - len(scored_candidates),
     }
+
+
+def search_candidate_pool(candidates: list, filters: dict) -> dict:
+    """Filters and ranks saved candidates for local search."""
+    return search_core.search_candidates(candidates, filters)
+
+
+def add_candidate_to_watchlist(candidate: dict) -> dict:
+    """Adds a candidate to the local watchlist JSON."""
+    return search_storage.add_to_watchlist(candidate)
+
+
+def hide_candidate(candidate: dict) -> dict:
+    """Adds a candidate to the local hidden JSON."""
+    return search_storage.add_to_hidden(candidate)
 
 
 def build_contribution_reports(candidates: list, weights: dict) -> list:
