@@ -170,12 +170,10 @@ def _poster_url_from_hints(poster_hints: dict | None) -> str | None:
     return build_tmdb_poster_url(str(poster_path).strip())
 
 
-def build_movie_record_from_defaults(defaults: dict, user_score: float, *, year: int | None = None) -> dict:
+def build_movie_record_from_defaults(defaults: dict, user_score: float) -> dict:
     """Build add_dataset_record payload from resolved defaults."""
     main_info = dict(defaults.get(scheme.MAIN_INFO, {}))
     main_info["user_score"] = float(user_score)
-    if year is not None:
-        main_info["year"] = int(year)
     return {
         "main_info": main_info,
         "raw_scores": dict(defaults.get(scheme.RAW_SCORES, {})),
@@ -190,11 +188,10 @@ def save_add_title_record(
     *,
     meta_payload=None,
     poster_hints=None,
-    year: int | None = None,
     pool_candidate: dict | None = None,
 ):
     """Save a new watched title through the existing add service."""
-    movie = build_movie_record_from_defaults(defaults, user_score, year=year)
+    movie = build_movie_record_from_defaults(defaults, user_score)
     return add_movie(
         movie,
         meta_payload=meta_payload,

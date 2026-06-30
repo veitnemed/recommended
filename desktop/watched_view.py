@@ -99,16 +99,40 @@ def prepare_card_for_display(movie: dict) -> dict:
 
 def filter_by_title(entries: list[WatchedEntry], query: str) -> list[WatchedEntry]:
     """Return entries whose title matches the search query (case-insensitive)."""
-    normalized = query.strip().lower()
+    from desktop.list_search import normalize_search_query
+
+    normalized = normalize_search_query(query)
     if normalized == "":
         return list(entries)
 
     result: list[WatchedEntry] = []
     for key, movie, card in entries:
-        title = (card.get("title") or key or "").lower()
-        if normalized in title or normalized in key.lower():
+        title = (card.get("title") or key or "").casefold()
+        if normalized in title or normalized in str(key).casefold():
             result.append((key, movie, card))
     return result
+
+
+def watched_entry_search_haystack(entry: WatchedEntry) -> str:
+    """Precomputed haystack for watched title search."""
+    key, _movie, card = entry
+    title = str(card.get("title") or key or "").strip().casefold()
+    return f"{str(key).casefold()} {title}".strip()
+
+
+def build_watched_search_index(entries: list[WatchedEntry]):
+    """Build reusable search index for watched list filtering."""
+    from desktop.list_search import SearchIndex, SearchIndexItem
+
+    items = [
+        SearchIndexItem(
+            item=entry,
+            haystack=watched_entry_search_haystack(entry),
+            selection_key=entry[0],
+        )
+        for entry in entries
+    ]
+    return SearchIndex(items)
 
 
 def _coerce_filter_score(value) -> float | None:
@@ -257,9 +281,13 @@ def apply_view(
     year_from: int | None = None,
     year_to: int | None = None,
     genre: str | None = None,
+    title_index=None,
 ) -> list[WatchedEntry]:
     """Filter and sort entries for display."""
-    filtered = filter_by_title(entries, query)
+    if title_index is not None:
+        filtered = title_index.filter_by_query(query)
+    else:
+        filtered = filter_by_title(entries, query)
     filtered = filter_entries_by_user_score(filtered, min_score, max_score)
     filtered = filter_entries_by_year(filtered, year_from, year_to)
     filtered = filter_entries_by_genre(filtered, genre)
@@ -591,6 +619,26 @@ def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | No
         path = Path(candidate)
         if path.is_file():
             return str(path)
+
+    poster_url = display_card.get("poster_url") or movie.get("poster_url")
+    if poster_url not in (None, ""):
+        from posters.download_images import local_preview_poster_path_if_cached
+
+        preview_path = local_preview_poster_path_if_cached(str(poster_url))
+        if preview_path not in (None, ""):
+            path = Path(preview_path)
+            if path.is_file():
+                return str(path)
+
+    main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
+    title = display_card.get("title") or main_info.get("title") or movie.get("title")
+    year = display_card.get("year", main_info.get("year", movie.get("year")))
+    if title not in (None, ""):
+        from posters.cache import default_local_poster_path
+
+        default_path = default_local_poster_path(str(title), year)
+        if default_path not in (None, ""):
+            return default_path
     return None
 
 

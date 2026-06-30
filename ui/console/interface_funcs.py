@@ -54,7 +54,7 @@ def request_object() -> None:
     if defaults is None:
         return
 
-    movie_request = request.request_all_scores(defaults)
+    movie_request = request.request_user_score(defaults)
     result = storage_movie.add_movie(
         movie_request,
         meta_payload=meta_payload,
@@ -142,7 +142,7 @@ def mark_candidate_as_watched() -> None:
     print_candidate_genre_transfer_preview(
         title_resolve.build_candidate_genre_transfer_preview(candidate)
     )
-    movie_request = request.request_all_scores(defaults)
+    movie_request = request.request_user_score(defaults)
     result = storage_movie.add_movie(
         movie_request,
         meta_payload=meta_payload,

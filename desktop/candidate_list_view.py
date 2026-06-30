@@ -25,12 +25,13 @@ from desktop.candidate_poster_worker import CandidatePosterDownloadWorker
 from desktop.candidate_search_session import CandidateSearchSession
 from desktop.candidate_search_view import (
     build_candidate_readonly_detail_entry,
+    build_candidate_search_index,
     candidate_detail_identity,
     candidate_poster_url_for_download,
-    filter_candidates_by_title,
     format_candidate_metric_value,
     resolve_local_poster_path_for_candidate,
 )
+from desktop.list_search import DebouncedLineEditSearch, resolve_selection_row
 from desktop.watched_view import (
     CANDIDATE_DETAIL_CARD_PROFILE,
     LIST_ITEM_HEIGHT,
@@ -179,6 +180,9 @@ class CandidateListView:
         self._all_candidates: list[dict] = []
         self._candidates: list[dict] = []
         self._selected_candidate: dict | None = None
+        self._selected_identity: str | None = None
+        self._search_index = build_candidate_search_index([])
+        self._pool_unique_total = 0
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
         self._poster_worker: CandidatePosterDownloadWorker | None = None
@@ -221,7 +225,11 @@ class CandidateListView:
         self._search_input.setObjectName("candidateListSearch")
         self._search_input.setPlaceholderText("Поиск по названию")
         self._search_input.setClearButtonEnabled(True)
-        self._search_input.textChanged.connect(self._on_search_changed)
+        self._debounced_search = DebouncedLineEditSearch(
+            self._search_input,
+            self._apply_visible_candidates,
+            parent=self._widget,
+        )
         list_layout.addWidget(self._search_input)
 
         sort_row = QWidget()
@@ -308,22 +316,16 @@ class CandidateListView:
             self._results_list.setItemDelegate(self._delegate)
             self._results_list.viewport().update()
 
-    def _on_search_changed(self, _text: str) -> None:
-        if not self._session.has_results:
-            return
-        self._apply_visible_candidates()
-
     def _apply_visible_candidates(self) -> None:
         query = self._search_input.text()
-        self._candidates = filter_candidates_by_title(self._all_candidates, query)
-        self._detail_entries = {
-            candidate_detail_identity(candidate): build_candidate_readonly_detail_entry(candidate)
-            for candidate in self._candidates
-        }
+        previous_identity = self._selected_identity
+        self._candidates = self._search_index.filter_by_query(query)
 
         self._results_list.blockSignals(True)
         self._results_list.clear()
         if len(self._candidates) == 0:
+            self._selected_candidate = None
+            self._selected_identity = None
             self._update_counter_label(query)
             self._clear_detail(show_filters_hint=False, search_active=bool(query.strip()))
         else:
@@ -334,20 +336,33 @@ class CandidateListView:
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, candidate)
                 self._results_list.addItem(item)
-            self._clear_detail(show_filters_hint=False, search_active=False)
         self._results_list.blockSignals(False)
 
-        if self._results_list.count() > 0:
-            self._results_list.setCurrentRow(0)
+        if len(self._candidates) == 0:
+            return
+
+        row = resolve_selection_row(
+            previous_identity,
+            self._candidates,
+            key_getter=candidate_detail_identity,
+        )
+        if row < 0:
+            return
+
+        selected_identity = candidate_detail_identity(self._candidates[row])
+        current_row = self._results_list.currentRow()
+        if current_row != row:
+            self._results_list.setCurrentRow(row)
+        elif selected_identity != self._selected_identity:
+            self._on_result_selected(row)
 
     def _update_counter_label(self, query: str) -> None:
-        pool_stats = candidate_service.get_pool_stats_view()["stats"]
-        unique_total = pool_stats.get("unique_total", pool_stats.get("storage_total", 0))
         dup_note = ""
         if self._session.hidden_duplicates > 0:
             dup_note = f" · дублей скрыто: {self._session.hidden_duplicates}"
         visible = len(self._candidates)
         total = len(self._all_candidates)
+        unique_total = self._pool_unique_total
         if query.strip():
             self._counter_label.setText(
                 f"Найдено {visible} из {total} · уникальных в pool: {unique_total}{dup_note}"
@@ -363,6 +378,9 @@ class CandidateListView:
             self._all_candidates = []
             self._candidates = []
             self._selected_candidate = None
+            self._selected_identity = None
+            self._search_index = build_candidate_search_index([])
+            self._pool_unique_total = 0
             self._detail_entries = {}
             self._results_list.clear()
             self._counter_label.setText("")
@@ -370,7 +388,12 @@ class CandidateListView:
             return
 
         self._all_candidates = self._session.sorted_candidates()
-        self._apply_visible_candidates()
+        self._search_index = build_candidate_search_index(self._all_candidates)
+        pool_stats = candidate_service.get_pool_stats_view()["stats"]
+        self._pool_unique_total = int(
+            pool_stats.get("unique_total", pool_stats.get("storage_total", 0)) or 0
+        )
+        self._debounced_search.flush()
 
     def _on_result_selected(self, row: int) -> None:
         started = perf_counter()
@@ -386,6 +409,7 @@ class CandidateListView:
 
         candidate = self._candidates[row]
         self._selected_candidate = candidate
+        self._selected_identity = candidate_detail_identity(candidate)
         lookup_done = perf_counter()
 
         identity = candidate_detail_identity(candidate)

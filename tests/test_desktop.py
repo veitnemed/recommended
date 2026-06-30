@@ -2,6 +2,7 @@ import copy
 import inspect
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from config import constant
 from config import scheme
@@ -96,6 +97,16 @@ def test_add_title_button_opens_wizard_dialog() -> None:
     assert "class AddTitlePreviewDialog" in dialog_source
     assert "run_add_title_flow" in dialog_source
     assert "Искать другой" in dialog_source
+
+
+def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> None:
+    import desktop.add_title_dialog as dialog_module
+
+    source = inspect.getsource(dialog_module.AddTitlePreviewDialog)
+    assert "_year_label" in source
+    assert "QSpinBox" not in source
+    assert "year=" not in source.replace("resolved_year", "")
+    assert "save_add_title_record" in source
 
 
 def test_prepare_card_for_display_does_not_mutate_movie() -> None:
@@ -1152,6 +1163,24 @@ def test_resolve_local_poster_path_reads_nested_poster_dict() -> None:
         assert resolve_local_poster_path(movie) == str(poster)
 
 
+def test_resolve_local_poster_path_uses_preview_cache_for_poster_url() -> None:
+    from desktop.watched_view import resolve_local_poster_path
+
+    poster_url = "https://image.tmdb.org/t/p/w500/example.jpg"
+    with tempfile.TemporaryDirectory() as temp_root:
+        preview = Path(temp_root) / "preview.jpg"
+        preview.write_bytes(b"x")
+        card = {"poster_url": poster_url}
+
+        def fake_preview_path(url: str) -> str | None:
+            if url == poster_url:
+                return str(preview)
+            return None
+
+        with patch("posters.download_images.local_preview_poster_path_if_cached", fake_preview_path):
+            assert resolve_local_poster_path({}, card) == str(preview)
+
+
 def test_watched_list_delegate_uses_poster_resolver() -> None:
     import inspect
 
@@ -1274,7 +1303,8 @@ def test_refresh_after_user_score_save_wiring() -> None:
     import desktop.app as app_module
 
     source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_user_score_save)
-    assert "_analytics_view.update_entries" in source
+    assert "_reload_watched_search_index" in source
+    assert "resolve_selection_row" in source
     assert "_model_view.refresh" not in source
 
 
@@ -1286,7 +1316,8 @@ def test_refresh_after_delete_wiring() -> None:
     source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_delete)
     assert "load_watched_entries" in source
     assert "_reload_genre_filter_options" in source
-    assert "_analytics_view.update_entries" in source
+    assert "_reload_watched_search_index" in source
+    assert "resolve_selection_row" in source
     assert "_model_view.refresh" not in source
     assert "_show_empty_details" in source
     assert "format_delete_status_message" in source
@@ -1532,6 +1563,46 @@ def test_filter_candidates_by_title_matches_alternative_title() -> None:
     assert filter_candidates_by_title(candidates, "gamma")[0]["title"] == "Beta"
 
 
+def test_list_search_index_filters_with_precomputed_haystack() -> None:
+    from desktop.list_search import SearchIndex, SearchIndexItem, normalize_search_query, resolve_selection_row
+
+    index = SearchIndex([
+        SearchIndexItem(item={"title": "Alpha"}, haystack="alpha show", selection_key="a"),
+        SearchIndexItem(item={"title": "Beta"}, haystack="beta series", selection_key="b"),
+    ])
+    assert len(index.filter_by_query("show")) == 1
+    assert index.filter_by_query("show")[0]["title"] == "Alpha"
+    assert len(index.filter_by_query("")) == 2
+    assert normalize_search_query("  AbC ") == "abc"
+
+    filtered = index.filter_by_query("beta")
+    assert resolve_selection_row("missing", filtered, key_getter=lambda item: item["title"]) == 0
+    assert resolve_selection_row("Beta", filtered, key_getter=lambda item: item["title"]) == 0
+
+
+def test_build_watched_search_index_matches_title() -> None:
+    from desktop.watched_view import build_watched_search_index
+
+    entries = [
+        ("Alpha", {}, {"title": "Alpha Show"}),
+        ("Beta", {}, {"title": "Beta"}),
+    ]
+    index = build_watched_search_index(entries)
+    assert len(index.filter_by_query("show")) == 1
+    assert index.filter_by_query("show")[0][0] == "Alpha"
+
+
+def test_candidate_list_view_uses_list_search_module() -> None:
+    import inspect
+
+    from desktop import candidate_list_view as module
+
+    source = inspect.getsource(module.CandidateListView)
+    assert "DebouncedLineEditSearch" in source
+    assert "build_candidate_search_index" in source
+    assert "get_pool_stats_view" not in source.split("_update_counter_label")[1].split("def ")[0]
+
+
 def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     import inspect
 
@@ -1541,7 +1612,7 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     source = inspect.getsource(module.CandidateListView)
     assert "build_candidate_readonly_detail_entry" in source
     assert "candidateListSearch" in source
-    assert "filter_candidates_by_title" in source
+    assert "build_candidate_search_index" in source
     assert "build_candidate_detail_entry" not in source
     assert "CANDIDATE_DETAIL_CARD_PROFILE" in source
     assert CANDIDATE_DETAIL_CARD_PROFILE.poster_width == DETAIL_CARD_LAYOUT_PROFILE.poster_width

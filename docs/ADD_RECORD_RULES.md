@@ -121,7 +121,11 @@ Defaults собираются через `dataset.title_resolve`.
 - TMDb;
 - candidate pool record.
 
-UI показывает defaults пользователю, но пользователь всё равно подтверждает форму перед сохранением.
+UI показывает defaults пользователю, но перед сохранением пользователь может изменить **только** `main_info.user_score`.
+
+Название, год, страна, `raw_scores`, жанры и `tags_vibe` берутся из resolve/candidate bundle без override.
+
+Для правки остальных полей уже существующей записи используй `update_dataset_record()`.
 
 ## Перенос Candidate -> Watched
 
@@ -130,7 +134,7 @@ UI показывает defaults пользователю, но пользова
 ```text
 ui.console.interface_funcs.mark_candidate_as_watched()
 -> dataset.title_resolve.build_candidate_transfer_payload(candidate)
--> ui.console.request.request_all_scores(defaults)
+-> ui.console.request.request_user_score(defaults)
 -> dataset.storage_movie.add_movie(..., pool_candidate=candidate, print_message=False)
 ```
 

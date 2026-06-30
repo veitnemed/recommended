@@ -389,6 +389,31 @@ def show_score_help(feature: str) -> None:
         print(f"  {line}")
 
 
+def request_user_score(defaults: dict | None = None) -> dict:
+    """Build add payload from resolved defaults; user may edit only user_score."""
+    from dataset.add_title_service import build_movie_record_from_defaults
+
+    defaults = defaults or {}
+    main_info = defaults.get(scheme.MAIN_INFO, {})
+    default_score = main_info.get("user_score")
+
+    print("\n--- Подтверждение ---")
+    print("Название, год, рейтинги и жанры берутся из найденных данных без изменений.")
+    title = main_info.get("title") or "?"
+    year = main_info.get("year") or "?"
+    print(f"Тайтл: {title} ({year})")
+
+    field_settings = get_request_schema()[scheme.MAIN_INFO]["user_score"]
+    field_validators = get_validators(field_settings["tag"])
+    answer = loop_input_with_default(
+        text=f'>> {get_label("user_score")} [{default_score}]: ',
+        funcs_list=field_validators,
+        default_value=default_score,
+    )
+    user_score = valid.parse_float(answer)
+    return build_movie_record_from_defaults(defaults, user_score)
+
+
 def request_all_scores(defaults: dict = None) -> dict:
     """Запрашивает все данные фильма."""
     if defaults is None:

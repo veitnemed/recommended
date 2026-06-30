@@ -158,6 +158,50 @@ def test_build_watched_movie_card_uses_poster_cache() -> None:
         movie = _make_movie("Cached Movie", 8.0, 2022)
         card = build_watched_movie_card(movie, poster_cache=load_poster_cache(cache_path))
 
-    assert card["poster_url"] == "https://image.tmdb.org/t/p/w342/cached.jpg"
-    assert card["poster_src"] == "https://image.tmdb.org/t/p/w342/cached.jpg"
-    assert card["poster_source"] == "poster_cache"
+        assert card["poster_url"] == "https://image.tmdb.org/t/p/w342/cached.jpg"
+        assert card["poster_src"] == "https://image.tmdb.org/t/p/w342/cached.jpg"
+        assert card["poster_source"] == "poster_cache"
+
+
+def test_build_poster_cache_from_existing_data_links_local_image_file(monkeypatch) -> None:
+    import tempfile
+
+    from posters.cache import build_poster_cache_from_existing_data, poster_identity_key
+    from posters.download_images import poster_image_path_for_identity
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        temp_dir = Path(temp_root)
+        monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", temp_dir)
+
+        data = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+        identity = poster_identity_key("Alpha", 2020)
+        image_path = poster_image_path_for_identity(identity)
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"poster")
+
+        cache = build_poster_cache_from_existing_data(data)
+
+        assert cache[identity]["local_path"] == str(image_path)
+        assert cache[identity]["status"] == "found"
+
+
+def test_build_watched_movie_card_falls_back_to_default_local_image(monkeypatch) -> None:
+    import tempfile
+
+    from posters.cache import poster_identity_key
+    from posters.download_images import poster_image_path_for_identity
+    from web.export import build_watched_movie_card
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        temp_dir = Path(temp_root)
+        monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", temp_dir)
+
+        movie = _make_movie("Fallback Movie", 8.0, 2021)
+        identity = poster_identity_key("Fallback Movie", 2021)
+        image_path = poster_image_path_for_identity(identity)
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"poster")
+
+        card = build_watched_movie_card(movie, poster_cache={})
+
+        assert card["poster_src"] == str(image_path)

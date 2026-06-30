@@ -45,14 +45,14 @@ def test_download_poster_for_title_downloads_and_persists_local_path(monkeypatch
         }
     }
 
-    def fake_download(url: str, destination: Path) -> bool:
+    def fake_download(url: str, destination: Path) -> tuple[bool, str]:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(b"poster")
-        return True
+        return True, "downloaded"
 
     saved: dict = {}
 
-    monkeypatch.setattr("posters.download_images._download_poster", fake_download)
+    monkeypatch.setattr("posters.download_images._download_preview_poster", fake_download)
     monkeypatch.setattr("posters.download_images.save_poster_cache", lambda payload: saved.update(payload))
 
     with patch("posters.download_images.load_poster_cache", return_value=copy.deepcopy(cache)):
@@ -90,11 +90,11 @@ def test_download_poster_for_title_skips_existing_file(monkeypatch) -> None:
 
         download_calls: list[str] = []
 
-        def fake_download(url: str, destination: Path) -> bool:
+        def fake_download(url: str, destination: Path) -> tuple[bool, str]:
             download_calls.append(url)
-            return True
+            return True, "downloaded"
 
-        monkeypatch.setattr("posters.download_images._download_poster", fake_download)
+        monkeypatch.setattr("posters.download_images._download_preview_poster", fake_download)
 
         with patch("posters.download_images.load_poster_cache", return_value=copy.deepcopy(cache)):
             with patch("posters.download_images.save_poster_cache") as save_mock:
@@ -105,6 +105,64 @@ def test_download_poster_for_title_skips_existing_file(monkeypatch) -> None:
         assert result["local_path"] == str(image_path)
         assert download_calls == []
         save_mock.assert_called_once()
+
+
+def test_download_poster_for_title_reuses_preview_cache(monkeypatch) -> None:
+    import tempfile
+
+    from posters.cache import poster_identity_key
+    from posters.download_images import download_poster_for_title, poster_image_path_for_identity
+
+    poster_url = "https://image.tmdb.org/t/p/w500/example.jpg"
+    with tempfile.TemporaryDirectory() as temp_root:
+        temp_dir = Path(temp_root)
+        monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", temp_dir)
+        monkeypatch.setattr("posters.download_images.PREVIEW_POSTER_DIR", temp_dir / "preview")
+
+        preview_dir = temp_dir / "preview"
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        preview_path = preview_dir / "cached.jpg"
+        preview_path.write_bytes(b"preview")
+
+        identity = poster_identity_key("Alpha", 2020)
+        cache = {
+            identity: {
+                "title": "Alpha",
+                "year": 2020,
+                "status": "found",
+                "poster_url": poster_url,
+            }
+        }
+
+        download_calls: list[str] = []
+
+        def fake_preview_path(url: str) -> str | None:
+            if url == poster_url:
+                return str(preview_path)
+            return None
+
+        def fake_download(url: str, destination: Path) -> tuple[bool, str]:
+            download_calls.append(url)
+            return True, "downloaded"
+
+        monkeypatch.setattr(
+            "posters.download_images.local_preview_poster_path_if_cached",
+            fake_preview_path,
+        )
+        monkeypatch.setattr("posters.download_images._download_preview_poster", fake_download)
+
+        saved: dict = {}
+
+        with patch("posters.download_images.load_poster_cache", return_value=copy.deepcopy(cache)):
+            with patch("posters.download_images.save_poster_cache", lambda payload: saved.update(payload)):
+                result = download_poster_for_title("Alpha", 2020)
+
+        watched_path = poster_image_path_for_identity(identity)
+        assert result["ok"] is True
+        assert result["reason"] == "downloaded"
+        assert watched_path.is_file()
+        assert watched_path.read_bytes() == b"preview"
+        assert download_calls == []
 
 
 def test_remove_local_poster_file_deletes_local_path() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -212,6 +213,42 @@ def download_poster_url_for_preview(poster_url: str) -> str | None:
     return str(destination)
 
 
+def _copy_poster_file(source: Path, destination: Path) -> bool:
+    """Copy one local poster image into watched cache."""
+    if source.is_file() is False:
+        return False
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return destination.is_file()
+
+
+def _local_poster_source_path(value) -> Path | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if text == "" or text.startswith(("http://", "https://")):
+        return None
+    path = Path(text)
+    return path if path.is_file() else None
+
+
+def _promote_existing_poster_sources(entry: dict, destination: Path) -> str | None:
+    """Reuse preview cache or another local file before a network download."""
+    poster_url = entry.get("poster_url")
+    if poster_url not in (None, ""):
+        preview_path = local_preview_poster_path_if_cached(str(poster_url))
+        if preview_path is not None and _copy_poster_file(Path(preview_path), destination):
+            entry["local_path"] = str(destination)
+            return "downloaded"
+
+    poster_path = _local_poster_source_path(entry.get("poster_path"))
+    if poster_path is not None and _copy_poster_file(poster_path, destination):
+        entry["local_path"] = str(destination)
+        return "downloaded"
+
+    return None
+
+
 def _ensure_poster_image_downloaded(identity: str, entry: dict) -> str:
     """Download one cache entry when possible. Returns result reason."""
     if isinstance(entry, dict) is False:
@@ -229,7 +266,12 @@ def _ensure_poster_image_downloaded(identity: str, entry: dict) -> str:
         entry["local_path"] = str(destination)
         return "skipped_existing"
 
-    if _download_poster(str(poster_url), destination) is False:
+    promoted = _promote_existing_poster_sources(entry, destination)
+    if promoted is not None:
+        return promoted
+
+    ok, _reason = _download_preview_poster(str(poster_url), destination)
+    if ok is False:
         return "failed"
 
     entry["local_path"] = str(destination)

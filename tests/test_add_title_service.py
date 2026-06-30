@@ -8,7 +8,7 @@ from dataset.add_title_service import (
 from config import scheme
 
 
-def test_build_movie_record_from_defaults_sets_score_and_year() -> None:
+def test_build_movie_record_from_defaults_sets_score_from_defaults() -> None:
     defaults = {
         scheme.MAIN_INFO: {"title": "Test Show", "year": 2020, "user_score": None},
         scheme.RAW_SCORES: {
@@ -21,11 +21,11 @@ def test_build_movie_record_from_defaults_sets_score_and_year() -> None:
         scheme.TAGS_VIBE: {},
     }
 
-    movie = build_movie_record_from_defaults(defaults, 9.2, year=2021)
+    movie = build_movie_record_from_defaults(defaults, 9.2)
 
     assert movie["main_info"]["title"] == "Test Show"
     assert movie["main_info"]["user_score"] == 9.2
-    assert movie["main_info"]["year"] == 2021
+    assert movie["main_info"]["year"] == 2020
     assert movie["raw_scores"]["imdb_score"] == 8.0
 
 
@@ -173,3 +173,25 @@ def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
     save_add_title_record(defaults, 8.0, pool_candidate=pool_candidate)
 
     assert captured["kwargs"]["pool_candidate"] == pool_candidate
+
+
+def test_request_user_score_builds_payload_without_other_edits(monkeypatch) -> None:
+    from ui.console import request as request_module
+
+    defaults = {
+        scheme.MAIN_INFO: {"title": "Console Show", "year": 2019, "country": "RU", "user_score": 7.0},
+        scheme.RAW_SCORES: {"imdb_score": 8.1, "imdb_votes": 100},
+        scheme.GENRE: {"has_drama": 1},
+        scheme.TAGS_VIBE: {},
+    }
+
+    monkeypatch.setattr(request_module, "loop_input_with_default", lambda **kwargs: "8.5")
+
+    movie = request_module.request_user_score(defaults)
+
+    assert movie["main_info"]["title"] == "Console Show"
+    assert movie["main_info"]["year"] == 2019
+    assert movie["main_info"]["country"] == "RU"
+    assert movie["main_info"]["user_score"] == 8.5
+    assert movie["raw_scores"]["imdb_score"] == 8.1
+    assert movie[scheme.GENRE]["has_drama"] == 1

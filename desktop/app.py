@@ -40,6 +40,7 @@ from desktop.theme import (
     build_app_style,
     build_score_edit_dialog_style,
 )
+from desktop.list_search import DebouncedLineEditSearch, resolve_selection_row
 from desktop.watched_view import (
     GENRE_FILTER_ALL,
     SORT_OPTIONS,
@@ -54,6 +55,7 @@ from desktop.watched_view import (
     WatchedEntry,
     WatchedListItemDelegate,
     apply_view,
+    build_watched_search_index,
     format_list_label,
     format_save_user_score_status,
     format_user_score_display,
@@ -171,6 +173,7 @@ class WatchedMoviesWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self._entries: list[WatchedEntry] = load_watched_entries()
+        self._watched_search_index = build_watched_search_index(self._entries)
         self._visible_entries: list[WatchedEntry] = list(self._entries)
         self._sort_key = SORT_OPTIONS[0][0]
 
@@ -238,7 +241,11 @@ class WatchedMoviesWindow(QMainWindow):
         self._search_input.setObjectName("watchedSearch")
         self._search_input.setPlaceholderText("Поиск по названию")
         self._search_input.setClearButtonEnabled(True)
-        self._search_input.textChanged.connect(self._on_filters_changed)
+        self._debounced_watched_search = DebouncedLineEditSearch(
+            self._search_input,
+            self._on_filters_changed,
+            parent=panel,
+        )
         layout.addWidget(self._search_input)
 
         sort_row = QWidget()
@@ -489,18 +496,11 @@ class WatchedMoviesWindow(QMainWindow):
             return
 
         added_key = result.title
-        self._entries = load_watched_entries()
-        self._refresh_list()
-
-        for index, (key, _, _) in enumerate(self._visible_entries):
-            if key == added_key:
-                self._list_widget.blockSignals(True)
-                self._list_widget.setCurrentRow(index)
-                self._list_widget.blockSignals(False)
-                self._detail_card.show_entry(self._visible_entries[index])
-                break
-
+        self._reload_watched_entries(added_key=added_key)
         self.statusBar().showMessage(result.message or "Новая запись добавлена!", 5000)
+
+    def _reload_watched_search_index(self) -> None:
+        self._watched_search_index = build_watched_search_index(self._entries)
 
     def _reload_watched_entries(self, added_key: str | None = None) -> None:
         """Refresh watched list after an external add (e.g. candidate transfer)."""
@@ -510,6 +510,7 @@ class WatchedMoviesWindow(QMainWindow):
             previous_key = self._visible_entries[current_row][0]
 
         self._entries = load_watched_entries()
+        self._reload_watched_search_index()
         self._reload_genre_filter_options()
         self._refresh_list()
 
@@ -518,12 +519,14 @@ class WatchedMoviesWindow(QMainWindow):
             return
 
         select_key = added_key or previous_key
-        row_to_select = 0
-        if select_key is not None:
-            for index, (key, _, _) in enumerate(self._visible_entries):
-                if key == select_key:
-                    row_to_select = index
-                    break
+        row_to_select = resolve_selection_row(
+            select_key,
+            self._visible_entries,
+            key_getter=lambda entry: entry[0],
+        )
+        if row_to_select < 0:
+            self._show_empty_details()
+            return
 
         self._list_widget.blockSignals(True)
         self._list_widget.setCurrentRow(row_to_select)
@@ -573,15 +576,19 @@ class WatchedMoviesWindow(QMainWindow):
 
     def _refresh_after_user_score_save(self, current_key: str, result) -> None:
         self._entries = load_watched_entries()
+        self._reload_watched_search_index()
         self._refresh_list()
 
-        for index, (key, _, _) in enumerate(self._visible_entries):
-            if key == current_key:
-                self._list_widget.blockSignals(True)
-                self._list_widget.setCurrentRow(index)
-                self._list_widget.blockSignals(False)
-                self._detail_card.show_entry(self._visible_entries[index])
-                break
+        row_to_select = resolve_selection_row(
+            current_key,
+            self._visible_entries,
+            key_getter=lambda entry: entry[0],
+        )
+        if row_to_select >= 0:
+            self._list_widget.blockSignals(True)
+            self._list_widget.setCurrentRow(row_to_select)
+            self._list_widget.blockSignals(False)
+            self._detail_card.show_entry(self._visible_entries[row_to_select])
 
         self.statusBar().showMessage(format_save_user_score_status(result), 4000)
 
@@ -648,13 +655,20 @@ class WatchedMoviesWindow(QMainWindow):
         self._genre_combo.blockSignals(False)
 
     def _refresh_after_delete(self, result: dict) -> None:
-        previous_row = self._list_widget.currentRow()
+        previous_key = self._current_entry_key()
         self._entries = load_watched_entries()
+        self._reload_watched_search_index()
         self._reload_genre_filter_options()
         self._refresh_list()
 
         if self._list_widget.count() > 0:
-            row_to_select = min(max(previous_row, 0), self._list_widget.count() - 1)
+            row_to_select = resolve_selection_row(
+                previous_key,
+                self._visible_entries,
+                key_getter=lambda entry: entry[0],
+            )
+            if row_to_select < 0:
+                row_to_select = 0
             self._list_widget.blockSignals(True)
             self._list_widget.setCurrentRow(row_to_select)
             self._list_widget.blockSignals(False)
@@ -693,13 +707,12 @@ class WatchedMoviesWindow(QMainWindow):
         previous_key = self._current_entry_key()
         self._refresh_list()
 
-        row_to_select = 0
-        if previous_key is not None:
-            for index, (key, _, _) in enumerate(self._visible_entries):
-                if key == previous_key:
-                    row_to_select = index
-                    break
-        if self._list_widget.count() > 0:
+        row_to_select = resolve_selection_row(
+            previous_key,
+            self._visible_entries,
+            key_getter=lambda entry: entry[0],
+        )
+        if row_to_select >= 0:
             self._list_widget.setCurrentRow(row_to_select)
 
     def _refresh_list(self) -> None:
@@ -716,6 +729,7 @@ class WatchedMoviesWindow(QMainWindow):
             year_from,
             year_to,
             genre,
+            title_index=self._watched_search_index,
         )
 
         self._list_widget.blockSignals(True)

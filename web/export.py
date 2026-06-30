@@ -139,6 +139,10 @@ def _resolve_poster_fields(movie: dict, poster_cache: dict | None = None) -> dic
     local_path = _local_poster_path(poster_path)
     if local_path is None and cache_entry:
         local_path = _local_poster_path(cache_entry.get("local_path"))
+    if local_path is None and title:
+        from posters.cache import default_local_poster_path
+
+        local_path = default_local_poster_path(title, year)
 
     poster_src = local_path or poster_url or poster_path
     return {

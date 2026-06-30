@@ -72,6 +72,21 @@ def filter_candidates_by_title(candidates: list[dict], query: str) -> list[dict]
     ]
 
 
+def build_candidate_search_index(candidates: list[dict]):
+    """Build reusable search index for candidate list filtering."""
+    from desktop.list_search import SearchIndex, SearchIndexItem
+
+    items = [
+        SearchIndexItem(
+            item=candidate,
+            haystack=candidate_search_text(candidate),
+            selection_key=candidate_detail_identity(candidate),
+        )
+        for candidate in candidates
+    ]
+    return SearchIndex(items)
+
+
 def candidate_detail_identity(candidate: dict) -> str:
     """Stable key for caching detail entries in the Candidates tab."""
     return str(candidate.get("pool_entry_key") or candidate.get("title") or "candidate")

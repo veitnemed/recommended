@@ -228,6 +228,14 @@ def _iter_dataset_items(data) -> list[tuple[str, dict]]:
     return [(str(index), movie) for index, movie in enumerate(data or [])]
 
 
+def default_local_poster_path(title: str, year: Any) -> str | None:
+    """Return watched poster image path when the default cache file already exists."""
+    from posters.download_images import poster_image_path_for_identity
+
+    path = poster_image_path_for_identity(poster_identity_key(title, year))
+    return str(path) if path.is_file() else None
+
+
 def build_poster_cache_from_existing_data(data) -> dict:
     """Build poster cache entries from existing dataset records without API calls."""
     cache: dict[str, dict] = {}
@@ -244,18 +252,39 @@ def build_poster_cache_from_existing_data(data) -> dict:
         if movie_dict != original:
             raise RuntimeError("poster cache builder mutated source movie")
 
-        cache[poster_identity_key(title, year)] = {
+        identity = poster_identity_key(title, year)
+        local_path = default_local_poster_path(title, year)
+        status = poster_info.get("status")
+        if local_path is not None and status != "found":
+            status = "found"
+
+        cache[identity] = {
             "title": title,
             "year": year,
             "source": poster_info.get("source"),
             "poster_path": poster_info.get("poster_path"),
             "poster_url": poster_info.get("poster_url"),
-            "local_path": None,
-            "status": poster_info.get("status"),
+            "local_path": local_path,
+            "status": status,
             "updated_at": now,
         }
 
     return cache
+
+
+def rehydrate_poster_cache_from_dataset(*, persist: bool = True) -> dict:
+    """Rebuild poster-cache JSON from dataset/meta and existing local image files."""
+    from storage.data import load_dataset
+
+    cache = build_poster_cache_from_existing_data(load_dataset())
+    linked = sum(1 for entry in cache.values() if entry.get("local_path"))
+    if persist:
+        save_poster_cache(cache)
+    return {
+        "entries": len(cache),
+        "linked": linked,
+        "missing": len(cache) - linked,
+    }
 
 
 def lookup_poster_cache_entry(title: str, year: Any, cache: dict | None = None) -> dict | None:

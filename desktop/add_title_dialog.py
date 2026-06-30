@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +23,7 @@ from PyQt6.QtWidgets import (
 from candidates.tmdb_country_options import add_title_country_combo_options
 from common import valid
 from config import constant
+from config import scheme
 from dataset.add_title_service import (
     AddTitleResolveBundle,
     build_candidate_transfer_bundle,
@@ -37,8 +37,6 @@ from desktop.watched_view import (
     USER_SCORE_MAX,
     USER_SCORE_MIN,
     USER_SCORE_STEP,
-    YEAR_FILTER_DEFAULT_FROM,
-    YEAR_FILTER_MAX,
     YEAR_FILTER_MIN,
     WatchedDetailCard,
     normalize_user_score_value,
@@ -277,9 +275,9 @@ class AddTitlePreviewDialog(QDialog):
         root_layout.addWidget(scroll, stretch=1)
 
         confirm_hint = QLabel(
-            "Проверьте карточку и подтвердите перенос в watched"
-            if self._transfer_mode
-            else "Проверьте карточку и подтвердите добавление"
+            "Проверьте карточку и укажите только вашу оценку"
+            if self._transfer_mode is False
+            else "Проверьте карточку и укажите оценку для переноса в watched"
         )
         confirm_hint.setObjectName("addTitleConfirmHint")
         confirm_hint.setWordWrap(True)
@@ -289,11 +287,10 @@ class AddTitlePreviewDialog(QDialog):
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(8)
 
-        self._year_input = QSpinBox()
-        self._year_input.setObjectName("addTitleYearSpin")
-        self._year_input.setRange(YEAR_FILTER_MIN, max(YEAR_FILTER_MAX, constant.NOW_YEAR))
-        self._year_input.setValue(self._default_year(bundle))
-        self._year_input.valueChanged.connect(self._update_confirm_state)
+        year_label = QLabel("Год")
+        year_label.setObjectName("addTitleFieldLabel")
+        self._year_label = QLabel(self._format_resolved_year(bundle))
+        self._year_label.setObjectName("addTitleYearValue")
 
         self._score_input = QDoubleSpinBox()
         self._score_input.setObjectName("addTitleScoreSpin")
@@ -303,11 +300,9 @@ class AddTitlePreviewDialog(QDialog):
         self._score_input.setValue(USER_SCORE_MIN)
         self._score_input.valueChanged.connect(self._update_confirm_state)
 
-        year_label = QLabel("Год")
-        year_label.setObjectName("addTitleFieldLabel")
         score_label = QLabel("Моя оценка")
         score_label.setObjectName("addTitleFieldLabel")
-        form.addRow(year_label, self._year_input)
+        form.addRow(year_label, self._year_label)
         form.addRow(score_label, self._score_input)
         root_layout.addLayout(form)
 
@@ -346,14 +341,20 @@ class AddTitlePreviewDialog(QDialog):
             return f"{title} ({year})"
         return title
 
-    def _default_year(self, bundle: AddTitleResolveBundle) -> int:
+    def _format_resolved_year(self, bundle: AddTitleResolveBundle) -> str:
+        year = self._resolved_year(bundle)
+        if year is None:
+            return "не указан"
+        return str(year)
+
+    def _resolved_year(self, bundle: AddTitleResolveBundle) -> int | None:
         year = bundle.preview_card.get("year")
-        if year not in (None, ""):
-            try:
-                return int(year)
-            except (TypeError, ValueError):
-                pass
-        return YEAR_FILTER_DEFAULT_FROM
+        if year in (None, ""):
+            year = bundle.defaults.get(scheme.MAIN_INFO, {}).get("year")
+        try:
+            return int(year)
+        except (TypeError, ValueError):
+            return None
 
     def _fill_warning_label(self) -> None:
         if self._transfer_mode and self._bundle.pool_candidate is not None:
@@ -362,7 +363,7 @@ class AddTitlePreviewDialog(QDialog):
             if candidate_service.is_pool_candidate_incomplete(self._bundle.pool_candidate):
                 self._warning_label.setText(
                     "Кандидат неполный: нет KP/IMDb данных. "
-                    "Можно продолжить вручную, но проверьте raw_scores."
+                    "Можно продолжить, но проверьте карточку перед сохранением."
                 )
                 self._warning_label.show()
                 return
@@ -370,7 +371,8 @@ class AddTitlePreviewDialog(QDialog):
         status_lines = format_resolve_status_lines(self._bundle.statuses)
         if self._bundle.found is False:
             self._warning_label.setText(
-                "Автоматически данные не найдены. Проверьте карточку и заполните год/оценку вручную."
+                "Автоматически данные не найдены. Вернитесь к поиску или укажите только оценку, "
+                "если карточка уже содержит корректный год."
             )
             self._warning_label.show()
         elif len(status_lines) > 0:
@@ -380,9 +382,10 @@ class AddTitlePreviewDialog(QDialog):
             self._warning_label.hide()
 
     def _update_confirm_state(self) -> None:
-        year_ok = valid.is_correct_year(str(self._year_input.value()))
         score_ok = valid.is_correct_score(str(self._score_input.value()))
-        self._confirm_button.setEnabled(year_ok and score_ok)
+        year = self._resolved_year(self._bundle)
+        year_ok = year is not None and valid.is_correct_year(str(year))
+        self._confirm_button.setEnabled(score_ok and year_ok)
 
     def _go_search_again(self) -> None:
         self.search_again = True
@@ -390,15 +393,16 @@ class AddTitlePreviewDialog(QDialog):
 
     def _confirm_add(self) -> None:
         user_score = normalize_user_score_value(self._score_input.value())
-        year = int(self._year_input.value())
+        year = self._resolved_year(self._bundle)
         if valid.is_correct_score(str(user_score)) is False:
             QMessageBox.warning(self, "Добавить тайтл", "Укажите корректную оценку (0–10).")
             return
-        if valid.is_correct_year(str(year)) is False:
+        if year is None or valid.is_correct_year(str(year)) is False:
             QMessageBox.warning(
                 self,
                 "Добавить тайтл",
-                f"Укажите корректный год ({YEAR_FILTER_MIN}–{constant.NOW_YEAR}).",
+                f"Год не задан или некорректен ({YEAR_FILTER_MIN}–{constant.NOW_YEAR}). "
+                "Вернитесь к поиску и выберите другой тайтл.",
             )
             return
 
@@ -408,7 +412,6 @@ class AddTitlePreviewDialog(QDialog):
             user_score,
             meta_payload=self._bundle.meta_payload,
             poster_hints=self._bundle.poster_hints,
-            year=year,
             pool_candidate=self._bundle.pool_candidate,
         )
         dialog_title = "Перенос из pool" if self._transfer_mode else "Добавить тайтл"
