@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 
-DEFAULT_CRITERIA_NAME = "legacy"
+COMMON_POOL_CRITERIA_NAME = "pool"
+DEFAULT_CRITERIA_NAME = COMMON_POOL_CRITERIA_NAME
 _KEY_PART_SPACES = [
     ".",
     ",",
@@ -55,6 +56,5 @@ def title_identity_key(candidate: dict) -> str:
 
 
 def pool_entry_key(candidate: dict) -> str:
-    """Builds criteria_name|normalized_title|year key for common-pool storage."""
-    criteria_name = normalize_key_part(candidate.get("criteria_name")) or DEFAULT_CRITERIA_NAME
-    return f"{criteria_name}|{title_identity_key(candidate)}"
+    """Builds title|year key for the single shared candidate pool."""
+    return title_identity_key(candidate)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from candidates.keys import DEFAULT_CRITERIA_NAME
+from candidates.keys import COMMON_POOL_CRITERIA_NAME
 from candidates import country_schema
 from candidates import genre_schema
 
@@ -112,7 +112,7 @@ def ensure_candidate_defaults(candidate: dict) -> dict:
     updated = _copy_candidate(candidate)
     updated["title"] = updated.get("title") or updated.get("alternative_title") or ""
     updated["year"] = updated.get("year")
-    updated["criteria_name"] = str(updated.get("criteria_name") or "").strip() or DEFAULT_CRITERIA_NAME
+    updated["criteria_name"] = COMMON_POOL_CRITERIA_NAME
     updated["source"] = str(updated.get("source") or "").strip() or "legacy"
     updated["signals"] = _normalize_list(updated.get("signals"))
     updated["genres"] = _normalize_list(updated.get("genres"))

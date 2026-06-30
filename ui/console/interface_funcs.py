@@ -16,6 +16,7 @@ from dataset import genre_import
 from dataset import genre_stats
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
+from posters.download_images import PREVIEW_BATCH_SIZE, PREVIEW_BULK_DELAY_SECONDS, PREVIEW_DOWNLOAD_SIZE
 from ui.console import candidate_pool_ui
 from ui.console import request
 from ui.console import title_presenters
@@ -97,22 +98,19 @@ def print_candidate_genre_transfer_preview(preview: dict) -> None:
 def mark_candidate_as_watched() -> None:
     """Переносит кандидата из пула в основной датасет через обычный сценарий добавления."""
     ui.clean_terminal()
-    selected = candidate_pool_ui.choose_existing_criteria()
-    if selected is None:
-        return
-
-    criteria_name, criteria = selected
-    watched_view = candidate_service.get_mark_watched_view(criteria_name)
+    watched_view = candidate_service.get_mark_watched_view()
     candidates = watched_view["candidates"]
+    criteria_view = candidate_service.get_common_pool_criteria_view()
+    criteria = criteria_view.get("criteria") or {}
 
-    print(f"\nПулл кандидатов: {criteria_name}")
-    print(f"Страна: {criteria.get('country')}")
+    print("\nОбщий пул кандидатов")
+    print(f"Страна: {criteria.get('country') or 'не важно'}")
     for line in watched_view["lines"]:
         print(line)
     print("")
 
     if len(candidates) == 0:
-        print("Для этого набора критериев кандидатов пока нет.")
+        print("В общем pool кандидатов пока нет.")
         return
 
     for idx, candidate in enumerate(candidates, start=1):
@@ -440,19 +438,18 @@ def show_dataset_genres() -> None:
 
 
 def collect_candidate_pool() -> None:
-    """Собирает пул кандидатов по сохраненным критериям."""
+    """Собирает кандидатов в общий pool по сохранённым настройкам (legacy KP API)."""
     ui.clean_terminal()
     selected = candidate_pool_ui.choose_or_create_criteria()
     if selected is None:
-        print("Критерии не выбраны.")
+        print("Настройки сбора не заданы.")
         return
 
     criteria_name, criteria = selected
-    print(f"\nЗапуск подбора по критериям: {criteria_name}")
+    print(f"\nЗапуск подбора в общий pool")
     result = candidate_service.collect_candidates_legacy(criteria_name, criteria)
 
-    print("\nСбор пула кандидатов завершён.")
-    print(f"Набор критериев: {result['criteria_name']}")
+    print("\nСбор в общий pool завершён.")
     print(f"Нужно было собрать: {result['target_count']}")
     print(f"Новых кандидатов добавлено: {result['added']}")
     print(f"Совпадений уже в JSON: {result['duplicates']}")
@@ -787,6 +784,8 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     from apis import imdb_sql as sql_search
 
+    from candidates.keys import COMMON_POOL_CRITERIA_NAME
+
     ui.clean_terminal()
     print("TMDb candidate_pool v1\n")
     country_codes = request_tmdb_country_codes(input_func=input, output_func=print)
@@ -807,8 +806,6 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
         print("Ошибка: выберите 1 или 2.")
         return
 
-    criteria_answer = input("\nНазвание пулла / criteria_name [auto] >> ").strip()
-
     if is_test_run:
         pages = 1
         details_answer = input("\nСколько кандидатов детально обработать в test-run [5] >> ").strip()
@@ -824,15 +821,10 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
     min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
     with_genres, without_genres = request_tmdb_discover_genre_filters(input_func=input, output_func=print)
-    criteria_name = criteria_answer or candidate_service.build_tmdb_criteria_name(
-        country,
-        mode,
-        year_min=year_min,
-        min_tmdb_score=min_tmdb_score,
-    )
+    criteria_name = COMMON_POOL_CRITERIA_NAME
 
     print("\nБудет запущен TMDb candidate_pool v1:\n")
-    print(f"Название пулла: {criteria_name}")
+    print("Обновление общего pool")
     print(f"Страна: {country}")
     print(f"Режим: {_tmdb_mode_label(mode)}")
     if is_test_run:
@@ -1044,26 +1036,18 @@ def import_tmdb_result_to_common_pool_flow() -> None:
         print(f"Не удалось прочитать файл: {preview.get('error')}")
         return
 
-    default_criteria_name = preview["default_criteria_name"]
-    criteria_answer = input(f"criteria_name [{default_criteria_name}] >> ").strip()
-    criteria_name = criteria_answer or default_criteria_name
-    if criteria_name == "":
-        print("criteria_name не должен быть пустым.")
-        return
-
     print("\nPreview импорта TMDb result:")
     print(f"Файл: {result_path}")
     print(f"Кандидатов в файле: {preview['candidate_count']}")
-    print("Будет добавлено/обновлено в общий пул после дедупликации.")
+    print("Будет добавлено/обновлено в общий pool после дедупликации.")
     print("Источник: tmdb_imdb_kp_v1")
-    print(f"criteria_name: {criteria_name}")
 
     answer = input("\nИмпортировать в общий candidate_pool? [y/N] ").strip().casefold()
     if answer not in {"y", "yes", "д", "да"}:
         print("Импорт отменён.")
         return
 
-    import_result = candidate_service.import_tmdb_result_to_pool(result_path, criteria_name=criteria_name)
+    import_result = candidate_service.import_tmdb_result_to_pool(result_path)
     if import_result["ok"] is False:
         print(f"Импорт не выполнен: {import_result.get('error')}")
         return
@@ -1080,14 +1064,16 @@ def import_tmdb_result_to_common_pool_flow() -> None:
 
 
 def edit_candidate_pool_filters() -> None:
-    """Обновляет saved defaults фильтров поиска для набора criteria."""
+    """Обновляет saved defaults фильтров поиска для общего pool."""
     ui.clean_terminal()
-    selected = candidate_pool_ui.choose_existing_criteria()
-    if selected is None:
-        return
+    criteria_view = candidate_service.get_common_pool_criteria_view()
+    if criteria_view["has_criteria"] is False:
+        criteria_name, criteria = candidate_service.ensure_common_pool_criteria()
+    else:
+        criteria_name = criteria_view["criteria_name"]
+        criteria = criteria_view["criteria"]
 
-    criteria_name, criteria = selected
-    print(f"\nDefaults фильтров поиска: {criteria_name}")
+    print("\nDefaults фильтров поиска для общего pool")
     print("Жанры берутся из сохранённых кандидатов pool. Это не запускает TMDb Discover.")
     print(f"Текущий KP: {criteria.get('min_kp', 'не важно')}")
     print(f"Текущие жанры (saved pool): {', '.join(criteria.get('genres', [])) or 'не важно'}")
@@ -1104,24 +1090,21 @@ def edit_candidate_pool_filters() -> None:
 
 
 def show_candidate_pool() -> None:
-    """Показывает кандидатов выбранного пула в консоли."""
+    """Показывает кандидатов общего pool в консоли."""
     ui.clean_terminal()
-    selected = candidate_pool_ui.choose_existing_criteria()
-    if selected is None:
-        return
+    candidates = candidate_service.get_pool_view()
+    pool_stats_view = candidate_service.get_pool_stats_view()
+    criteria_view = candidate_service.get_common_pool_criteria_view()
+    criteria = criteria_view.get("criteria") or {}
 
-    criteria_name, criteria = selected
-    candidates = candidate_service.get_pool_view(criteria_name)
-    pool_stats_view = candidate_service.get_pool_stats_view(criteria_name=criteria_name)
-
-    print(f"\nПул кандидатов: {criteria_name}")
-    print(f"Страна: {criteria.get('country')}")
+    print("\nОбщий pool кандидатов")
+    print(f"Страна: {criteria.get('country') or 'не важно'}")
     for line in pool_stats_view["lines"]:
         print(line)
     print("")
 
     if len(candidates) == 0:
-        print("Для этого набора критериев кандидатов пока нет.")
+        print("Общий pool пока пуст.")
         return
 
     for idx, candidate in enumerate(candidates, start=1):
@@ -1186,22 +1169,7 @@ def retry_kp_for_incomplete_candidates() -> None:
         print("Добор не требуется.")
         return
 
-    criteria_options = retry_view["criteria_options"]
-    print("\nНабор критериев:")
-    print(" 0 >> Все неполные кандидаты")
-    for idx, option in enumerate(criteria_options, start=1):
-        print(f" {idx} >> {option['label']} | incomplete={option['incomplete_count']}")
-
-    selected = request.loop_input(
-        text="\nВыбор [0] >> ",
-        funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(criteria_options))]
-    )
-    criteria_name = None
-    if selected != "" and selected != "0":
-        criteria_name = criteria_options[int(selected) - 1]["criteria_name"]
-
-    scoped_view = candidate_service.get_retry_kp_view(criteria_name=criteria_name)
-    scoped_incomplete = scoped_view["incomplete_candidates"]
+    scoped_incomplete = retry_view["incomplete_candidates"]
     if len(scoped_incomplete) == 0:
         print("Для выбранного набора неполных кандидатов нет.")
         return
@@ -1215,7 +1183,6 @@ def retry_kp_for_incomplete_candidates() -> None:
     selected_candidates = scoped_incomplete[:limit]
 
     print("\nБудет запущен добор KP:")
-    print(f"Критерий: {criteria_name or 'все'}")
     print(f"Неполных найдено: {len(scoped_incomplete)}")
     print(f"Попыток будет выполнено: {limit}")
     print("\nПервые кандидаты на добор:\n")
@@ -1225,10 +1192,7 @@ def retry_kp_for_incomplete_candidates() -> None:
         print("Добор KP отменён.")
         return
 
-    result = candidate_service.retry_kp_enrichment_in_pool(
-        limit=limit,
-        criteria_name=criteria_name,
-    )
+    result = candidate_service.retry_kp_enrichment_in_pool(limit=limit)
     stats = result["stats"]
 
     print("\nДобор KP завершён.")
@@ -1242,25 +1206,67 @@ def retry_kp_for_incomplete_candidates() -> None:
 
 
 def delete_candidate_pool() -> None:
-    """Удаляет набор критериев и связанные с ним объекты из общего пула."""
+    """Очищает общий candidate pool."""
     ui.clean_terminal()
-    selected = candidate_pool_ui.choose_existing_criteria()
-    if selected is None:
+    pool_stats_view = candidate_service.get_pool_stats_view()
+    stats = pool_stats_view["stats"]
+    total = stats.get("unique_total", stats.get("storage_total", 0))
+    if total == 0:
+        print("Общий pool уже пуст.")
         return
 
-    criteria_name, _ = selected
-    answer = input(f"\nУдалить пулл '{criteria_name}'? yes >> ").strip().lower()
+    answer = input(f"\nОчистить общий pool ({total} уникальных кандидатов)? yes >> ").strip().lower()
     if answer != "yes":
-        print("Удаление отменено.")
+        print("Очистка отменена.")
         return
 
-    delete_result = candidate_service.delete_candidate_pool_criteria(criteria_name)
-    if delete_result["deleted_criteria"] is False:
-        print("Пулл не найден.")
+    delete_result = candidate_service.clear_common_candidate_pool()
+    print("Общий pool очищен.")
+    print(f"Удалено кандидатов: {delete_result['cleared']}")
+
+
+def clean_common_pool_duplicates() -> None:
+    """Удаляет exact- и похожие дубли из общего pool после merge старых пуллов."""
+    ui.clean_terminal()
+    pool_stats_view = candidate_service.get_pool_stats_view()
+    stats = pool_stats_view["stats"]
+    unique_total = stats.get("unique_total", stats.get("storage_total", 0))
+    duplicate_entries = int(stats.get("duplicate_entries") or 0)
+    similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
+
+    if unique_total == 0:
+        print("Общий pool пуст.")
         return
 
-    print("Пулл удалён.")
-    print(f"Удалено кандидатов из общего пула: {delete_result['deleted_candidates']}")
+    print("Очистка дублей в общем pool\n")
+    for line in pool_stats_view["lines"]:
+        print(line)
+    print("")
+    if duplicate_entries == 0 and similar_duplicate_total == 0:
+        print("Exact- и похожие дубли не найдены. JSON уже соответствует уникальным кандидатам.")
+        return
+
+    print("Будет выполнено:")
+    if duplicate_entries > 0:
+        print(f"- exact-дубли и legacy-ключи: до {duplicate_entries}")
+    if similar_duplicate_total > 0:
+        print(f"- похожие названия одного года: до {similar_duplicate_total}")
+    print("Останется лучшая запись по рейтингу и полноте данных.")
+
+    answer = input("\nОчистить дубли? [y/N] >> ").strip().casefold()
+    if answer not in {"y", "yes", "д", "да"}:
+        print("Очистка отменена.")
+        return
+
+    result = candidate_service.clean_common_pool_duplicates()
+    print("\nОчистка завершена.")
+    print(f"Было записей в JSON: {result['raw_total']}")
+    print(f"Стало уникальных: {result['unique_total']}")
+    print(f"Удалено exact-дублей: {result['removed_exact']}")
+    print(f"Слито похожих: {result['removed_similar']}")
+    print(f"Всего убрано: {result['removed_total']}")
+    if result["changed"] is False:
+        print("JSON не изменился.")
 
 
 def show_suspicious_candidate_duplicates() -> None:
@@ -1285,3 +1291,100 @@ def show_suspicious_candidate_duplicates() -> None:
             f"| критерий: {right.get('criteria_name')}"
         )
         print("")
+
+
+def show_candidate_poster_diagnostics() -> None:
+    """Показывает покрытие постерами в общем candidate pool."""
+    ui.clean_terminal()
+    view = candidate_service.get_candidate_poster_diagnostics_view()
+    if view.get("is_empty_pool"):
+        print("Общий candidate pool пуст.")
+        return
+
+    total = int(view.get("total") or 0)
+    counts = view.get("counts") or {}
+    displayable = int(counts.get("displayable") or 0)
+    metadata_only = int(counts.get("metadata_only") or 0)
+    missing = int(counts.get("missing") or 0)
+
+    def pct(value: int) -> str:
+        if total <= 0:
+            return "0%"
+        return f"{(100 * value / total):.1f}%"
+
+    print("Диагностика постеров в общем candidate pool\n")
+    print(f"Всего кандидатов: {total}")
+    print(f"  Отображаются в GUI (локальный файл): {displayable} ({pct(displayable)})")
+    print(f"  Есть metadata, но нет локального файла: {metadata_only} ({pct(metadata_only)})")
+    print(f"  Без poster metadata: {missing} ({pct(missing)})")
+    print("")
+    print("Источники poster metadata:")
+    source_counts = view.get("source_counts") or {}
+    for source, count in sorted(source_counts.items(), key=lambda item: (-item[1], item[0])):
+        print(f"  {source}: {count}")
+    print("")
+    print("Примеры без отображаемого постера (до 30):")
+    problem_rows = list(view.get("problem_rows") or [])[:30]
+    if len(problem_rows) == 0:
+        print("  Все кандидаты имеют локальный постер.")
+        return
+
+    state_labels = {
+        "metadata_only": "metadata без файла",
+        "missing": "нет metadata",
+    }
+    for idx, row in enumerate(problem_rows, start=1):
+        candidate = row.get("candidate") or {}
+        title = candidate.get("title") or candidate.get("name") or "Без названия"
+        year = candidate.get("year") or "?"
+        criteria_name = candidate.get("criteria_name") or "—"
+        state = row.get("display_state") or "missing"
+        source = row.get("source") or "—"
+        poster_url = row.get("poster_url")
+        poster_path = row.get("poster_path")
+        poster_hint = request.short_text(poster_url or poster_path, 70) if (poster_url or poster_path) else "—"
+        print(
+            f"{idx}) {title} ({year}) | {state_labels.get(state, state)} "
+            f"| критерий: {criteria_name} | source: {source}"
+        )
+        print(f"   poster: {poster_hint}")
+
+
+def download_candidate_pool_preview_posters() -> None:
+    """Download unique candidate pool poster URLs into preview cache for desktop GUI."""
+    ui.clean_terminal()
+    print("Скачивание постеров candidate pool в preview-cache...")
+    print(
+        f"(TMDb URL -> {PREVIEW_DOWNLOAD_SIZE}, пауза {PREVIEW_BULK_DELAY_SECONDS:g}s, "
+        f"batch {PREVIEW_BATCH_SIZE}, retry на 403/SSL)\n"
+    )
+
+    def progress(current: int, total: int, url: str) -> None:
+        label = request.short_text(url, 70) if url else "—"
+        print(f"  [{current}/{total}] {label}")
+
+    def on_error(url: str, reason: str) -> None:
+        label = request.short_text(url, 70) if url else "—"
+        print(f"      ! {reason} | {label}")
+
+    result = candidate_service.download_candidate_pool_preview_posters(
+        progress_callback=progress,
+        error_callback=on_error,
+    )
+    if result.get("is_empty_pool"):
+        print("\nОбщий candidate pool пуст.")
+        return
+
+    print("")
+    print(f"  Записей в pool: {result.get('pool_total', 0)}")
+    print(f"  Уникальных poster URL: {result.get('unique_urls', 0)}")
+    print(f"  Скачано: {result.get('downloaded', 0)}")
+    print(f"  Уже были в cache: {result.get('skipped_existing', 0)}")
+    print(f"  Ошибок: {result.get('failed', 0)}")
+    skipped_invalid = int(result.get("skipped_invalid") or 0)
+    if skipped_invalid > 0:
+        print(f"  Пропущено (невалидный URL): {skipped_invalid}")
+
+    failures = list(result.get("failures") or [])
+    if len(failures) > 0 and int(result.get("failed") or 0) > len(failures):
+        print("  (часть ошибок уже показана выше построчно)")

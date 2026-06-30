@@ -303,8 +303,15 @@ QLabel#watchedFilterValue {{
     font-weight: 600;
 }}
 QWidget#watchedScoreRange,
-QWidget#watchedYearRange {{
+QWidget#watchedYearRange,
+QWidget#candidateSearchYearRange {{
     background: transparent;
+}}
+QLabel#candidateSearchYearRangeLabel {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
 }}
 QScrollArea {{
     border: none;
@@ -383,6 +390,188 @@ QTabBar::tab:selected {{
 QTabBar::tab:hover {{
     background-color: {COLOR_HOVER};
     color: {COLOR_TEXT};
+}}
+QWidget#candidateSearchSidebar {{
+    background: transparent;
+}}
+QLabel#candidateSearchHeader {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SECTION}px;
+    font-weight: 700;
+}}
+QLabel#candidateSearchHint,
+QLabel#candidateSearchResultsSummary,
+QLabel#candidateSearchDetailPlaceholder,
+QLabel#candidateSearchExplanation {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_BASE}px;
+}}
+QLabel#candidateSearchFieldLabel {{
+    color: {COLOR_TEXT_MUTED};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding-top: 2px;
+}}
+QListWidget#candidateListWidget {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    padding: 8px;
+    outline: none;
+}}
+QListWidget#candidateListWidget::item {{
+    padding: 0;
+    border: none;
+    margin: 1px 0;
+    background: transparent;
+}}
+QListWidget#candidateListWidget::item:selected {{
+    background: transparent;
+    color: {COLOR_TEXT};
+}}
+QListWidget#candidateListWidget::item:hover {{
+    background: transparent;
+}}
+QLabel#candidateListCounter {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: 0 4px;
+}}
+QComboBox#candidateListSort {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_INPUT}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    padding: 4px 8px;
+    min-width: 120px;
+}}
+QPushButton#genreFilterChip {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CHIP}px;
+    color: {COLOR_TEXT_CHIP};
+    font-size: {FONT_BASE}px;
+    font-weight: 500;
+    padding: 8px 14px;
+    min-height: 36px;
+}}
+QPushButton#genreFilterChip:hover {{
+    background-color: {COLOR_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#genreFilterChip:checked {{
+    background-color: {COLOR_ACCENT_SOFT};
+    border-color: {COLOR_ACCENT};
+    color: {COLOR_TEXT};
+}}
+QPushButton#genreChipClear {{
+    background: transparent;
+    border: none;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {FONT_BASE}px;
+    padding: 4px 6px;
+    min-height: 28px;
+}}
+QPushButton#genreChipClear:hover {{
+    color: {COLOR_TEXT_SECONDARY};
+}}
+QLabel#genreChipCount {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {FONT_BASE}px;
+}}
+QWidget#genreChipHost {{
+    background: transparent;
+    padding-top: 2px;
+}}
+QWidget#candidateFiltersRoot {{
+    font-size: {FONT_BASE}px;
+}}
+QListWidget#candidateSearchCountryList {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_INPUT}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    padding: 6px;
+}}
+QListWidget#candidateSearchCountryList::item {{
+    padding: 4px 2px;
+    min-height: 28px;
+}}
+QListWidget#candidateSearchCountryList::item:selected {{
+    background-color: {COLOR_ACCENT_SOFT};
+    color: {COLOR_TEXT};
+}}
+QPushButton#candidateSearchButton,
+QPushButton#candidateSearchAddWatched {{
+    background-color: {COLOR_ADD_BUTTON};
+    border: 1px solid {COLOR_ADD_BUTTON_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding: 10px 16px;
+    min-height: 40px;
+}}
+QPushButton#candidateSearchButton:hover,
+QPushButton#candidateSearchAddWatched:hover {{
+    background-color: {COLOR_ADD_BUTTON_TOP};
+}}
+QPushButton#candidateSearchWatchlist,
+QPushButton#candidateSearchHide {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    padding: 8px 12px;
+}}
+QPushButton#candidateSearchWatchlist:hover,
+QPushButton#candidateSearchHide:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+}}
+QComboBox#candidateSearchCriteria,
+QSpinBox#candidateSearchYearMin,
+QSpinBox#candidateSearchYearMax,
+QSpinBox#candidateSearchTopN,
+QSpinBox#candidateSearchMinKpVotes,
+QSpinBox#candidateSearchMinImdbVotes,
+QDoubleSpinBox#candidateSearchMinKp,
+QDoubleSpinBox#candidateSearchMinImdb {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_INPUT}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    padding: 6px 10px;
+    min-height: 34px;
+}}
+QCheckBox#candidateSearchOnlyComplete,
+QCheckBox#candidateSearchOnlyUnwatched,
+QCheckBox#candidateSearchHideHidden {{
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_BASE}px;
+    spacing: 8px;
+    min-height: 28px;
+}}
+QCheckBox#candidateSearchOnlyComplete::indicator,
+QCheckBox#candidateSearchOnlyUnwatched::indicator,
+QCheckBox#candidateSearchHideHidden::indicator {{
+    width: 18px;
+    height: 18px;
+}}
+QFrame#candidateSearchDetailCard {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD}px;
 }}
 """
 

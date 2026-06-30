@@ -14,7 +14,7 @@ from candidates import import_tmdb
 from candidates import candidate_pool as legacy_candidate_pool
 from candidates import kp_enrichment
 from candidates import kp_tmdb_build_debug
-from candidates.keys import pool_entry_key
+from candidates.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
 from candidates.schema import normalize_candidate_record
 from apis import imdb_sql as sql_search
 from apis import kp_api
@@ -732,12 +732,7 @@ def build_candidate_pool(
         raise ValueError("country must be a 2-letter ISO code")
     if mode not in {"quality", "hidden_gems"}:
         raise ValueError("mode должен быть quality или hidden_gems")
-    criteria_name = str(criteria_name or "").strip() or build_tmdb_criteria_name(
-        country,
-        mode,
-        year_min=year_min,
-        min_tmdb_score=min_tmdb_score,
-    )
+    criteria_name = str(criteria_name or "").strip() or COMMON_POOL_CRITERIA_NAME
 
     token = api_tmdb.load_tmdb_token()
     query = apply_discover_filters(

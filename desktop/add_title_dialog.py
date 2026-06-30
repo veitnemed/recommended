@@ -26,6 +26,7 @@ from common import valid
 from config import constant
 from dataset.add_title_service import (
     AddTitleResolveBundle,
+    build_candidate_transfer_bundle,
     format_resolve_status_lines,
     save_add_title_record,
 )
@@ -222,14 +223,22 @@ class AddTitleSearchDialog(QDialog):
 class AddTitlePreviewDialog(QDialog):
     """Preview card and confirm. Closes on save or «Искать другой»."""
 
-    def __init__(self, bundle: AddTitleResolveBundle, parent=None) -> None:
+    def __init__(
+        self,
+        bundle: AddTitleResolveBundle,
+        parent=None,
+        *,
+        transfer_mode: bool = False,
+    ) -> None:
         super().__init__(parent)
         self._bundle = bundle
+        self._transfer_mode = transfer_mode or bundle.pool_candidate is not None
         self._save_result = None
         self.search_again = False
 
         self.setObjectName("addTitlePreviewDialog")
-        self.setWindowTitle("Добавить тайтл — подтверждение")
+        window_title = "Перенос из pool — подтверждение" if self._transfer_mode else "Добавить тайтл — подтверждение"
+        self.setWindowTitle(window_title)
         self.setModal(True)
         self.setMinimumWidth(PREVIEW_DIALOG_WIDTH)
         self.resize(PREVIEW_DIALOG_WIDTH, PREVIEW_DIALOG_HEIGHT)
@@ -267,7 +276,11 @@ class AddTitlePreviewDialog(QDialog):
         scroll.setWidget(card_shell)
         root_layout.addWidget(scroll, stretch=1)
 
-        confirm_hint = QLabel("Проверьте карточку и подтвердите добавление")
+        confirm_hint = QLabel(
+            "Проверьте карточку и подтвердите перенос в watched"
+            if self._transfer_mode
+            else "Проверьте карточку и подтвердите добавление"
+        )
         confirm_hint.setObjectName("addTitleConfirmHint")
         confirm_hint.setWordWrap(True)
         root_layout.addWidget(confirm_hint)
@@ -300,13 +313,18 @@ class AddTitlePreviewDialog(QDialog):
 
         actions = QHBoxLayout()
         actions.setSpacing(10)
-        back_button = QPushButton("Искать другой")
-        back_button.setObjectName("addTitleSecondaryButton")
-        back_button.clicked.connect(self._go_search_again)
-        self._confirm_button = QPushButton("Добавить тайтл")
+        self._back_button = QPushButton("Искать другой")
+        self._back_button.setObjectName("addTitleSecondaryButton")
+        self._back_button.clicked.connect(self._go_search_again)
+        if self._transfer_mode:
+            self._back_button.hide()
+        self._confirm_button = QPushButton(
+            "Добавить в watched" if self._transfer_mode else "Добавить тайтл"
+        )
         self._confirm_button.setObjectName("addTitleConfirmButton")
         self._confirm_button.clicked.connect(self._confirm_add)
-        actions.addWidget(back_button)
+        if self._transfer_mode is False:
+            actions.addWidget(self._back_button)
         actions.addStretch()
         actions.addWidget(self._confirm_button)
         root_layout.addLayout(actions)
@@ -338,6 +356,17 @@ class AddTitlePreviewDialog(QDialog):
         return YEAR_FILTER_DEFAULT_FROM
 
     def _fill_warning_label(self) -> None:
+        if self._transfer_mode and self._bundle.pool_candidate is not None:
+            from candidates import service as candidate_service
+
+            if candidate_service.is_pool_candidate_incomplete(self._bundle.pool_candidate):
+                self._warning_label.setText(
+                    "Кандидат неполный: нет KP/IMDb данных. "
+                    "Можно продолжить вручную, но проверьте raw_scores."
+                )
+                self._warning_label.show()
+                return
+
         status_lines = format_resolve_status_lines(self._bundle.statuses)
         if self._bundle.found is False:
             self._warning_label.setText(
@@ -380,14 +409,27 @@ class AddTitlePreviewDialog(QDialog):
             meta_payload=self._bundle.meta_payload,
             poster_hints=self._bundle.poster_hints,
             year=year,
+            pool_candidate=self._bundle.pool_candidate,
         )
+        dialog_title = "Перенос из pool" if self._transfer_mode else "Добавить тайтл"
         if result.ok is False:
             self._confirm_button.setEnabled(True)
-            QMessageBox.warning(self, "Добавить тайтл", result.message)
+            QMessageBox.warning(self, dialog_title, result.message)
             return
 
         self._save_result = result
         self.accept()
+
+
+def run_candidate_transfer_flow(parent, candidate: dict):
+    """Open preview dialog for pool candidate transfer; returns save result or None."""
+    if not isinstance(candidate, dict):
+        return None
+    bundle = build_candidate_transfer_bundle(candidate)
+    preview_dialog = AddTitlePreviewDialog(bundle, parent, transfer_mode=True)
+    if preview_dialog.exec() == QDialog.DialogCode.Accepted:
+        return preview_dialog.save_result
+    return None
 
 
 def run_add_title_flow(parent=None):

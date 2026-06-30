@@ -269,26 +269,6 @@ def _input_optional_search_csv_list(label: str, default: list) -> list[str]:
     return _parse_optional_csv_list(answer)
 
 
-def choose_search_criteria_name() -> str | None:
-    catalog = candidate_service.get_criteria_catalog_view()
-    if catalog["is_empty"]:
-        return None
-
-    print("\nВыбрать набор criteria_name?")
-    print(" 0 >> Все")
-    for idx, item in enumerate(catalog["items"], start=1):
-        print(f" {idx} >> {item['label']}")
-
-    criteria_names = [item["criteria_name"] for item in catalog["items"]]
-    selected = request.loop_input(
-        text="\nВыбор [0] >> ",
-        funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(criteria_names))],
-    )
-    if selected in {"", "0"}:
-        return None
-    return criteria_names[int(selected) - 1]
-
-
 def request_search_candidate_filters() -> dict:
     print("\nФильтр кандидатов перед поиском:")
     print("Жанры для поиска (по сохранённым данным pool).")
@@ -296,15 +276,14 @@ def request_search_candidate_filters() -> dict:
     print("Это не пересобирает pool и не делает новый TMDb-запрос.")
     print("Enter в списках стран/жанров = не важно; в числовых полях = saved default.\n")
 
-    criteria_name = choose_search_criteria_name()
-    defaults_view = candidate_service.get_search_filter_defaults_view(criteria_name)
+    defaults_view = candidate_service.get_search_filter_defaults_view()
     defaults = defaults_view["defaults"]
     if defaults_view["has_defaults"]:
-        print(f"\nDefaults из criteria '{criteria_name}':")
+        print("\nDefaults общего pool:")
         for line in defaults_view["lines"]:
             print(f"  {line}")
 
-    genre_options_view = candidate_service.get_search_genre_options_view(criteria_name)
+    genre_options_view = candidate_service.get_search_genre_options_view()
     genre_options = genre_options_view["genres"]
 
     country = choose_search_country()
@@ -332,7 +311,7 @@ def request_search_candidate_filters() -> dict:
     hide_hidden = hide_hidden_answer not in {"n", "no", "н", "нет"}
 
     return {
-        "criteria_name": criteria_name,
+        "criteria_name": None,
         "source": None,
         "country": country,
         "year_min": year_min,

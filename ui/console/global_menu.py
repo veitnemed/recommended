@@ -123,12 +123,12 @@ def open_candidate_pool_menu():
         ui.press_enter()
 
 def open_candidate_pool_management_menu():
-    """Открывает подменю управления сохранёнными пулами."""
+    """Открывает подменю управления общим pool."""
     while True:
         ui.clean_terminal()
         ui.show_candidate_pool_management_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
         if command == "0":
             return
         if command == "1":
@@ -139,6 +139,8 @@ def open_candidate_pool_management_menu():
             interface_funcs.import_tmdb_result_to_common_pool_flow()
         elif command == "4":
             interface_funcs.collect_candidate_pool()
+        elif command == "5":
+            interface_funcs.clean_common_pool_duplicates()
 
         ui.press_enter()
 
@@ -149,7 +151,7 @@ def open_candidate_pool_diagnostics_menu():
         ui.clean_terminal()
         ui.show_candidate_pool_diagnostics_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":
             return
         if command == "1":
@@ -158,6 +160,10 @@ def open_candidate_pool_diagnostics_menu():
             interface_funcs.retry_kp_for_incomplete_candidates()
         elif command == "3":
             interface_funcs.show_tmdb_dataset_genre_diagnostics()
+        elif command == "4":
+            interface_funcs.show_candidate_poster_diagnostics()
+        elif command == "5":
+            interface_funcs.download_candidate_pool_preview_posters()
 
         ui.press_enter()
 

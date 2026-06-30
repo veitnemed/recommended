@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -697,7 +697,10 @@ ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
     include_bottom_stretch=False,
 )
 
+CANDIDATE_DETAIL_CARD_PROFILE = replace(DETAIL_CARD_LAYOUT_PROFILE, show_user_score=False)
+
 _thumb_pixmap_cache: dict[str, object] = {}
+_detail_poster_source_cache: dict[str, object] = {}
 
 
 def fit_poster_pixmap_for_display(pixmap, max_width: int, max_height: int):
@@ -748,6 +751,20 @@ def _load_list_thumb_pixmap(poster_path: str | None):
     )
     _thumb_pixmap_cache[poster_path] = scaled
     return scaled
+
+
+def _load_detail_poster_source_pixmap(poster_path: str):
+    from PyQt6.QtGui import QPixmap
+
+    cached = _detail_poster_source_cache.get(poster_path)
+    if cached is not None:
+        return cached if cached is not False else None
+    pixmap = QPixmap(poster_path)
+    if pixmap.isNull():
+        _detail_poster_source_cache[poster_path] = False
+        return None
+    _detail_poster_source_cache[poster_path] = pixmap
+    return pixmap
 
 
 class WatchedListItemDelegate:
@@ -1234,10 +1251,8 @@ class WatchedDetailCard:
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
 
     def _set_poster_image(self, poster_path: str) -> bool:
-        from PyQt6.QtGui import QPixmap
-
-        pixmap = QPixmap(poster_path)
-        if pixmap.isNull():
+        pixmap = _load_detail_poster_source_pixmap(poster_path)
+        if pixmap is None:
             return False
 
         self._poster_source_pixmap = pixmap
@@ -1323,4 +1338,12 @@ class WatchedDetailCard:
         if poster_path is None or self._set_poster_image(poster_path) is False:
             self._set_poster_placeholder()
         self._set_local_poster_path(poster_path)
+        self._schedule_poster_height_sync()
+
+    def apply_local_poster_path(self, poster_path: str | None) -> None:
+        """Update only the poster area after async download."""
+        if poster_path not in (None, "") and self._set_poster_image(poster_path):
+            self._set_local_poster_path(poster_path)
+        else:
+            self._set_poster_placeholder()
         self._schedule_poster_height_sync()

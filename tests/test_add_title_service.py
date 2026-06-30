@@ -1,7 +1,9 @@
 from dataset.add_title_service import (
+    build_candidate_transfer_bundle,
     build_movie_record_from_defaults,
     build_preview_card_from_defaults,
     build_preview_movie_from_defaults,
+    save_add_title_record,
 )
 from config import scheme
 
@@ -120,3 +122,54 @@ def test_build_preview_movie_from_defaults() -> None:
 
     assert movie["main_info"]["title"] == "Alpha"
     assert movie["main_info"]["user_score"] is None
+
+
+def test_build_candidate_transfer_bundle_maps_candidate_fields() -> None:
+    candidate = {
+        "title": "Pool Show",
+        "year": 2018,
+        "country": "Россия",
+        "kp_score": 7.8,
+        "kp_votes": 5000,
+        "imdb_score": 7.2,
+        "imdb_votes": 800,
+        "overview": "Test overview",
+        "genre_keys": ["drama"],
+    }
+
+    bundle = build_candidate_transfer_bundle(candidate)
+
+    assert bundle.title == "Pool Show"
+    assert bundle.pool_candidate == candidate
+    assert bundle.defaults["main_info"]["year"] == 2018
+    assert bundle.meta_payload.get("description") == "Test overview"
+    assert bundle.preview_card["title"] == "Pool Show"
+
+
+def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
+    captured = {}
+
+    def fake_add_movie(movie, **kwargs):
+        captured["movie"] = movie
+        captured["kwargs"] = kwargs
+
+        class Result:
+            ok = True
+            message = "ok"
+            title = movie["main_info"]["title"]
+
+        return Result()
+
+    monkeypatch.setattr("dataset.add_title_service.add_movie", fake_add_movie)
+
+    defaults = {
+        scheme.MAIN_INFO: {"title": "From Pool", "year": 2020, "country": ""},
+        scheme.RAW_SCORES: {},
+        scheme.GENRE: {},
+        scheme.TAGS_VIBE: {},
+    }
+    pool_candidate = {"title": "From Pool", "year": 2020}
+
+    save_add_title_record(defaults, 8.0, pool_candidate=pool_candidate)
+
+    assert captured["kwargs"]["pool_candidate"] == pool_candidate

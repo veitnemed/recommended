@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sys
 
-from PyQt6.QtCore import QRectF, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -31,13 +31,12 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.analytics_view import AnalyticsView
+from desktop.candidate_filters_view import CandidateFiltersView
+from desktop.candidate_list_view import CandidateListView
+from desktop.candidate_search_session import CandidateSearchSession
 from desktop.delete_dialog import WatchedDeleteDialog
+from desktop.range_slider import RangeSlider
 from desktop.theme import (
-    COLOR_ACCENT,
-    COLOR_ACCENT_SOFT,
-    COLOR_BORDER,
-    COLOR_CARD_ALT,
-    COLOR_TEXT,
     FONT_FAMILY,
     build_app_style,
     build_score_edit_dialog_style,
@@ -80,126 +79,6 @@ from desktop.watched_delete import (
 
 DARK_STYLE = build_app_style()
 SCORE_EDIT_DIALOG_STYLE = build_score_edit_dialog_style()
-
-
-class RangeSlider(QWidget):
-    """Compact two-handle horizontal range slider."""
-
-    rangeChanged = pyqtSignal(int, int)
-
-    def __init__(self, minimum: int, maximum: int, lower: int, upper: int, parent=None) -> None:
-        super().__init__(parent)
-        self._minimum = minimum
-        self._maximum = maximum
-        self._lower = lower
-        self._upper = upper
-        self._active_handle = "lower"
-        self._dragging = False
-        self.setMouseTracking(True)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumHeight(30)
-
-    def sizeHint(self) -> QSize:
-        return QSize(180, 30)
-
-    def values(self) -> tuple[int, int]:
-        return (self._lower, self._upper)
-
-    def setValues(self, lower: int, upper: int) -> None:
-        lower = self._clamp(lower)
-        upper = self._clamp(upper)
-        if lower > upper:
-            lower, upper = upper, lower
-        if (lower, upper) == (self._lower, self._upper):
-            return
-        self._lower = lower
-        self._upper = upper
-        self.update()
-        self.rangeChanged.emit(self._lower, self._upper)
-
-    def paintEvent(self, _event) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-
-        handle_radius = 7
-        track_height = 4
-        left = handle_radius + 2
-        right = self.width() - handle_radius - 2
-        center_y = self.height() / 2
-
-        track = QRectF(left, center_y - track_height / 2, right - left, track_height)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(COLOR_CARD_ALT))
-        painter.drawRoundedRect(track, track_height / 2, track_height / 2)
-
-        lower_x = self._x_from_value(self._lower)
-        upper_x = self._x_from_value(self._upper)
-        active = QRectF(lower_x, center_y - track_height / 2, upper_x - lower_x, track_height)
-        painter.setBrush(QColor(COLOR_ACCENT_SOFT))
-        painter.drawRoundedRect(active, track_height / 2, track_height / 2)
-
-        handle_pen = QPen(QColor(COLOR_BORDER), 1)
-        for x in (lower_x, upper_x):
-            painter.setPen(handle_pen)
-            painter.setBrush(QColor(COLOR_ACCENT))
-            painter.drawEllipse(QRectF(x - handle_radius, center_y - handle_radius, handle_radius * 2, handle_radius * 2))
-            painter.setPen(QPen(QColor(COLOR_TEXT), 1))
-            painter.drawEllipse(QRectF(x - 2, center_y - 2, 4, 4))
-
-    def mousePressEvent(self, event) -> None:
-        if event.button() != Qt.MouseButton.LeftButton:
-            return
-        lower_distance = abs(event.position().x() - self._x_from_value(self._lower))
-        upper_distance = abs(event.position().x() - self._x_from_value(self._upper))
-        self._active_handle = "lower" if lower_distance <= upper_distance else "upper"
-        self._dragging = True
-        self._move_active_handle(event.position().x())
-
-    def mouseMoveEvent(self, event) -> None:
-        if self._dragging:
-            self._move_active_handle(event.position().x())
-
-    def mouseReleaseEvent(self, event) -> None:
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._dragging = False
-
-    def keyPressEvent(self, event) -> None:
-        if event.key() not in (Qt.Key.Key_Left, Qt.Key.Key_Right):
-            super().keyPressEvent(event)
-            return
-        delta = -1 if event.key() == Qt.Key.Key_Left else 1
-        if self._active_handle == "lower":
-            self.setValues(min(self._lower + delta, self._upper), self._upper)
-        else:
-            self.setValues(self._lower, max(self._upper + delta, self._lower))
-
-    def _move_active_handle(self, x: float) -> None:
-        value = self._value_from_x(x)
-        if self._active_handle == "lower":
-            self.setValues(min(value, self._upper), self._upper)
-        else:
-            self.setValues(self._lower, max(value, self._lower))
-
-    def _clamp(self, value: int) -> int:
-        return max(self._minimum, min(self._maximum, int(value)))
-
-    def _x_from_value(self, value: int) -> float:
-        handle_radius = 7
-        left = handle_radius + 2
-        right = self.width() - handle_radius - 2
-        if self._maximum == self._minimum:
-            return left
-        ratio = (value - self._minimum) / (self._maximum - self._minimum)
-        return left + ratio * (right - left)
-
-    def _value_from_x(self, x: float) -> int:
-        handle_radius = 7
-        left = handle_radius + 2
-        right = self.width() - handle_radius - 2
-        if right <= left:
-            return self._minimum
-        ratio = max(0.0, min(1.0, (x - left) / (right - left)))
-        return round(self._minimum + ratio * (self._maximum - self._minimum))
 
 
 class ScoreEditDialog(QDialog):
@@ -303,6 +182,7 @@ class WatchedMoviesWindow(QMainWindow):
 
         tabs = QTabWidget()
         self.setCentralWidget(tabs)
+        self._main_tabs = tabs
 
         watched_tab = QWidget()
         layout = QHBoxLayout(watched_tab)
@@ -321,6 +201,15 @@ class WatchedMoviesWindow(QMainWindow):
         splitter.setSizes([340, 840])
 
         tabs.addTab(watched_tab, "Watched")
+        self._candidate_session = CandidateSearchSession()
+        self._candidate_filters_view = CandidateFiltersView(
+            self._candidate_session,
+            on_applied=self._focus_candidates_tab,
+        )
+        self._candidate_list_view = CandidateListView(self._candidate_session)
+        tabs.addTab(self._candidate_filters_view.widget, "Фильтры")
+        tabs.addTab(self._candidate_list_view.widget, "Кандидаты")
+        self._candidates_tab_index = tabs.indexOf(self._candidate_list_view.widget)
         self._analytics_view = AnalyticsView(self._entries)
         tabs.addTab(self._analytics_view.widget, "Аналитика")
 
@@ -610,6 +499,39 @@ class WatchedMoviesWindow(QMainWindow):
                 break
 
         self.statusBar().showMessage(result.message or "Новая запись добавлена!", 5000)
+
+    def _reload_watched_entries(self, added_key: str | None = None) -> None:
+        """Refresh watched list and analytics after an external add (e.g. candidate transfer)."""
+        previous_key = None
+        current_row = self._list_widget.currentRow()
+        if 0 <= current_row < len(self._visible_entries):
+            previous_key = self._visible_entries[current_row][0]
+
+        self._entries = load_watched_entries()
+        self._analytics_view.update_entries(self._entries)
+        self._reload_genre_filter_options()
+        self._refresh_list()
+
+        if self._list_widget.count() == 0:
+            self._show_empty_details()
+            return
+
+        select_key = added_key or previous_key
+        row_to_select = 0
+        if select_key is not None:
+            for index, (key, _, _) in enumerate(self._visible_entries):
+                if key == select_key:
+                    row_to_select = index
+                    break
+
+        self._list_widget.blockSignals(True)
+        self._list_widget.setCurrentRow(row_to_select)
+        self._list_widget.blockSignals(False)
+        self._detail_card.show_entry(self._visible_entries[row_to_select])
+
+    def _focus_candidates_tab(self) -> None:
+        if hasattr(self, "_main_tabs") and hasattr(self, "_candidates_tab_index"):
+            self._main_tabs.setCurrentIndex(self._candidates_tab_index)
 
     def _selected_genre_filter(self) -> str | None:
         genre = self._genre_combo.currentData()

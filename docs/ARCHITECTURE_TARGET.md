@@ -211,7 +211,8 @@ genre:
 - read-path не удаляет кандидатов;
 - write-path после переноса в watched чистит watched-кандидата из pool;
 - incomplete-кандидаты можно видеть отдельно и добирать через enrichment;
-- dedupe должен быть централизован в `candidates`, а не размазан по UI.
+- dedupe централизован в `candidates`: `deduplicate_pool`, `dedupe_pool_by_similar_titles`, `clean_common_pool_duplicates`;
+- UI показывает `unique_total`; при расхождении с JSON — предупреждение и пункт очистки дублей в console.
 
 ## Add / Update / Delete
 
@@ -333,7 +334,7 @@ UI не должен:
 3. Разделить крупные UI-сценарии в `ui/console/interface_funcs.py` на тематические модули.
 4. Уточнить model/schema для watched title и candidate record.
 5. Сделать единый слой миграций/инициализации данных.
-6. Подтянуть desktop к тем же service-сценариям, что и console.
+6. Подтянуть desktop к тем же service-сценариям, что и console. **Частично:** watched CRUD и candidate search через `candidates.service` / `dataset.add_title_service`; pool operations и TMDb build остаются в console.
 7. Обновлять этот документ после каждого крупного структурного шага.
 
 ## Проверки

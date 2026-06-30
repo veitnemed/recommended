@@ -63,7 +63,17 @@ py start_app.py
 
 ## Candidate Pool
 
-Общий пул хранится в `data/candidates/pool.json`.
+Общий пул хранится в `data/candidates/pool.json`. Named pools больше не создаются: TMDb build, import и legacy KP-сбор обновляют один pool. Defaults фильтров и параметров сбора — в `data/candidates/criteria.json` (запись `"pool"`).
+
+Счётчики в UI/console:
+
+- **уникальных** — число кандидатов после нормализации по `title|year`;
+- **в JSON** — сколько физических записей в файле, если есть лишние дубли после merge старых пуллов.
+
+Очистка дублей (console: **Поиск сериалов → Управление pool → Очистить дубли в pool**):
+
+- exact-дубли и legacy-ключи;
+- похожие названия одного года (остаётся лучшая запись).
 
 TMDb candidate pool v1:
 
@@ -119,7 +129,7 @@ py -m pytest
 | Watched titles | `data/watched/titles.json` |
 | Watched meta | `data/watched/meta.json` |
 | Общий candidate pool | `data/candidates/pool.json` |
-| Criteria | `data/candidates/criteria.json` |
+| Criteria / defaults | `data/candidates/criteria.json` (запись `"pool"`) |
 | API log | `data/logs/api_requests.log` |
 | Backup | `data/backups/` |
 | Excel/export | `data/exports/` |

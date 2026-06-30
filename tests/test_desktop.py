@@ -1313,3 +1313,240 @@ def test_open_list_context_menu_includes_delete_action() -> None:
     assert "Удалить запись" in source
     assert "_delete_watched_entry" in source
     assert "Изменить оценку" in source
+
+
+def test_format_candidate_list_label_shows_sort_metric() -> None:
+    from desktop.candidate_search_view import (
+        format_candidate_list_label,
+        format_candidate_metric_value,
+        format_candidate_title_line,
+    )
+
+    candidate = {
+        "title": "Test Show",
+        "year": 2020,
+        "kp_score": 8.1,
+        "imdb_score": 7.4,
+        "kp_votes": 12000,
+        "imdb_votes": 900,
+    }
+    assert format_candidate_title_line(candidate) == "Test Show (2020)"
+    assert format_candidate_metric_value(candidate, "kp_score") == "KP 8.1"
+    assert format_candidate_metric_value(candidate, "imdb_votes") == "IMDb 900"
+    label = format_candidate_list_label(candidate, "kp_score")
+    assert "Test Show (2020)" in label
+    assert "KP 8.1" in label
+    assert "incomplete" not in label
+    assert "Q " not in label
+
+
+def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
+    from desktop.candidate_filters_view import CandidateFiltersView
+    from desktop.candidate_search_session import CandidateSearchSession
+
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
+        lambda: {"is_empty": True, "summary": "", "candidates": []},
+    )
+    session = CandidateSearchSession()
+    view = CandidateFiltersView(session)
+    assert "pool пуст" in view._status_label.text()
+    assert view._apply_button.isEnabled() is False
+
+
+def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch, qapp) -> None:
+    from config import constant
+    from desktop.candidate_filters_view import CANDIDATE_YEAR_MIN, CandidateFiltersView
+    from desktop.candidate_search_session import CandidateSearchSession
+
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
+        lambda: {
+            "is_empty": False,
+            "summary": "в pool: 1 | ready: 1 | incomplete: 0",
+            "candidates": [],
+        },
+    )
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_filter_defaults_view",
+        lambda: {"defaults": {}},
+    )
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_genre_options_view",
+        lambda: {"genres": []},
+    )
+
+    view = CandidateFiltersView(CandidateSearchSession())
+    filters = view._collect_filters()
+
+    assert filters["country"] == []
+    assert filters["year_min"] is None
+    assert filters["year_max"] is None
+    assert view._country_list.item(0).isSelected() is True
+    assert view._year_slider.values() == (CANDIDATE_YEAR_MIN, constant.NOW_YEAR)
+
+
+def test_watched_window_includes_candidate_tabs() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
+    assert "CandidateFiltersView" in source
+    assert "CandidateListView" in source
+    assert '"Фильтры"' in source
+    assert '"Кандидаты"' in source
+    assert '"Search"' not in source
+    assert "_focus_candidates_tab" in source
+
+
+def test_genre_chip_selector_tracks_selection(qapp) -> None:
+    from desktop.genre_chip_selector import GenreChipSelector
+
+    selector = GenreChipSelector()
+    selector.set_options(["Драма", "Комедия", "Детектив"], ["Драма"])
+
+    assert selector.selected_genres() == ["Драма"]
+
+    selector._chips["Комедия"].setChecked(True)
+    assert selector.selected_genres() == ["Драма", "Комедия"]
+
+    selector.clear_selection()
+    assert selector.selected_genres() == []
+
+
+def test_candidate_filters_view_uses_genre_chip_selectors() -> None:
+    import inspect
+
+    from desktop import candidate_filters_view as module
+
+    source = inspect.getsource(module.CandidateFiltersView.__init__)
+    assert "GenreChipSelector" in source
+    assert "_include_genre_selector" in source
+    assert "_exclude_genre_selector" in source
+    assert "_make_genre_list" not in source
+
+
+def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
+    from desktop.candidate_search_view import build_candidate_readonly_detail_entry
+
+    candidate = {
+        "pool_entry_key": "show|2018",
+        "title": "Pool Show",
+        "year": 2018,
+        "country": "Россия",
+        "kp_score": 7.8,
+        "imdb_score": 7.2,
+        "overview": "Test overview",
+        "genres_display": ["Драма", "Комедия"],
+        "poster_url": "https://example.com/poster.jpg",
+    }
+
+    entry_key, movie, card = build_candidate_readonly_detail_entry(candidate)
+
+    assert entry_key == "__candidate__show|2018"
+    assert movie["main_info"]["title"] == "Pool Show"
+    assert card["title"] == "Pool Show"
+    assert card["year"] == 2018
+    assert card["country"] == "Россия"
+    assert card["kp_score"] == 7.8
+    assert card["imdb_score"] == 7.2
+    assert card["overview"] == "Test overview"
+    assert card["genres"] == ["Драма", "Комедия"]
+    assert "poster_path" not in card
+    assert "poster_src" not in card
+
+
+def test_build_candidate_readonly_detail_entry_does_not_download_poster(monkeypatch) -> None:
+    from desktop.candidate_search_view import build_candidate_readonly_detail_entry
+
+    def fail_download(_url: str):
+        raise AssertionError("download_poster_url_for_preview must not run on read-only selection")
+
+    monkeypatch.setattr(
+        "posters.download_images.download_poster_url_for_preview",
+        fail_download,
+    )
+
+    _, _, card = build_candidate_readonly_detail_entry(
+        {
+            "title": "Remote Poster",
+            "poster_url": "https://example.com/poster.jpg",
+        }
+    )
+    assert card["title"] == "Remote Poster"
+    assert "poster_path" not in card
+
+
+def test_candidate_search_session_sorts_once_and_slices_top_n(monkeypatch) -> None:
+    from desktop.candidate_search_session import CandidateSearchSession
+
+    calls = {"count": 0}
+    candidates = [
+        {"title": "A", "kp_score": 9.0},
+        {"title": "B", "kp_score": 8.0},
+        {"title": "C", "kp_score": 7.0},
+    ]
+
+    def fake_sort(items, sort_mode):
+        calls["count"] += 1
+        return {
+            "candidates": list(items),
+            "sort_mode": sort_mode,
+            "before_dedupe_count": len(items),
+            "hidden_duplicates": 0,
+        }
+
+    monkeypatch.setattr(
+        "desktop.candidate_search_session.candidate_service.sort_search_candidates",
+        fake_sort,
+    )
+    monkeypatch.setattr(
+        "desktop.candidate_search_session.candidate_service.get_search_overview_view",
+        lambda: {"is_empty": False, "candidates": candidates},
+    )
+    monkeypatch.setattr(
+        "desktop.candidate_search_session.candidate_service.search_candidate_pool",
+        lambda _items, _filters: {"candidates": candidates, "filtered_count": len(candidates)},
+    )
+
+    session = CandidateSearchSession()
+    session.apply_filters({})
+    assert calls["count"] == 1
+    assert [item["title"] for item in session.sorted_candidates()] == ["A", "B", "C"]
+    assert session.sorted_total_count() == 3
+    assert calls["count"] == 1
+
+    session.set_top_n(2)
+    assert [item["title"] for item in session.sorted_candidates()] == ["A", "B"]
+    assert session.sorted_total_count() == 3
+    assert calls["count"] == 1
+
+    session.set_sort_mode("imdb_score")
+    assert calls["count"] == 2
+
+
+def test_candidate_list_view_uses_readonly_detail_builder() -> None:
+    import inspect
+
+    from desktop import candidate_list_view as module
+    from desktop.watched_view import CANDIDATE_DETAIL_CARD_PROFILE, DETAIL_CARD_LAYOUT_PROFILE
+
+    source = inspect.getsource(module.CandidateListView)
+    assert "build_candidate_readonly_detail_entry" in source
+    assert "build_candidate_detail_entry" not in source
+    assert "CANDIDATE_DETAIL_CARD_PROFILE" in source
+    assert CANDIDATE_DETAIL_CARD_PROFILE.poster_width == DETAIL_CARD_LAYOUT_PROFILE.poster_width
+    assert CANDIDATE_DETAIL_CARD_PROFILE.poster_height == DETAIL_CARD_LAYOUT_PROFILE.poster_height
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
+
+
+def test_candidate_list_view_starts_async_poster_download() -> None:
+    import inspect
+
+    from desktop import candidate_list_view as module
+
+    source = inspect.getsource(module.CandidateListView)
+    assert "CandidatePosterDownloadWorker" in source
+    assert "candidate_poster_url_for_download" in source
+    assert "apply_local_poster_path" in source

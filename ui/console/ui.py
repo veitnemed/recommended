@@ -62,21 +62,22 @@ def show_candidate_pool_menu(movies_counter: int, pool_stats_line: str, error: i
     show_header(movies_counter, error)
     show_menu_title('ПОИСК СЕРИАЛОВ')
     print(f'{pool_stats_line}\n')
-    print(' 1 >> Собрать новый пул кандидатов')
-    print(' 2 >> Посмотреть сохранённые пулы')
-    print(' 3 >> Найти сериалы в общем пуле')
-    print(' 4 >> Отметить просмотренные из пула')
-    print(' 5 >> Управление пулами')
+    print(' 1 >> Обновить общий pool (TMDb)')
+    print(' 2 >> Посмотреть общий pool')
+    print(' 3 >> Найти сериалы в общем pool')
+    print(' 4 >> Отметить просмотренные из pool')
+    print(' 5 >> Управление pool')
     print(' 6 >> Диагностика и обслуживание')
     print(' 0 >> Главное меню\n')
 
 def show_candidate_pool_management_menu():
-    """Печатает подменю управления сохранёнными пулами."""
-    show_menu_title('УПРАВЛЕНИЕ ПУЛАМИ')
-    print(' 1 >> Удалить пул')
+    """Печатает подменю управления общим pool."""
+    show_menu_title('УПРАВЛЕНИЕ POOL')
+    print(' 1 >> Очистить общий pool')
     print(' 2 >> Defaults фильтров поиска')
-    print(' 3 >> Импортировать TMDb result в общий пул')
-    print(' 4 >> Собрать пул через KP API (legacy)')
+    print(' 3 >> Импортировать TMDb result в общий pool')
+    print(' 4 >> Собрать pool через KP API (legacy)')
+    print(' 5 >> Очистить дубли в pool')
     print(' 0 >> Назад\n')
 
 
@@ -86,6 +87,8 @@ def show_candidate_pool_diagnostics_menu():
     print(' 1 >> Показать подозрительные дубли')
     print(' 2 >> Добрать KP для неполных кандидатов')
     print(' 3 >> Показать TMDb жанры по dataset')
+    print(' 4 >> Диагностика постеров в общем пуле')
+    print(' 5 >> Скачать постеры candidate pool в preview-cache')
     print(' 0 >> Назад\n')
 
 

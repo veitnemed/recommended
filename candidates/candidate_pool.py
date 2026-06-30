@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 from config import constant
 from config import genre_tags
 from apis import kp_api as api
-from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
+from candidates.keys import COMMON_POOL_CRITERIA_NAME, normalize_key_part, pool_entry_key, title_identity_key
 from candidates import country_schema
 from candidates import genre_schema
 from candidates import genres as candidate_genres
@@ -273,6 +273,76 @@ def deduplicate_pool(pool: dict) -> dict:
     return deduplicated
 
 
+def dedupe_pool_by_similar_titles(pool: dict) -> tuple[dict, int]:
+    """Сливает кандидатов одного года с похожими названиями, оставляя лучшую запись."""
+    candidates = [
+        normalize_candidate_record(candidate)
+        for candidate in pool.values()
+        if isinstance(candidate, dict)
+    ]
+    if len(candidates) <= 1:
+        return dict(pool), 0
+
+    kept: list[dict] = []
+    removed = 0
+    for candidate in candidates:
+        match_index = None
+        for index, existing in enumerate(kept):
+            if candidates_are_same(candidate, existing, include_criteria=False):
+                match_index = index
+                break
+        if match_index is None:
+            kept.append(candidate)
+            continue
+
+        removed += 1
+        if candidate_sort_score(candidate) > candidate_sort_score(kept[match_index]):
+            kept[match_index] = candidate
+
+    deduplicated: dict = {}
+    for candidate in kept:
+        key = pool_entry_key(candidate)
+        current_best = deduplicated.get(key)
+        if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
+            deduplicated[key] = candidate
+    return deduplicated, removed
+
+
+def clean_common_pool_duplicates(*, merge_similar: bool = True) -> dict:
+    """Явно чистит общий pool от exact- и fuzzy-дублей (write-path)."""
+    raw_pool = load_candidate_pool()
+    raw_total = len(raw_pool) if isinstance(raw_pool, dict) else 0
+
+    exact_pool = normalize_storage_pool(raw_pool)
+    exact_unique = len(exact_pool)
+    exact_removed = max(0, raw_total - exact_unique)
+
+    final_pool = exact_pool
+    similar_removed = 0
+    if merge_similar and exact_unique > 1:
+        final_pool, similar_removed = dedupe_pool_by_similar_titles(exact_pool)
+
+    final_unique = len(final_pool)
+    changed = (
+        raw_total != final_unique
+        or similar_removed > 0
+        or set(raw_pool.keys()) != set(final_pool.keys())
+    )
+    if changed:
+        save_candidate_pool(final_pool)
+
+    return {
+        "ok": True,
+        "changed": changed,
+        "raw_total": raw_total,
+        "exact_unique": exact_unique,
+        "unique_total": final_unique,
+        "removed_exact": exact_removed,
+        "removed_similar": similar_removed,
+        "removed_total": max(0, raw_total - final_unique),
+    }
+
+
 def migrate_pool_keys(pool: dict) -> dict:
     """Переводит legacy-ключи пула на criteria-aware формат."""
     migrated = {}
@@ -406,7 +476,8 @@ def normalize_candidate(movie: dict, criteria_name: str) -> dict:
 
 
 def collect_candidates(criteria_name: str, criteria: dict) -> dict:
-    """Собирает новых кандидатов из API по критериям."""
+    """Собирает новых кандидатов из API в общий pool."""
+    criteria_name = COMMON_POOL_CRITERIA_NAME
     pool = normalize_storage_pool(load_candidate_pool())
     watched_signatures = build_watched_signatures()
     target_count = int(criteria.get("count") or 20)
@@ -548,7 +619,13 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
         and (criteria_name is None or candidate.get("criteria_name") == criteria_name)
     ]
 
-    storage_total = len(candidates)
+    unique_total = len(candidates)
+    raw_total = _count_raw_pool_entries(raw_pool, criteria_name=criteria_name)
+    duplicate_entries = max(0, raw_total - unique_total)
+    similar_duplicate_total = 0
+    if criteria_name is None and unique_total > 1:
+        _, similar_duplicate_total = dedupe_pool_by_similar_titles(storage_pool)
+
     watched_total = sum(
         1 for candidate in candidates
         if is_watched_candidate(candidate, watched_signatures)
@@ -557,14 +634,17 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
         1 for candidate in candidates
         if schema_is_candidate_complete(candidate)
     )
-    incomplete_total = storage_total - ready_total
+    incomplete_total = unique_total - ready_total
 
     return {
         "criteria_name": criteria_name,
-        "raw_total": _count_raw_pool_entries(raw_pool, criteria_name=criteria_name),
-        "storage_total": storage_total,
+        "raw_total": raw_total,
+        "unique_total": unique_total,
+        "storage_total": unique_total,
+        "duplicate_entries": duplicate_entries,
+        "similar_duplicate_total": similar_duplicate_total,
         "watched_total": watched_total,
-        "active_total": storage_total - watched_total,
+        "active_total": unique_total - watched_total,
         "ready_total": ready_total,
         "incomplete_total": incomplete_total,
     }
@@ -572,22 +652,28 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
 
 def format_pool_stats_summary(stats: dict) -> str:
     """Формирует однострочную сводку pool stats для меню."""
+    unique_total = stats.get("unique_total", stats.get("storage_total", 0))
     parts = [
-        f"в pool: {stats['storage_total']}",
+        f"уникальных: {unique_total}",
         f"ready: {stats['ready_total']}",
         f"incomplete: {stats['incomplete_total']}",
     ]
     if stats.get("watched_total", 0) > 0:
         parts.append(f"watched: {stats['watched_total']}")
-    if stats.get("criteria_name") is None and stats.get("raw_total") != stats.get("storage_total"):
-        parts.append(f"JSON keys: {stats['raw_total']}")
+    duplicate_entries = int(stats.get("duplicate_entries") or 0)
+    if duplicate_entries > 0:
+        parts.append(f"в JSON: {stats['raw_total']} (+{duplicate_entries} дублей)")
+    similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
+    if similar_duplicate_total > 0:
+        parts.append(f"похожих: {similar_duplicate_total}")
     return " | ".join(parts)
 
 
 def format_pool_stats_lines(stats: dict) -> list[str]:
     """Формирует многострочную сводку pool stats для экранов pool/top."""
+    unique_total = stats.get("unique_total", stats.get("storage_total", 0))
     lines = [
-        f"В pool (normalized): {stats['storage_total']}",
+        f"Уникальных кандидатов: {unique_total}",
         f"Ready: {stats['ready_total']} | Incomplete: {stats['incomplete_total']}",
     ]
     if stats.get("watched_total", 0) > 0:
@@ -595,8 +681,15 @@ def format_pool_stats_lines(stats: dict) -> list[str]:
             f"Watched in pool: {stats['watched_total']} "
             f"(после save active: {stats['active_total']})"
         )
-    if stats.get("criteria_name") is None:
-        lines.append(f"Записей в JSON: {stats['raw_total']}")
+    duplicate_entries = int(stats.get("duplicate_entries") or 0)
+    if stats.get("criteria_name") is None and duplicate_entries > 0:
+        lines.append(
+            f"Записей в JSON: {stats['raw_total']} "
+            f"(лишних exact-дублей: {duplicate_entries})"
+        )
+    similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
+    if stats.get("criteria_name") is None and similar_duplicate_total > 0:
+        lines.append(f"Похожих дублей можно слить: {similar_duplicate_total}")
     return lines
 
 
@@ -608,10 +701,41 @@ def _format_optional_filter_value(value) -> str:
     return str(value)
 
 
+def ensure_common_pool_criteria() -> tuple[str, dict]:
+    """Returns the single shared criteria entry, creating it when missing."""
+    all_criteria = load_candidate_criteria()
+    existing = all_criteria.get(COMMON_POOL_CRITERIA_NAME)
+    if isinstance(existing, dict):
+        return COMMON_POOL_CRITERIA_NAME, existing
+
+    criteria = {
+        "country": None,
+        "count": 50,
+        "min_kp": None,
+        "min_imdb": None,
+        "min_kp_votes": None,
+        "min_imdb_votes": None,
+        "min_year": None,
+        "max_year": None,
+        "genres": [],
+        "excluded_genres": [],
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    return save_named_criteria(COMMON_POOL_CRITERIA_NAME, criteria)
+
+
+def clear_common_pool() -> dict:
+    """Removes all candidates from the shared pool without touching watched dataset."""
+    pool = load_candidate_pool()
+    cleared = len(pool)
+    save_candidate_pool({})
+    return {"ok": True, "cleared": cleared}
+
+
 def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
-    """Возвращает defaults runtime-фильтров поиска из candidate_criteria.json."""
+    """Возвращает defaults runtime-фильтров поиска из единого candidate_criteria.json."""
     defaults = {
-        "criteria_name": criteria_name,
+        "criteria_name": None,
         "source": None,
         "country": None,
         "year_min": None,
@@ -624,10 +748,8 @@ def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
         "min_imdb_votes": None,
         "only_complete": True,
     }
-    if criteria_name is None:
-        return defaults
 
-    criteria = load_candidate_criteria().get(criteria_name) or {}
+    criteria = load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME) or {}
     if isinstance(criteria, dict) is False:
         return defaults
 
@@ -750,7 +872,6 @@ def _matches_max_value(candidate: dict, field_name: str, max_value) -> bool:
 
 def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
     """Фильтрует уже сохранённых кандидатов из общего пула перед поиском."""
-    criteria_name = filters.get("criteria_name")
     source = filters.get("source")
     country = filters.get("country")
     year_min = filters.get("year_min")
@@ -766,8 +887,6 @@ def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
     filtered = []
     for candidate in candidates:
         candidate = normalize_candidate_record(candidate)
-        if criteria_name and candidate.get("criteria_name") != criteria_name:
-            continue
         if source and candidate.get("source") != source:
             continue
         if _matches_optional_country(candidate, country) is False:
@@ -1105,5 +1224,108 @@ def format_candidate_description(candidate: dict, limit: int = 200) -> str:
                 return text
             return text[: max(0, limit - 3)].rstrip() + "..."
     return "нет данных"
+
+
+def classify_candidate_poster_state(candidate: dict) -> dict:
+    """Classify one pool candidate poster state for read-only diagnostics."""
+    from pathlib import Path
+
+    from dataset.title_resolve import build_poster_hints_from_candidate
+    from posters.download_images import local_preview_poster_path_if_cached
+
+    hints = build_poster_hints_from_candidate(candidate)
+    status = hints.get("status") or "missing"
+    poster_url = hints.get("poster_url")
+    poster_path = hints.get("poster_path")
+    source = hints.get("source")
+
+    local_path = None
+    for key in ("poster_path", "poster_src"):
+        value = candidate.get(key)
+        if value in (None, ""):
+            continue
+        text = str(value).strip()
+        if text.startswith(("http://", "https://")):
+            continue
+        path = Path(text)
+        if path.is_file():
+            local_path = str(path)
+            break
+
+    if local_path is None and poster_url not in (None, ""):
+        cached = local_preview_poster_path_if_cached(str(poster_url))
+        if cached not in (None, ""):
+            local_path = cached
+
+    if local_path not in (None, ""):
+        display_state = "displayable"
+    elif status == "missing":
+        display_state = "missing"
+    else:
+        display_state = "metadata_only"
+
+    return {
+        "display_state": display_state,
+        "status": status,
+        "source": source,
+        "poster_url": poster_url,
+        "poster_path": poster_path,
+        "local_path": local_path,
+    }
+
+
+def build_candidate_poster_diagnostics(candidates: list) -> dict:
+    """Summarize poster coverage for saved pool candidates without network/JSON writes."""
+    rows = []
+    counts = {
+        "displayable": 0,
+        "metadata_only": 0,
+        "missing": 0,
+    }
+    source_counts: dict[str, int] = {}
+
+    for candidate in candidates:
+        state = classify_candidate_poster_state(candidate)
+        counts[state["display_state"]] += 1
+        source_key = str(state.get("source") or "—")
+        source_counts[source_key] = source_counts.get(source_key, 0) + 1
+        rows.append({
+            "candidate": candidate,
+            **state,
+        })
+
+    problem_rows = [row for row in rows if row["display_state"] != "displayable"]
+
+    return {
+        "total": len(candidates),
+        "counts": counts,
+        "source_counts": source_counts,
+        "rows": rows,
+        "problem_rows": problem_rows,
+        "is_empty": len(candidates) == 0,
+    }
+
+
+def collect_unique_pool_poster_urls(candidates: list) -> list[str]:
+    """Collect unique HTTP poster URLs from saved pool candidates."""
+    from dataset.title_resolve import build_poster_hints_from_candidate
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        hints = build_poster_hints_from_candidate(candidate)
+        poster_url = hints.get("poster_url")
+        if poster_url in (None, ""):
+            continue
+        text = str(poster_url).strip()
+        if text.startswith(("http://", "https://")) is False:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        urls.append(text)
+    return urls
 
 

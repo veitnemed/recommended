@@ -6,10 +6,11 @@
 
 - UI должен ходить через `candidates.service`, а не напрямую в `candidate_pool.py` или `tmdb_candidate_pool.py`.
 - `load_candidate_pool()` и read-view функции не должны писать JSON.
-- Любой write-path должен быть явным: import, save, delete, retry KP, mark watched.
+- Любой write-path должен быть явным: import, save, clear pool, dedupe, retry KP, mark watched.
+- Единый pool: `criteria_name = "pool"`, UI не создаёт named pools.
 - Не меняй формат `candidate_pool.json` и `candidate_criteria.json` без отдельной задачи, миграции и тестов.
 - Не смешивай `tmdb_genre_options.py` и `genres.py`.
-- Не меняй `keys.py` без понимания cross-criteria dedupe.
+- Не меняй `keys.py` без понимания dedupe и merge legacy-ключей.
 - Не трогай candidate pool ради desktop GUI-polish. Визуальный контракт PyQt GUI живёт в [../docs/DESKTOP_STYLE_CONTRACT.md](../docs/DESKTOP_STYLE_CONTRACT.md).
 
 ## Быстрая карта

@@ -6,6 +6,7 @@ from config import constant
 from common import valid
 from candidates import candidate_pool
 from candidates import service as candidate_service
+from candidates.keys import COMMON_POOL_CRITERIA_NAME
 
 
 def format_optional_default(value) -> str:
@@ -120,75 +121,30 @@ def choose_genres_by_numbers(
         return selected_genres
 
 
+def get_common_pool_criteria_readonly() -> tuple[str, dict] | None:
+    """Возвращает настройки общего pool без записи JSON."""
+    criteria = candidate_pool.load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
+    if isinstance(criteria, dict) is False:
+        return None
+    return COMMON_POOL_CRITERIA_NAME, criteria
+
+
 def choose_or_create_criteria() -> tuple[str, dict] | None:
-    """Дает выбрать сохраненный набор критериев или создать новый."""
-    all_criteria = candidate_pool.load_candidate_criteria()
-    criteria_names = sorted(all_criteria.keys())
-
-    print("Сохраненные критерии:\n")
-    print(" 0 >> Создать новый набор")
-    for idx, name in enumerate(criteria_names, start=1):
-        print(f" {idx} >> {candidate_pool.build_criteria_label(name, all_criteria[name])}")
-
-    while True:
-        answer = input("\nВыбор >> ").strip()
-        try:
-            select = int(answer)
-        except ValueError:
-            print("Введите номер пункта.")
-            continue
-
-        if 0 <= select <= len(criteria_names):
-            break
-        print("Такого пункта нет.")
-
-    if select == 0:
-        return create_criteria_interactive()
-
-    name = criteria_names[select - 1]
-    return name, all_criteria[name]
+    """Редактирует настройки сбора для единого общего pool."""
+    return create_criteria_interactive()
 
 
 def choose_existing_criteria() -> tuple[str, dict] | None:
-    """Дает выбрать только существующий набор критериев."""
-    all_criteria = candidate_pool.load_candidate_criteria()
-    criteria_names = sorted(all_criteria.keys())
-    if len(criteria_names) == 0:
-        print("Сохраненных критериев пока нет.")
-        return None
-
-    print("Сохраненные критерии:\n")
-    for idx, name in enumerate(criteria_names, start=1):
-        print(f" {idx} >> {candidate_pool.build_criteria_label(name, all_criteria[name])}")
-
-    while True:
-        answer = input("\nВыбор >> ").strip()
-        try:
-            select = int(answer)
-        except ValueError:
-            print("Введите номер пункта.")
-            continue
-
-        if 1 <= select <= len(criteria_names):
-            break
-        print("Такого пункта нет.")
-
-    name = criteria_names[select - 1]
-    return name, all_criteria[name]
+    """Возвращает настройки общего pool для read-only сценариев."""
+    selected = get_common_pool_criteria_readonly()
+    if selected is None:
+        print("Настройки общего pool пока не сохранены.")
+    return selected
 
 
 def create_criteria_interactive() -> tuple[str, dict] | None:
-    """Запрашивает новый набор критериев и сохраняет его."""
-    all_criteria = candidate_pool.load_candidate_criteria()
-
-    while True:
-        criteria_name = input("Название набора критериев >> ").strip()
-        if criteria_name == "":
-            print("Название не должно быть пустым.")
-            continue
-        break
-
-    current = all_criteria.get(criteria_name, {})
+    """Запрашивает настройки сбора для общего pool и сохраняет их."""
+    criteria_name, current = candidate_pool.ensure_common_pool_criteria()
     country_default = current.get("country")
     country_answer = input(f"Страна [{format_optional_default(country_default)}] >> ").strip()
     country = country_answer if country_answer != "" else country_default
@@ -228,7 +184,7 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
 
 
 def update_criteria_filters(criteria_name: str, current: dict) -> dict:
-    """Интерактивно обновляет у набора критериев только блок фильтрации."""
+    """Интерактивно обновляет у общего pool только блок фильтрации."""
     min_kp = prompt_optional_score("Минимальный рейтинг KP", current.get("min_kp"))
     genres = choose_genres_by_numbers(
         current.get("genres", []),

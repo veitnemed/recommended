@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from candidates import candidate_pool as legacy_candidate_pool
-from candidates.keys import DEFAULT_CRITERIA_NAME, pool_entry_key
+from candidates.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
 from candidates.schema import normalize_candidate_record
 
 
@@ -80,8 +80,7 @@ def tmdb_import_default_criteria_name(result: dict[str, Any]) -> str | None:
 
 
 def resolve_tmdb_import_criteria_name(result: dict[str, Any], criteria_name: str | None = None) -> str:
-    resolved = str(criteria_name or tmdb_import_default_criteria_name(result) or "").strip()
-    return resolved or DEFAULT_CRITERIA_NAME
+    return COMMON_POOL_CRITERIA_NAME
 
 
 def _base_import_stats(read: int, criteria_name: str, pool_size_before: int) -> dict[str, Any]:
