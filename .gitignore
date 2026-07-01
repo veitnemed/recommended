@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .pytest-tmp/
+.pytest_cache/
 
 # Editors and operating systems
 .idea/
@@ -22,11 +23,12 @@ recovered_edit_dataset.csv
 api_token.py
 .browser_profiles/
 data/cache/
-data/watched/*.json
-data/candidates/*.json
+data/watched/*.json*
+data/candidates/*.json*
 data/logs/
 data/backups/
 data/exports/
+data/**/*.backup*
 
 # Large local datasets and generated outputs
 datasets/
