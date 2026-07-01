@@ -2,7 +2,7 @@
 
 from config import constant
 from config import scheme
-from dataset import title_resolve
+from dataset import service
 
 
 def short_text(value, limit: int = 50) -> str:
@@ -26,12 +26,12 @@ def print_sql_add_preview(sql_data: dict) -> None:
 
 def print_api_add_preview(api_data: dict) -> None:
     """Показывает краткую API-сводку для будущего сохранения."""
-    countries = title_resolve.extract_api_countries(api_data)
-    genres_line = ", ".join(title_resolve.extract_api_genres(api_data)) or "нет данных"
-    raw_scores = title_resolve.extract_api_raw_scores(api_data)
+    countries = service.extract_api_countries(api_data)
+    genres_line = ", ".join(service.extract_api_genres(api_data)) or "нет данных"
+    raw_scores = service.extract_api_raw_scores(api_data)
 
     print("\nAPI обогатил объект:")
-    print(f"Название: {title_resolve.extract_api_title(api_data) or 'нет данных'}")
+    print(f"Название: {service.extract_api_title(api_data) or 'нет данных'}")
     print(f"Год: {api_data.get('year') or 'нет данных'}")
     print(f"Страны: {countries if countries != 'None' else 'нет данных'}")
     print(f"Жанры: {genres_line}")

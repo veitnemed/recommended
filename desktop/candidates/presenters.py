@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from candidates import service as candidate_service
-from dataset.add_title_service import build_candidate_transfer_bundle
+from dataset import service
 
 SORT_MODE_METRIC_PREFIX = {
     "kp_score": "KP",
@@ -166,6 +166,6 @@ def build_candidate_readonly_detail_entry(candidate: dict) -> tuple:
 
 def build_candidate_detail_entry(candidate: dict) -> tuple:
     """Build WatchedDetailCard entry tuple from pool candidate (transfer flow)."""
-    bundle = build_candidate_transfer_bundle(candidate)
+    bundle = service.build_candidate_transfer_bundle(candidate)
     identity = candidate_detail_identity(candidate)
     return (f"__candidate__{identity}", bundle.preview_movie, bundle.preview_card)

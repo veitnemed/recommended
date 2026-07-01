@@ -1,12 +1,12 @@
 """Содержит интерактивные действия меню настройки тегов."""
 
 from storage import files as storage_files
-from dataset import tags_work
+from dataset import service
 
 
 def show_tags() -> None:
     """Показывает список тегов."""
-    tags = tags_work.load_tags()
+    tags = service.load_tags()
     print('\nТеги вайба:\n')
     if len(tags) == 0:
         print('Сейчас вайб-тегов нет.')
@@ -17,10 +17,10 @@ def show_tags() -> None:
 
 def request_new_tag() -> None:
     """Запрашивает данные нового тега и добавляет его в проект."""
-    tags = tags_work.load_tags()
+    tags = service.load_tags()
 
     feature = input('Название поля на английском, например imdb_drama >> ').strip()
-    if tags_work.is_correct_tag_name(feature) is False:
+    if service.is_correct_tag_name(feature) is False:
         print('Ошибка! Название должно начинаться с английской буквы и содержать только английские буквы, цифры и _.')
         return
 
@@ -49,7 +49,7 @@ def request_new_tag() -> None:
         print('Ошибка! Все поля должны быть заполнены.')
         return
 
-    tags_work.add_tag(feature, settings)
+    service.add_tag(feature, settings)
     print(f'Тег добавлен: {feature}')
     print('Схема изменилась. Запусти программу снова.')
     raise SystemExit
@@ -63,9 +63,9 @@ def request_delete_all_tags() -> None:
         return
 
     storage_files.create_backup()
-    tags_work.backup_tag_files()
-    tags_work.delete_all_tags()
-    tags_work.move_edit_files_to_backup()
+    service.backup_tag_files()
+    service.delete_all_tags()
+    service.move_edit_files_to_backup()
     print("Все вайб-теги удалены.")
     print('Схема изменилась. Запусти программу снова.')
     raise SystemExit
@@ -73,7 +73,7 @@ def request_delete_all_tags() -> None:
 
 def request_delete_tag() -> None:
     """Запрашивает номер тега и удаляет выбранный тег."""
-    tags = tags_work.load_tags()
+    tags = service.load_tags()
     show_tags()
     if len(tags) == 0:
         return
@@ -94,7 +94,7 @@ def request_delete_tag() -> None:
         print('Удаление отменено.')
         return
 
-    tags_work.delete_tag(feature)
+    service.delete_tag(feature)
     print(f'Тег удален: {feature}')
     print('Схема изменилась. Запусти программу снова.')
     raise SystemExit

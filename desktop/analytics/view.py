@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from candidates.service import get_pool_genre_count_rows
-from dataset.score_analytics import build_score_analytics
+from dataset import service
 
 from desktop.analytics.constants import (
     ANALYTICS_COMPLETENESS_BOTTOM_SPACING,
@@ -207,7 +207,7 @@ class AnalyticsView(
             self.update_entries(self._entries_provider())
 
     def update_entries(self, entries: list[tuple[str, dict, dict]]) -> None:
-        analytics = build_score_analytics(entries_to_records(entries), entries=entries)
+        analytics = service.build_score_analytics(entries_to_records(entries), entries=entries)
         self._clear_plotly_html_files()
         self._fill_summary(analytics["summary"])
         self._fill_completeness(analytics["dataset_completeness"])

@@ -475,7 +475,7 @@ def test_save_watched_user_score_uses_update_pipeline(monkeypatch) -> None:
         calls.append((title, patch, source_name))
         return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
 
-    monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
+    monkeypatch.setattr("dataset.service.update_dataset_record", fake_update)
 
     result = save_watched_user_score("Dataset Key", 8.5)
 
@@ -493,7 +493,7 @@ def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch)
     def fake_update(title, patch, source_name=""):
         return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
 
-    monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
+    monkeypatch.setattr("dataset.service.update_dataset_record", fake_update)
     monkeypatch.setattr("candidates.repositories.pool_repository.save_candidate_pool", fail)
 
     result = save_watched_user_score("Dataset Key", 8.5)
@@ -1253,7 +1253,7 @@ def test_execute_watched_delete_delegates_to_service(monkeypatch) -> None:
         calls.append(dataset_key)
         return {"ok": True, "dataset_key": dataset_key}
 
-    monkeypatch.setattr("desktop.watched.delete.delete_watched_record", fake_delete)
+    monkeypatch.setattr("desktop.watched.delete.service.delete_watched_record", fake_delete)
     result = execute_watched_delete("Alpha")
     assert calls == ["Alpha"]
     assert result["ok"] is True

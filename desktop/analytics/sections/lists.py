@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from dataset.score_analytics import (
-    IMDB_DELTA_LIST_PREVIEW_LIMIT,
-    format_imdb_delta_line,
-    format_rating_gap_line,
-    format_suspicious_rating_line,
-)
+from dataset import service
 
 from desktop.analytics.constants import (
     ANALYTICS_DENSE_ROW_PADDING_X,
@@ -42,11 +37,11 @@ class AnalyticsListsMixin:
             )
             return
 
-        lines = [format_imdb_delta_line(row) for row in rows]
+        lines = [service.format_imdb_delta_line(row) for row in rows]
         if self._imdb_delta_expanded:
             visible_lines = lines
         else:
-            visible_lines = lines[:IMDB_DELTA_LIST_PREVIEW_LIMIT]
+            visible_lines = lines[:service.IMDB_DELTA_LIST_PREVIEW_LIMIT]
 
         for line in visible_lines:
             self._imdb_delta_layout.addWidget(self._make_insight_line(line))
@@ -59,7 +54,7 @@ class AnalyticsListsMixin:
                     self._expand_imdb_delta_list,
                 )
             )
-        elif self._imdb_delta_expanded and len(lines) > IMDB_DELTA_LIST_PREVIEW_LIMIT:
+        elif self._imdb_delta_expanded and len(lines) > service.IMDB_DELTA_LIST_PREVIEW_LIMIT:
             self._imdb_delta_layout.addWidget(
                 self._make_list_expand_button("Свернуть", self._collapse_imdb_delta_list)
             )
@@ -81,7 +76,7 @@ class AnalyticsListsMixin:
     def _fill_rating_higher(self, rows: list[dict], extra_count: int) -> None:
         self._fill_text_list(
             self._rating_higher_layout,
-            [format_rating_gap_line(row) for row in rows],
+            [service.format_rating_gap_line(row) for row in rows],
             empty_text="Нет тайтлов, где ваша оценка сильно выше IMDb.",
             extra_count=extra_count,
         )
@@ -89,7 +84,7 @@ class AnalyticsListsMixin:
     def _fill_rating_lower(self, rows: list[dict], extra_count: int) -> None:
         self._fill_text_list(
             self._rating_lower_layout,
-            [format_rating_gap_line(row) for row in rows],
+            [service.format_rating_gap_line(row) for row in rows],
             empty_text="Нет тайтлов, где ваша оценка сильно ниже IMDb.",
             extra_count=extra_count,
         )
@@ -97,7 +92,7 @@ class AnalyticsListsMixin:
     def _fill_suspicious(self, rows: list[dict], extra_count: int) -> None:
         self._fill_text_list(
             self._suspicious_layout,
-            [format_suspicious_rating_line(row) for row in rows],
+            [service.format_suspicious_rating_line(row) for row in rows],
             empty_text="Подозрительных оценок не найдено.",
             extra_count=extra_count,
         )

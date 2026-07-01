@@ -10,18 +10,13 @@ from candidates.models import genre_schema
 from candidates import service as candidate_service
 from candidates.sources.tmdb import country_options as tmdb_country_options
 from candidates.sources.tmdb import genre_options as tmdb_genre_options
-from dataset import dataset_stats
-from dataset import delete_record as dataset_delete_record
-from dataset import genre_import
-from dataset import genre_stats
+from dataset import service
 from apis import imdb_sql as sql_search
-from dataset import title_resolve
 from posters.download_images import PREVIEW_BATCH_SIZE, PREVIEW_BULK_DELAY_SECONDS, PREVIEW_DOWNLOAD_SIZE
 from ui.console import candidate_pool_ui
 from ui.console import request
 from ui.console import title_presenters
 from storage import data as storage_data
-from dataset import storage_movie
 from ui.console import ui
 from common import valid
 
@@ -55,7 +50,7 @@ def request_object() -> None:
         return
 
     movie_request = request.request_user_score(defaults)
-    result = storage_movie.add_movie(
+    result = service.add_movie(
         movie_request,
         meta_payload=meta_payload,
         poster_hints=poster_hints,
@@ -133,17 +128,17 @@ def mark_candidate_as_watched() -> None:
     candidate = candidates[int(selected_index) - 1]
 
     print("")
-    transfer_payload = title_resolve.build_candidate_transfer_payload(candidate)
+    transfer_payload = service.build_candidate_transfer_payload(candidate)
     defaults = transfer_payload["defaults"]
     meta_payload = transfer_payload["meta_payload"]
     if candidate_service.is_pool_candidate_incomplete(candidate):
         print("Кандидат неполный: нет KP/IMDb данных.")
         print("Можно продолжить вручную, но проверь raw_scores.\n")
     print_candidate_genre_transfer_preview(
-        title_resolve.build_candidate_genre_transfer_preview(candidate)
+        service.build_candidate_genre_transfer_preview(candidate)
     )
     movie_request = request.request_user_score(defaults)
-    result = storage_movie.add_movie(
+    result = service.add_movie(
         movie_request,
         meta_payload=meta_payload,
         pool_candidate=candidate,
@@ -155,7 +150,7 @@ def mark_candidate_as_watched() -> None:
 def show_data_info():
     """Показывает сводку по датасету."""
     data = storage_data.load_dataset()
-    for line in dataset_stats.build_dataset_info_lines(data):
+    for line in service.build_dataset_info_lines(data):
         print(line)
 
 
@@ -199,7 +194,7 @@ def delete_watched_record() -> None:
         print("Поиск отменён: пустой запрос.")
         return
 
-    matches = dataset_delete_record.search_watched_records_by_query(query, data=data)
+    matches = service.search_watched_records_by_query(query, data=data)
     if len(matches) == 0:
         print("Запись не найдена.")
         return
@@ -224,22 +219,22 @@ def delete_watched_record() -> None:
             selected = matches[choice - 1]
             break
 
-    preview = dataset_delete_record.build_watched_delete_preview(selected["dataset_key"], data=data)
+    preview = service.build_watched_delete_preview(selected["dataset_key"], data=data)
     if preview is None:
         print("Запись не найдена.")
         return
 
     print()
-    print(dataset_delete_record.format_watched_delete_preview(preview))
+    print(service.format_watched_delete_preview(preview))
     print()
     confirmation = input("Введите DELETE для удаления: ").strip()
     if confirmation != "DELETE":
         print("Удаление отменено.")
         return
 
-    result = dataset_delete_record.delete_watched_record(selected["dataset_key"])
+    result = service.delete_watched_record(selected["dataset_key"])
     print()
-    print(dataset_delete_record.format_watched_delete_report(result))
+    print(service.format_watched_delete_report(result))
     if result.get("ok") is False:
         print("Данные не изменены.")
 
@@ -247,7 +242,7 @@ def delete_watched_record() -> None:
 def load_genre_markup():
     """Загружает жанровую разметку для текущего датасета с подтверждением."""
     ui.clean_terminal()
-    result = genre_import.apply_genre_markup()
+    result = service.apply_genre_markup()
     print(f"\nОбработано записей: {result['total']}")
     print(f"Подтверждено: {result['updated']}")
     print(f"Пропущено: {result['skipped']}")
@@ -261,14 +256,14 @@ def show_api_features():
         text='Название сериала >> ',
         funcs_list=[valid.is_correct_title]
     )
-    result = title_resolve.fetch_series_raw(title, "Россия")
+    result = service.fetch_series_raw(title, "Россия")
 
     if result["ok"] is False:
         print(f'Сериал не найден в списке API: {result["details"]}')
         return
 
     print('\nСериал найден в списке API.\n')
-    for line in title_resolve.format_series_lines(result["data"]):
+    for line in service.format_series_lines(result["data"]):
         print(line)
 
 
@@ -434,7 +429,7 @@ def diagnose_unresolved_watched_tmdb_metadata() -> None:
 def show_dataset_genres() -> None:
     """Показывает все жанры текущего датасета через API."""
     ui.clean_terminal()
-    genre_stats.show_dataset_genres()
+    service.show_dataset_genres()
 
 
 def collect_candidate_pool() -> None:

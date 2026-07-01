@@ -3,9 +3,8 @@
 from functools import partial
 
 from config import constant
-from dataset import excel_work
+from dataset import service
 from storage import files as storage_files
-from dataset import storage_movie
 from candidates import service as candidate_service
 from ui.console import backup_menu
 from ui.console import interface_funcs
@@ -29,10 +28,10 @@ def open_data_menu():
         if command == "0":
             return
         if command == "1":
-            if excel_work.export_dataset_to_excel(overwrite=True):
+            if service.export_dataset_to_excel(overwrite=True):
                 storage_files.open_file(constant.EDIT_EXCEL)
         elif command == "2":
-            excel_work.replace_dataset_from_excel()
+            service.replace_dataset_from_excel()
         elif command == "3":
             interface_funcs.request_object()
         elif command == "4":

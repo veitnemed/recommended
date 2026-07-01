@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from dataset.add_title_service import AddTitleResolveBundle, resolve_title_for_add
+from dataset import service
 
 
 class AddTitleResolveWorker(QThread):
@@ -21,7 +21,7 @@ class AddTitleResolveWorker(QThread):
 
     def run(self) -> None:
         try:
-            bundle = resolve_title_for_add(
+            bundle = service.resolve_title_for_add(
                 self._title,
                 self._country,
                 on_progress=self._on_progress,

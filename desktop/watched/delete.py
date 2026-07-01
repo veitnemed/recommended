@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataset.delete_record import build_watched_delete_preview, delete_watched_record
+from dataset import service
 from desktop.shared.detail.presenters import format_user_score_display
 
 DELETE_CONFIRMATION_TEXT = "DELETE"
@@ -15,7 +15,7 @@ def is_delete_confirmation_valid(text: str) -> bool:
 
 def load_delete_preview(dataset_key: str, data: dict | None = None) -> dict | None:
     """Build read-only delete preview for a watched dataset key."""
-    return build_watched_delete_preview(dataset_key, data=data)
+    return service.build_watched_delete_preview(dataset_key, data=data)
 
 
 def format_delete_preview_lines(preview: dict) -> list[str]:
@@ -46,7 +46,7 @@ def format_delete_preview_lines(preview: dict) -> list[str]:
 
 def execute_watched_delete(dataset_key: str) -> dict:
     """Delete one watched record through the existing safe delete service."""
-    return delete_watched_record(dataset_key)
+    return service.delete_watched_record(dataset_key)
 
 
 def format_delete_status_message(result: dict) -> str:

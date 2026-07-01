@@ -6,7 +6,7 @@ from config import constant
 from config import scheme
 from common import valid
 from storage import data as storage_data
-from dataset import title_resolve
+from dataset import service
 from ui.console import title_presenters
 from candidates.sources.tmdb import country_options as tmdb_country_options
 
@@ -174,7 +174,7 @@ def choose_genre_values_by_numbers(default_values: dict | None = None) -> dict:
 
 def confirm_or_edit_api_genres(series: dict) -> list:
     """Показывает жанры из API и дает принять или изменить их."""
-    genres = title_resolve.extract_api_genres(series)
+    genres = service.extract_api_genres(series)
     genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
 
     print(f"Краткое описание: {short_text(series.get('description'), 80)}")
@@ -183,7 +183,7 @@ def confirm_or_edit_api_genres(series: dict) -> list:
     if answer in ("yes", "y", "да"):
         return genres
 
-    known_genres, unknown_genres = title_resolve.split_known_genres(genres)
+    known_genres, unknown_genres = service.split_known_genres(genres)
     if len(unknown_genres) > 0:
         print(f"Как подсказка будут проигнорированы неизвестные жанры: {', '.join(unknown_genres)}")
     return choose_genre_names_by_numbers(
@@ -196,8 +196,8 @@ def confirm_or_edit_api_genres(series: dict) -> list:
 
 def confirm_or_edit_dataset_genres(series: dict) -> list:
     """Показывает жанры для dataset без автодобавления новых feature."""
-    genres = title_resolve.extract_api_genres(series)
-    known_genres, unknown_genres = title_resolve.split_known_genres(genres)
+    genres = service.extract_api_genres(series)
+    known_genres, unknown_genres = service.split_known_genres(genres)
     genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
     known_line = ", ".join(known_genres) if len(known_genres) > 0 else "нет"
 
@@ -223,8 +223,8 @@ def confirm_or_edit_dataset_genres(series: dict) -> list:
 
 def build_manual_defaults(input_title: str, base_defaults: dict | None = None) -> dict:
     """Собирает минимальные defaults для ручного добавления без SQL/API."""
-    defaults = title_resolve.merge_defaults(
-        title_resolve.build_empty_add_defaults(input_title),
+    defaults = service.merge_defaults(
+        service.build_empty_add_defaults(input_title),
         base_defaults or {},
     )
     defaults.setdefault(scheme.MAIN_INFO, {})["title"] = (
@@ -318,9 +318,9 @@ def resolve_title_for_add(
     confirm_genres: bool = False,
 ) -> tuple[dict | None, dict | None, dict | None]:
     """Ищет объект через SQL, затем обогащает через API и собирает defaults."""
-    resolved = title_resolve.resolve_title_data_for_add(title, country)
-    meta_payload = title_resolve.build_add_meta_payload(resolved)
-    poster_hints = title_resolve.build_poster_hints_from_resolve(resolved)
+    resolved = service.resolve_title_data_for_add(title, country)
+    meta_payload = service.build_add_meta_payload(resolved)
+    poster_hints = service.build_poster_hints_from_resolve(resolved)
     sql_data = resolved["sql_data"]
     api_data = resolved["api_data"]
 
@@ -332,11 +332,11 @@ def resolve_title_for_add(
     api_defaults = {}
     if api_data is not None:
         title_presenters.print_api_add_preview(api_data)
-        api_genres = title_resolve.extract_api_genres(api_data)
+        api_genres = service.extract_api_genres(api_data)
         if confirm_genres:
             print("")
             api_genres = confirm_or_edit_dataset_genres(api_data)
-        api_defaults = title_resolve.build_api_defaults(api_data, api_genres)
+        api_defaults = service.build_api_defaults(api_data, api_genres)
     elif resolved["api_error"] is not None:
         error = resolved["api_error"]
         print(f"\nAPI не обогатил объект: {error.get('details') or error.get('error')}")
@@ -391,7 +391,7 @@ def show_score_help(feature: str) -> None:
 
 def request_user_score(defaults: dict | None = None) -> dict:
     """Build add payload from resolved defaults; user may edit only user_score."""
-    from dataset.add_title_service import build_movie_record_from_defaults
+    from dataset import service
 
     defaults = defaults or {}
     main_info = defaults.get(scheme.MAIN_INFO, {})
@@ -411,7 +411,7 @@ def request_user_score(defaults: dict | None = None) -> dict:
         default_value=default_score,
     )
     user_score = valid.parse_float(answer)
-    return build_movie_record_from_defaults(defaults, user_score)
+    return service.build_movie_record_from_defaults(defaults, user_score)
 
 
 def request_all_scores(defaults: dict = None) -> dict:

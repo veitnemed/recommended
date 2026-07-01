@@ -28,9 +28,9 @@ def build_user_score_update_payload(user_score: float) -> dict:
 
 def save_watched_user_score(dataset_key: str, user_score: float):
     """Save user_score for a watched record via the dataset update pipeline."""
-    from dataset.dataset_records import update_dataset_record
+    from dataset import service
 
-    return update_dataset_record(
+    return service.update_dataset_record(
         dataset_key,
         build_user_score_update_payload(user_score),
         source_name="desktop_gui",

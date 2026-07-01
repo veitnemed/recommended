@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataset.score_analytics import summarize_dataset_completeness
+from dataset import service
 
 from desktop.analytics.constants import (
     ANALYTICS_SUMMARY_CARD_PADDING,
@@ -75,7 +75,7 @@ class AnalyticsSummaryMixin:
         return frame
 
     def _fill_completeness(self, completeness: dict) -> None:
-        summary = summarize_dataset_completeness(completeness)
+        summary = service.summarize_dataset_completeness(completeness)
         self._completeness_headline.setText(summary["headline_text"])
         self._completeness_subline.setText(summary["subline_text"])
 

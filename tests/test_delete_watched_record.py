@@ -236,17 +236,17 @@ def test_delete_watched_record_ui_cancelled_without_delete(monkeypatch) -> None:
 
     monkeypatch.setattr(interface_funcs.storage_data, "load_dataset", lambda: dataset)
     monkeypatch.setattr(
-        interface_funcs.dataset_delete_record,
+        interface_funcs.service,
         "search_watched_records_by_query",
         lambda query, data=None: [{"dataset_key": "Alpha", "title": "Alpha", "year": 2020, "user_score": 8.0}],
     )
     monkeypatch.setattr(
-        interface_funcs.dataset_delete_record,
+        interface_funcs.service,
         "build_watched_delete_preview",
         lambda dataset_key, data=None: {"title": "Alpha", "year": 2020, "user_score": 8.0, "has_meta": False, "has_poster_cache": False},
     )
     monkeypatch.setattr(
-        interface_funcs.dataset_delete_record,
+        interface_funcs.service,
         "format_watched_delete_preview",
         lambda preview: "preview",
     )
@@ -255,7 +255,7 @@ def test_delete_watched_record_ui_cancelled_without_delete(monkeypatch) -> None:
         delete_called["value"] = True
         return {"ok": True}
 
-    monkeypatch.setattr(interface_funcs.dataset_delete_record, "delete_watched_record", fake_delete)
+    monkeypatch.setattr(interface_funcs.service, "delete_watched_record", fake_delete)
 
     inputs = iter(["Alpha", "no"])
     monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))

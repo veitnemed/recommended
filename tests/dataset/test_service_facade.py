@@ -1,5 +1,7 @@
 """Tests for stats summary, analytics split, and service facade."""
 
+import importlib
+
 
 def test_dataset_stats_wrapper_reexports_summary() -> None:
     from dataset.dataset_stats import get_dataset_stats
@@ -25,3 +27,13 @@ def test_service_facade_exports_core_operations() -> None:
     assert hasattr(service, "save_add_title_record")
     assert hasattr(service, "build_score_analytics")
     assert hasattr(service, "get_dataset_stats")
+    assert hasattr(service, "export_dataset_to_excel")
+    assert hasattr(service, "apply_genre_markup")
+    assert hasattr(service, "fetch_series_raw")
+
+
+def test_dataset_package_exports_service() -> None:
+    import dataset
+
+    assert hasattr(dataset, "service")
+    assert dataset.service is importlib.import_module("dataset.service")
