@@ -356,9 +356,14 @@ def build_summary_lines(result: dict[str, Any]) -> list[str]:
     """Возвращает строки итогового отчёта (печать выполняет UI/CLI)."""
     stats = result["stats"]
     lines = [
+        f"Enrichment mode: {stats.get('enrichment_mode', 'full')}",
         f"Найдено через TMDb Discover: {stats['discover_total']}",
         f"Удалено дублей: {stats['duplicates_removed']}",
         f"Пропущено уже просмотренных: {stats['watched_skipped']}",
+        f"Пропущено уже в pool по TMDb ID: {stats.get('existing_pool_skipped_tmdb_id', 0)}",
+        f"Пропущено уже в pool по title/year: {stats.get('existing_pool_skipped_title_year', 0)}",
+        f"Новых перед TMDb Details: {stats.get('novel_before_details', 0)}",
+        f"Novelty rate перед Details: {stats.get('novelty_rate_before_details', 0)}",
         f"Запрошено TMDb Details: {stats['details_requested']}",
         f"TMDb Details ошибок сети: {stats.get('tmdb_details_errors', 0)}",
         f"TMDb Details пропущено после ошибок: {stats.get('tmdb_details_skipped_after_errors', 0)}",
@@ -372,6 +377,7 @@ def build_summary_lines(result: dict[str, Any]) -> list[str]:
         f"KP API ошибок: {stats['kp_api_errors']}",
         f"KP API пропущено после ошибок: {stats.get('kp_api_skipped_after_errors', 0)}",
         f"KP API пропущено из-за кэша: {stats['kp_api_skipped_cache']}",
+        f"KP API пропущено вне top-N: {stats.get('kp_api_skipped_not_top', 0)}",
         f"KP ожидает добора из-за лимита: {stats['kp_pending_limit']}",
         f"Неполных кандидатов по KP: {stats['kp_incomplete_candidates']}",
         f"Полностью обогащённых кандидатов: {stats['complete_candidates']}",

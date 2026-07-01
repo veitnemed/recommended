@@ -309,6 +309,9 @@ def build_tmdb_candidate_pool(
     force_refresh: bool = False,
     db_path=None,
     kp_api_limit: int | None = None,
+    skip_existing_pool: bool = False,
+    enrichment_mode: str = "full",
+    kp_top_limit: int | None = None,
 ) -> dict:
     """Builds TMDb candidate snapshot via existing discover/details path."""
     build_kwargs = {
@@ -325,6 +328,9 @@ def build_tmdb_candidate_pool(
         "without_genres": without_genres,
         "force_refresh": force_refresh,
         "kp_api_limit": kp_api_limit,
+        "skip_existing_pool": skip_existing_pool,
+        "enrichment_mode": enrichment_mode,
+        "kp_top_limit": kp_top_limit,
     }
     if db_path is not None:
         build_kwargs["db_path"] = db_path

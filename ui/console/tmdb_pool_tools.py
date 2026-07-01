@@ -108,6 +108,9 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     stats = result.get("stats") or {}
     discover_filters = stats.get("discover_filters") or {}
     print("\nСтатистика TMDb candidate_pool:")
+    print(f"Enrichment mode: {stats.get('enrichment_mode', 'full')}")
+    if stats.get("kp_top_limit") is not None:
+        print(f"KP top limit: {stats.get('kp_top_limit')}")
     print("TMDb Discover filters:")
     print(f"Минимальный год: {discover_filters.get('year_min') if discover_filters.get('year_min') is not None else 'не важно'}")
     print(f"Максимальный год: {discover_filters.get('year_max') if discover_filters.get('year_max') is not None else 'не важно'}")
@@ -118,6 +121,10 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print(f"Найдено через TMDb Discover: {stats.get('discover_total', 0)}")
     print(f"Удалено дублей: {stats.get('duplicates_removed', 0)}")
     print(f"Пропущено уже просмотренных: {stats.get('watched_skipped', 0)}")
+    print(f"Пропущено уже в pool по TMDb ID: {stats.get('existing_pool_skipped_tmdb_id', 0)}")
+    print(f"Пропущено уже в pool по title/year: {stats.get('existing_pool_skipped_title_year', 0)}")
+    print(f"Новых перед TMDb Details: {stats.get('novel_before_details', 0)}")
+    print(f"Novelty rate перед Details: {stats.get('novelty_rate_before_details', 0)}")
     print(f"Запрошено TMDb Details: {stats.get('details_requested', 0)}")
     print(f"TMDb Details ошибок сети: {stats.get('tmdb_details_errors', 0)}")
     print(f"TMDb Details пропущено после ошибок: {stats.get('tmdb_details_skipped_after_errors', 0)}")
@@ -131,6 +138,7 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print(f"KP API ошибок: {stats.get('kp_api_errors', 0)}")
     print(f"KP API пропущено после ошибок: {stats.get('kp_api_skipped_after_errors', 0)}")
     print(f"KP API пропущено из-за кэша: {stats.get('kp_api_skipped_cache', 0)}")
+    print(f"KP API пропущено вне top-N: {stats.get('kp_api_skipped_not_top', 0)}")
     print(f"KP ожидает добора из-за лимита: {stats.get('kp_pending_limit', 0)}")
     print(f"Неполных кандидатов по KP: {stats.get('kp_incomplete_candidates', 0)}")
     print(f"Полностью обогащённых кандидатов: {stats.get('complete_candidates', 0)}")
@@ -145,6 +153,36 @@ def _tmdb_mode_label(mode: str) -> str:
         "hidden_gems": "поиск по недооценённым",
     }
     return labels.get(mode, mode)
+
+
+def _input_enrichment_mode(input_func=input, output_func=print) -> tuple[str, int | None]:
+    output_func("\nРежим обогащения:")
+    output_func(" 1 >> Full: TMDb + IMDb SQL + KP API")
+    output_func(" 2 >> Fast: только TMDb Discover + Details")
+    output_func(" 3 >> KP cache: TMDb + локальный KP cache")
+    output_func(" 4 >> KP top-N: TMDb, затем KP API только для top-N")
+    while True:
+        answer = input_func("Выбор [1] >> ").strip()
+        if answer in {"", "1"}:
+            return "full", None
+        if answer == "2":
+            return "fast", None
+        if answer == "3":
+            return "kp_cache", None
+        if answer == "4":
+            limit_answer = input_func("Сколько top-кандидатов отправить в KP API [50] >> ").strip()
+            return "kp_top", _parse_bounded_int(limit_answer, default=50, min_value=0, max_value=500)
+        output_func("Выберите 1, 2, 3 или 4.")
+
+
+def _enrichment_mode_label(enrichment_mode: str) -> str:
+    labels = {
+        "full": "Full: TMDb + IMDb SQL + KP API",
+        "fast": "Fast: только TMDb",
+        "kp_cache": "TMDb + локальный KP cache",
+        "kp_top": "TMDb + KP API только для top-N",
+    }
+    return labels.get(enrichment_mode, enrichment_mode)
 
 
 def _parse_tmdb_genre_indexes(value: str, options: list[dict] | None = None) -> list[int] | None:
@@ -362,6 +400,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
     min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
     with_genres, without_genres = request_tmdb_discover_genre_filters(input_func=input, output_func=print)
+    enrichment_mode, kp_top_limit = _input_enrichment_mode(input_func=input, output_func=print)
     criteria_name = COMMON_POOL_CRITERIA_NAME
 
     print("\nБудет запущен TMDb candidate_pool v1:\n")
@@ -378,7 +417,9 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     print(f"Минимум голосов TMDb: {min_tmdb_votes if min_tmdb_votes is not None else 'не важно'}")
     print(f"Include жанры (TMDb): {tmdb_genre_options.describe_filter_value(with_genres)}")
     print(f"Exclude жанры (TMDb): {tmdb_genre_options.describe_filter_value(without_genres)}")
-    print("KP API: включён после локального KP cache, при ошибке сбор продолжается без KP.")
+    print(f"Обогащение: {_enrichment_mode_label(enrichment_mode)}")
+    if kp_top_limit is not None:
+        print(f"KP top-N limit: {kp_top_limit}")
     if is_test_run:
         print("\nПлан тестового режима:")
         print(f"Лимит TMDb Details: {details_limit}")
@@ -390,7 +431,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
         print("Операция отменена.")
         return
 
-    if Path(sql_search.DEFAULT_DB_PATH).is_file() is False:
+    if enrichment_mode == "full" and Path(sql_search.DEFAULT_DB_PATH).is_file() is False:
         print("Ошибка: не найдена локальная IMDb SQLite база. Проверь путь в настройках.")
         return
 
@@ -407,6 +448,8 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
             min_tmdb_votes=min_tmdb_votes,
             with_genres=with_genres,
             without_genres=without_genres,
+            enrichment_mode=enrichment_mode,
+            kp_top_limit=kp_top_limit,
         )
         if is_test_run:
             print("Сохранение test candidate_pool: Ожидание")

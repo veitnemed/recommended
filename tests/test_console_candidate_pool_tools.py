@@ -142,6 +142,101 @@ def test_tmdb_pool_menus_route_to_scenario_module() -> None:
     assert "tmdb_pool_tools.show_tmdb_dataset_genre_diagnostics" not in cleanup_source
 
 
+def test_tmdb_flow_passes_fast_enrichment_mode(monkeypatch, capsys) -> None:
+    answers = iter([
+        "1",
+        "1",
+        "1",
+        "1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "2",
+        "y",
+        "n",
+    ])
+    build_kwargs = {}
+
+    def fake_build(**kwargs):
+        build_kwargs.update(kwargs)
+        return {
+            "stats": {
+                "discover_filters": {},
+                "discover_total": 0,
+                "duplicates_removed": 0,
+                "watched_skipped": 0,
+                "details_requested": 0,
+                "enrichment_mode": kwargs.get("enrichment_mode"),
+            },
+            "candidates": [],
+        }
+
+    monkeypatch.setattr(tmdb_pool_tools.ui, "clean_terminal", lambda: None)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    monkeypatch.setattr(tmdb_pool_tools.candidate_service, "build_tmdb_candidate_pool", fake_build)
+    monkeypatch.setattr(
+        tmdb_pool_tools.candidate_service,
+        "save_tmdb_build_result",
+        lambda _result, is_test_run=False: {
+            "json_path": type("P", (), {"with_name": lambda self, _name: self, "is_file": lambda self: False})(),
+            "csv_path": "out.csv",
+        },
+    )
+    monkeypatch.setattr(tmdb_pool_tools, "maybe_auto_import_tmdb_result", lambda *_args, **_kwargs: None)
+
+    tmdb_pool_tools.run_tmdb_candidate_pool_flow()
+
+    assert build_kwargs["enrichment_mode"] == "fast"
+    assert build_kwargs["kp_top_limit"] is None
+    output = capsys.readouterr().out
+    assert "Fast: только TMDb" in output
+
+
+def test_tmdb_flow_passes_kp_top_limit(monkeypatch) -> None:
+    answers = iter([
+        "1",
+        "1",
+        "1",
+        "1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "4",
+        "7",
+        "y",
+        "n",
+    ])
+    build_kwargs = {}
+
+    monkeypatch.setattr(tmdb_pool_tools.ui, "clean_terminal", lambda: None)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    monkeypatch.setattr(
+        tmdb_pool_tools.candidate_service,
+        "build_tmdb_candidate_pool",
+        lambda **kwargs: build_kwargs.update(kwargs) or {"stats": {"discover_filters": {}}, "candidates": []},
+    )
+    monkeypatch.setattr(
+        tmdb_pool_tools.candidate_service,
+        "save_tmdb_build_result",
+        lambda _result, is_test_run=False: {
+            "json_path": type("P", (), {"with_name": lambda self, _name: self, "is_file": lambda self: False})(),
+            "csv_path": "out.csv",
+        },
+    )
+    monkeypatch.setattr(tmdb_pool_tools, "maybe_auto_import_tmdb_result", lambda *_args, **_kwargs: None)
+
+    tmdb_pool_tools.run_tmdb_candidate_pool_flow()
+
+    assert build_kwargs["enrichment_mode"] == "kp_top"
+    assert build_kwargs["kp_top_limit"] == 7
+
+
 def test_global_menu_is_maintenance_first() -> None:
     menu_source = inspect.getsource(ui.show_global_menu)
     pool_screen_source = inspect.getsource(ui.show_candidate_pool_menu)
