@@ -4,13 +4,28 @@ from __future__ import annotations
 
 KP_RETRY_BATCH_SIZE = 10
 
+POOL_KPI_ICONS = {
+    "Всего": "▦",
+    "Готовые": "✓",
+    "Неполные": "…",
+    "Дубли": "≈",
+}
 
-def format_pool_stats_block(stats_view: dict) -> list[str]:
-    lines = list(stats_view.get("lines") or [])
-    summary = str(stats_view.get("summary") or "").strip()
-    if summary and summary not in lines:
-        lines.append(summary)
-    return lines
+
+def format_pool_kpi_items(stats: dict) -> list[tuple[str, str, str]]:
+    """Return (label, value, icon) tuples for pool KPI tiles."""
+    unique = int(stats.get("unique_total", stats.get("storage_total", 0)) or 0)
+    ready = int(stats.get("ready_total", 0) or 0)
+    incomplete = int(stats.get("incomplete_total", 0) or 0)
+    duplicates = int(stats.get("duplicate_entries", 0) or 0)
+    duplicates += int(stats.get("similar_duplicate_total", 0) or 0)
+    duplicates += int(stats.get("cross_year_duplicate_total", 0) or 0)
+    return [
+        ("Всего", str(unique), POOL_KPI_ICONS["Всего"]),
+        ("Готовые", str(ready), POOL_KPI_ICONS["Готовые"]),
+        ("Неполные", str(incomplete), POOL_KPI_ICONS["Неполные"]),
+        ("Дубли", str(duplicates), POOL_KPI_ICONS["Дубли"]),
+    ]
 
 
 def format_dedupe_preview_lines(title_view: dict, suspicious_view: dict) -> list[str]:
@@ -19,7 +34,7 @@ def format_dedupe_preview_lines(title_view: dict, suspicious_view: dict) -> list
     group_count = int(summary.get("group_count") or 0)
     extra_entries = int(summary.get("extra_entries") or 0)
     if group_count > 0:
-        lines.append(f"Групп дублей по названию: {group_count} · лишних записей: {extra_entries}")
+        lines.append(f"Групп по названию: {group_count} · лишних записей: {extra_entries}")
     else:
         lines.append("Групп дублей по названию не найдено.")
 
@@ -32,7 +47,7 @@ def format_dedupe_preview_lines(title_view: dict, suspicious_view: dict) -> list
 def format_retry_kp_preview_line(retry_view: dict) -> str:
     count = int(retry_view.get("incomplete_count") or 0)
     if count <= 0:
-        return "Неполных карточек для KP retry нет."
+        return "Неполных карточек для добора KP нет."
     batch = min(KP_RETRY_BATCH_SIZE, count)
     return f"Неполных карточек: {count}. Следующий запуск обработает до {batch}."
 
@@ -75,21 +90,22 @@ def format_tmdb_files_empty_hint() -> str:
     return "TMDb result JSON в data/exports/candidate_pool не найдены."
 
 
-def format_tmdb_import_preview(preview: dict) -> str:
+def format_tmdb_import_preview(preview: dict, *, include_filename: bool = False) -> str:
     if preview.get("ok") is False:
         error = preview.get("error") or "неизвестная ошибка"
         return f"Не удалось прочитать файл: {error}"
 
-    path = preview.get("result_path")
-    file_name = path.name if hasattr(path, "name") else str(path)
     count = int(preview.get("candidate_count") or 0)
     criteria = str(preview.get("default_criteria_name") or "—")
-    return (
-        f"Файл: {file_name}\n"
-        f"Кандидатов в файле: {count}\n"
-        f"criteria_name: {criteria}\n"
-        "Будет добавлено/обновлено в общий pool после дедупликации."
-    )
+    lines = []
+    if include_filename:
+        path = preview.get("result_path")
+        file_name = path.name if hasattr(path, "name") else str(path)
+        lines.append(f"Файл: {file_name}")
+    lines.append(f"Кандидатов в файле: {count}")
+    lines.append(f"Критерий: {criteria}")
+    lines.append("Записи будут добавлены или обновлены в общем pool после дедупликации.")
+    return "\n".join(lines)
 
 
 def format_tmdb_import_status(import_result: dict) -> str:

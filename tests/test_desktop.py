@@ -1803,6 +1803,10 @@ def test_settings_tools_view_wires_pool_maintenance_actions() -> None:
     assert "QMessageBox" in dedupe_source
     assert "on_pool_changed" in init_source
     assert "get_title_duplicates_view" in inspect.getsource(settings_module.SettingsToolsView.refresh)
+    assert "settingsSection" in init_source
+    assert "settingsMetricCard" in inspect.getsource(settings_module.SettingsToolsView._make_metric_tile)
+    assert "settingsDangerButton" in init_source
+    assert "format_pool_kpi_items" in inspect.getsource(settings_module.SettingsToolsView.refresh)
 
 
 def test_settings_tools_view_wires_tmdb_import() -> None:
