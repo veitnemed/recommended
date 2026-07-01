@@ -81,7 +81,13 @@ desktop/
   theme/
     tokens.py                    # COLOR_*, FONT_*, spacing, radius
     styles/
-      app.py                     # build_app_style
+      app.py                     # build_app_style (composer)
+      shell.py                   # tabs, scrollbars, status bar
+      form_controls.py           # inputs, combos, range sliders
+      lists.py                   # QListWidget base
+      watched_shell.py           # watched sidebar/filters
+      candidates_shell.py        # candidate filters/list
+      chips.py                   # genre/country chip selectors
       dialogs.py                 # score/delete/add-title dialogs
       detail_card.py             # detail card, poster, bar fallbacks
       analytics.py               # build_analytics_style
