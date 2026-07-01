@@ -7,6 +7,7 @@
 ## Быстрый вход
 
 - [README.md](README.md) - пользовательское описание проекта.
+- [LOGICAL_ARCHITECTURE.md](LOGICAL_ARCHITECTURE.md) - логические зоны проекта без физического переноса файлов.
 - [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
 - [REFACTORING_CHECKLIST.md](REFACTORING_CHECKLIST.md) - чеклист безопасного завершения рефакторинга.
 - [DATA_STORAGE_PLAN.md](DATA_STORAGE_PLAN.md) - структура локального хранения данных.
@@ -17,6 +18,16 @@
 - [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
 
 ## Слои
+
+Физически папки остаются как сейчас. Логически проект делится на 4 зоны:
+
+- `UI`: `app/`, `desktop/`, `ui/`, `web/`;
+- `Domain`: `dataset/`, `candidates/`, `posters/`;
+- `Infra`: `apis/`, `storage/`, `config/`, `common/`;
+- `Project`: `tests/`, `docs/`, `scripts/`, `assets/`.
+
+Runtime/legacy-папки `data/`, `datasets/`, `diagnostics/`, `reports/`, `archive/` не считаются архитектурными зонами.
+Подробные правила: [LOGICAL_ARCHITECTURE.md](LOGICAL_ARCHITECTURE.md).
 
 ```text
 common <- config <- storage <- dataset / apis <- candidates <- ui
