@@ -52,3 +52,48 @@ def test_get_pool_stats_view_does_not_write_json(monkeypatch: pytest.MonkeyPatch
 
     assert "stats" in stats_view
     assert after_mtime == before_mtime
+
+
+def test_service_clean_common_pool_duplicates_delegates_without_recursion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    def fake_clean_common_pool_duplicates(*, merge_similar=True, merge_cross_year=True):
+        calls.append((merge_similar, merge_cross_year))
+        return {"ok": True, "removed_total": 0}
+
+    monkeypatch.setattr(
+        candidate_service,
+        "_clean_common_pool_duplicates_impl",
+        fake_clean_common_pool_duplicates,
+    )
+
+    result = candidate_service.clean_common_pool_duplicates(
+        merge_similar=False,
+        merge_cross_year=True,
+    )
+
+    assert result == {"ok": True, "removed_total": 0}
+    assert calls == [(False, True)]
+
+
+def test_service_ensure_common_pool_criteria_delegates_without_recursion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        candidate_service,
+        "_ensure_common_pool_criteria_impl",
+        lambda: ("pool", {"country": "RU"}),
+    )
+
+    assert candidate_service.ensure_common_pool_criteria() == ("pool", {"country": "RU"})
+
+
+def test_service_format_candidate_description_delegates_without_recursion() -> None:
+    description = candidate_service.format_candidate_description(
+        {"description": "A long description"},
+        limit=6,
+    )
+
+    assert description == "A l..."

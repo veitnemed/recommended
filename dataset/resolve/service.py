@@ -14,7 +14,8 @@ ADD_TITLE_RESOLVE_PROGRESS_TOTAL = 7
 
 
 def print_progress_step(source: str, status: str) -> None:
-    print(f"{source}: {status}")
+    """Compatibility no-op: callers should pass ``on_progress`` to receive progress."""
+    del source, status
 
 
 def _report_add_progress(
@@ -26,8 +27,6 @@ def _report_add_progress(
     message = f"{source}: {status}"
     if on_progress is not None:
         on_progress(step, ADD_TITLE_RESOLVE_PROGRESS_TOTAL, message)
-        return
-    print_progress_step(source, status)
 
 
 def resolve_title_data_for_add(

@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QApplication
 
 from desktop.shell.main_window import WatchedMoviesWindow
 from desktop.theme import FONT_FAMILY
+from storage.runtime import ensure_runtime_data_layout
 
 
 def _prepare_webengine() -> None:
@@ -23,6 +24,7 @@ def _prepare_webengine() -> None:
 
 def main() -> None:
     _prepare_webengine()
+    ensure_runtime_data_layout()
     app = QApplication(sys.argv)
     app.setFont(QFont(FONT_FAMILY, 10))
     window = WatchedMoviesWindow()

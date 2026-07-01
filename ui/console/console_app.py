@@ -21,14 +21,16 @@ def run_console_app():
         _data, movies_counter = menu_state.get_menu_state()
         ui.show_global_menu(movies_counter)
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
         if command == "0":
             break
         elif command == "1":
-            global_menu.open_data_menu()
+            global_menu.open_maintenance_menu()
         elif command == "2":
-            global_menu.open_candidate_pool_menu()
+            global_menu.open_watched_menu()
         elif command == "3":
-            global_menu.open_genres_menu()
+            global_menu.open_candidate_pool_menu()
         elif command == "4":
-            global_menu.open_extra_menu()
+            global_menu.open_search_menu()
+        elif command == "5":
+            global_menu.open_reference_menu()

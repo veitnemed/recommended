@@ -97,19 +97,15 @@ def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = Non
     meta = load_meta()
 
     if valid.is_correct_title(title) is False:
-        print('Ошибка добавления в meta! Некорректное название')
         return False
 
     if valid.is_correct_score(str(main_info["user_score"])) is False:
-        print('Ошибка добавления в meta! Некорректное значение user_score')
         return False
 
     if valid.is_correct_year(str(main_info["year"])) is False:
-        print('Ошибка добавления в meta! Некорректный год')
         return False
 
     if valid.is_valid_raw_meta(raw) is False:
-        print('Ошибка добавления в meta! Некорректные raw-данные')
         return False
 
     meta_obj = {}
@@ -149,16 +145,13 @@ def rename_movie_title(old_title: str, new_title: str) -> bool:
     """Безопасно переименовывает запись в dataset и meta."""
     old_exact = find_exact_title(old_title)
     if old_exact is None:
-        print("Ошибка переименования! Старая запись не найдена")
         return False
 
     new_title = str(new_title).strip()
     if valid.is_correct_title(new_title) is False:
-        print("Ошибка переименования! Некорректное новое название")
         return False
 
     if old_exact.strip().lower() != new_title.lower() and is_origin_title(new_title) is False:
-        print("Ошибка переименования! Такое название уже существует")
         return False
 
     dataset = load_dataset()

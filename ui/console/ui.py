@@ -1,130 +1,185 @@
-"""Печатает экраны, заголовки и пункты терминального меню."""
+"""Prints console menu screens and terminal prompts."""
 
 import os
 import sys
 
 
-MENU_WIDTH = 38
+MENU_WIDTH = 42
 
 
 def clean_terminal():
-    """Очищает терминал."""
+    """Clear terminal when stdout is interactive."""
     if sys.stdout.isatty():
-        os.system('cls')
+        os.system("cls")
 
 
 def press_enter():
-    """Ждет нажатия Enter."""
-    input('Enter, чтобы продолжить >>')
+    """Wait for Enter before returning to a menu."""
+    input("Enter, чтобы продолжить >>")
 
 
 def show_menu_title(title: str):
-    """Печатает центрированный заголовок подменю."""
-    print(f'\n{title.center(MENU_WIDTH)}\n')
+    """Print centered submenu title."""
+    print(f"\n{title.center(MENU_WIDTH)}\n")
 
 
 def show_header(movies_counter: int, error: int):
-    """Печатает общий заголовок приложения."""
-    print('======= SERIES LIST =======')
+    """Print common application header."""
+    print("======= SERIES LIST =======")
     if movies_counter == 0:
-        print('Список просмотренного пуст!\n')
+        print("Список просмотренного пуст!\n")
     else:
-        print(' ' * 4, f'Просмотрено записей: {movies_counter}\n')
+        print(" " * 4, f"Просмотрено записей: {movies_counter}\n")
 
 
 def show_global_menu(movies_counter: int, error: int = 0):
-    """Печатает главное меню."""
+    """Print main menu with maintenance as the primary path."""
     show_header(movies_counter, error)
-    print(' 1 >> Просмотренное')
-    print(' 2 >> Поиск сериалов')
-    print(' 3 >> Жанры')
-    print(' 4 >> Дополнительно')
-    print(' 0 >> Выход\n')
+    print(" 1 >> Обслуживание")
+    print(" 2 >> Просмотренное")
+    print(" 3 >> Candidate pool")
+    print(" 4 >> Поиск")
+    print(" 5 >> Справочники")
+    print(" 0 >> Выход\n")
+
+
+def show_maintenance_menu(movies_counter: int, pool_stats_line: str, error: int = 0):
+    """Print maintenance hub menu."""
+    show_header(movies_counter, error)
+    show_menu_title("ОБСЛУЖИВАНИЕ")
+    print(f"{pool_stats_line}\n")
+    print(" 1 >> Состояние проекта")
+    print(" 2 >> Backup / restore")
+    print(" 3 >> Metadata и poster-cache")
+    print(" 4 >> Candidate pool cleanup")
+    print(" 5 >> Диагностика API/cache")
+    print(" 6 >> Проверки перед завершением рефакторинга")
+    print(" 0 >> Главное меню\n")
+
+
+def show_metadata_maintenance_menu():
+    """Print metadata and poster-cache maintenance menu."""
+    show_menu_title("METADATA И POSTER-CACHE")
+    print(" 1 >> Обновить описания и poster-cache для просмотренных")
+    print(" 2 >> Загрузить TMDb metadata для просмотренных")
+    print(" 3 >> Загрузить poster URL из TMDb")
+    print(" 4 >> Скачать poster images локально")
+    print(" 5 >> Диагностика unresolved TMDb metadata")
+    print(" 0 >> Назад\n")
+
+
+def show_maintenance_diagnostics_menu():
+    """Print read-only diagnostics menu."""
+    show_menu_title("ДИАГНОСТИКА")
+    print(" 1 >> Пинг API")
+    print(" 2 >> Просмотр API признаков")
+    print(" 3 >> Показать все жанры датасета")
+    print(" 4 >> Показать TMDb жанры по dataset")
+    print(" 5 >> Диагностика постеров в общем pool")
+    print(" 0 >> Назад\n")
+
+
+def show_watched_menu(movies_counter: int, error: int = 0):
+    """Print watched dataset menu."""
+    show_header(movies_counter, error)
+    show_menu_title("ПРОСМОТРЕННОЕ")
+    print(" 1 >> Показать просмотренное")
+    print(" 2 >> Переименовать запись")
+    print(" 3 >> Удалить просмотренную запись")
+    print(" 4 >> Открыть Excel")
+    print(" 5 >> Загрузить Excel")
+    print(" 6 >> Добавить запись")
+    print(" 0 >> Главное меню\n")
 
 
 def show_data_menu(movies_counter: int, error: int = 0):
-    """Печатает меню данных."""
-    show_header(movies_counter, error)
-    show_menu_title('ПРОСМОТРЕННОЕ')
-    print(' 1 >> Открыть Excel')
-    print(' 2 >> Загрузить Excel')
-    print(' 3 >> Добавить запись')
-    print(' 4 >> Показать просмотренное')
-    print(' 5 >> Данные о датасете')
-    print(' 6 >> Бэкап')
-    print(' 7 >> Переименовать запись')
-    print(' 8 >> Удалить просмотренную запись')
-    print(' 0 >> Главное меню\n')
+    """Compatibility screen for the old watched data menu."""
+    show_watched_menu(movies_counter, error)
 
 
 def show_candidate_pool_menu(movies_counter: int, pool_stats_line: str, error: int = 0):
-    """Печатает меню работы с общим пулом кандидатов."""
+    """Print candidate pool menu with generation moved into a submenu."""
     show_header(movies_counter, error)
-    show_menu_title('ПОИСК СЕРИАЛОВ')
-    print(f'{pool_stats_line}\n')
-    print(' 1 >> Обновить общий pool (TMDb)')
-    print(' 2 >> Посмотреть общий pool')
-    print(' 3 >> Найти сериалы в общем pool')
-    print(' 4 >> Отметить просмотренные из pool')
-    print(' 5 >> Управление pool')
-    print(' 6 >> Диагностика и обслуживание')
-    print(' 0 >> Главное меню\n')
+    show_menu_title("CANDIDATE POOL")
+    print(f"{pool_stats_line}\n")
+    print(" 1 >> Посмотреть общий pool")
+    print(" 2 >> Найти в pool")
+    print(" 3 >> Отметить как просмотренное")
+    print(" 4 >> Обслуживание pool")
+    print(" 5 >> Импорт / сбор pool")
+    print(" 0 >> Главное меню\n")
+
+
+def show_candidate_pool_cleanup_menu():
+    """Print candidate pool maintenance and diagnostics menu."""
+    show_menu_title("ОБСЛУЖИВАНИЕ POOL")
+    print(" 1 >> Статистика и просмотр pool")
+    print(" 2 >> Очистить дубли в pool")
+    print(" 3 >> Удалить из pool тайтлы из датасета")
+    print(" 4 >> Показать подозрительные дубли")
+    print(" 5 >> Cross-year: одно название, разный год")
+    print(" 6 >> Дубли по названию")
+    print(" 7 >> Диагностика постеров в общем pool")
+    print(" 8 >> Скачать preview-постеры candidate pool")
+    print(" 9 >> Добрать KP для неполных кандидатов")
+    print(" 0 >> Назад\n")
+
+
+def show_candidate_pool_import_menu():
+    """Print rare candidate pool build/import menu."""
+    show_menu_title("ИМПОРТ / СБОР POOL")
+    print(" 1 >> Собрать TMDb pool")
+    print(" 2 >> Импортировать TMDb result")
+    print(" 3 >> Собрать pool через KP API (legacy)")
+    print(" 4 >> Defaults фильтров поиска")
+    print(" 0 >> Назад\n")
+
 
 def show_candidate_pool_management_menu():
-    """Печатает подменю управления общим pool."""
-    show_menu_title('УПРАВЛЕНИЕ POOL')
-    print(' 1 >> Очистить общий pool')
-    print(' 2 >> Defaults фильтров поиска')
-    print(' 3 >> Импортировать TMDb result в общий pool')
-    print(' 4 >> Собрать pool через KP API (legacy)')
-    print(' 5 >> Очистить дубли в pool')
-    print(' 6 >> Удалить из pool тайтлы из датасета')
-    print(' 0 >> Назад\n')
+    """Compatibility screen for the old pool management menu."""
+    show_candidate_pool_import_menu()
 
 
 def show_candidate_pool_diagnostics_menu():
-    """Печатает подменю диагностики и обслуживания пула."""
-    show_menu_title('ДИАГНОСТИКА И ОБСЛУЖИВАНИЕ')
-    print(' 1 >> Показать подозрительные дубли')
-    print(' 2 >> Добрать KP для неполных кандидатов')
-    print(' 3 >> Показать TMDb жанры по dataset')
-    print(' 4 >> Диагностика постеров в общем пуле')
-    print(' 5 >> Скачать постеры candidate pool в preview-cache')
-    print(' 6 >> Cross-year: одно название, разный год')
-    print(' 7 >> Дубли по названию')
-    print(' 0 >> Назад\n')
+    """Compatibility screen for the old pool diagnostics menu."""
+    show_candidate_pool_cleanup_menu()
+
+
+def show_search_menu():
+    """Print read-only search menu."""
+    show_menu_title("ПОИСК")
+    print(" 1 >> Поиск в candidate pool")
+    print(" 2 >> Поиск в IMDb SQL")
+    print(" 3 >> Показать жанры датасета")
+    print(" 4 >> Просмотр API признаков")
+    print(" 0 >> Главное меню\n")
+
+
+def show_reference_menu():
+    """Print reference data menu."""
+    show_menu_title("СПРАВОЧНИКИ")
+    print(" 1 >> Жанры dataset")
+    print(" 2 >> Теги")
+    print(" 0 >> Главное меню\n")
 
 
 def show_genres_menu():
-    """Печатает меню жанров."""
-    show_menu_title('ЖАНРЫ')
-    print(' 1 >> Показать жанровые поля dataset')
-    print(' 0 >> Главное меню\n')
+    """Compatibility screen for the old genres menu."""
+    show_menu_title("ЖАНРЫ")
+    print(" 1 >> Показать жанровые поля dataset")
+    print(" 0 >> Главное меню\n")
 
 
 def show_extra_menu(movies_counter: int, error: int = 0):
-    """Печатает дополнительное меню."""
-    show_header(movies_counter, error)
-    show_menu_title('ДОПОЛНИТЕЛЬНО')
-    print(' 1 >> Просмотр API признаков')
-    print(' 2 >> Показать все жанры датасета')
-    print(' 3 >> Поиск в SQL по названию')
-    print(' 4 >> Обновить описания и poster-cache для просмотренных')
-    print(' 5 >> Загрузить poster URL из TMDb (metadata)')
-    print(' 6 >> Скачать poster images локально')
-    print(' 7 >> Загрузить TMDb metadata для просмотренных')
-    print(' 8 >> Диагностика unresolved TMDb metadata')
-    print(' 9 >> Пинг API')
-    print(' 0 >> Главное меню\n')
+    """Compatibility screen for the old extra menu."""
+    show_maintenance_menu(movies_counter, "Candidate pool: см. раздел обслуживания", error)
 
 
 def show_tags_menu():
-    """Печатает меню тегов."""
-    show_menu_title('НАСТРОЙКА ТЕГОВ')
-    print(' 1 >> Показать теги')
-    print(' 2 >> Добавить тег')
-    print(' 3 >> Удалить тег')
-    print(' 4 >> Удалить все теги')
-    print(' 0 >> Назад\n')
-
-
+    """Print tag settings menu."""
+    show_menu_title("НАСТРОЙКА ТЕГОВ")
+    print(" 1 >> Показать теги")
+    print(" 2 >> Добавить тег")
+    print(" 3 >> Удалить тег")
+    print(" 4 >> Удалить все теги")
+    print(" 0 >> Назад\n")

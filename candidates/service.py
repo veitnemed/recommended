@@ -13,7 +13,7 @@ from candidates.pool.dataset_overlap import (
     count_pool_dataset_title_matches,
     purge_dataset_title_matches_from_pool,
 )
-from candidates.pool.dedupe import clean_common_pool_duplicates
+from candidates.pool.dedupe import clean_common_pool_duplicates as _clean_common_pool_duplicates_impl
 from candidates.pool.diagnostics import (
     build_candidate_poster_diagnostics,
     build_title_duplicate_summary,
@@ -38,7 +38,7 @@ from candidates.pool.watched_cleanup import remove_candidate_from_pool
 from candidates.repositories.criteria_repository import (
     build_criteria_label,
     clear_common_pool,
-    ensure_common_pool_criteria,
+    ensure_common_pool_criteria as _ensure_common_pool_criteria_impl,
     load_candidate_criteria,
 )
 from candidates.repositories.pool_repository import load_candidate_pool
@@ -48,7 +48,7 @@ from candidates.sources.tmdb import builder as tmdb_build
 from candidates.sources.tmdb import country_options as tmdb_country_options
 from candidates.sources.tmdb import importer as tmdb_import
 from candidates.views.formatters import (
-    format_candidate_description,
+    format_candidate_description as _format_candidate_description_impl,
     format_pool_stats_lines,
     format_pool_stats_summary,
     format_search_filter_default_lines,
@@ -412,7 +412,7 @@ def clean_common_pool_duplicates(
     merge_cross_year: bool = True,
 ) -> dict:
     """Removes exact, similar, and cross-year duplicates from shared pool via write-path."""
-    return clean_common_pool_duplicates(
+    return _clean_common_pool_duplicates_impl(
         merge_similar=merge_similar,
         merge_cross_year=merge_cross_year,
     )
@@ -560,7 +560,7 @@ def get_common_pool_criteria_view() -> dict:
 
 def ensure_common_pool_criteria() -> tuple[str, dict]:
     """Ensures shared pool criteria entry exists (write-path)."""
-    return ensure_common_pool_criteria()
+    return _ensure_common_pool_criteria_impl()
 
 
 def collect_candidates_legacy(criteria_name: str, criteria: dict) -> dict:
@@ -640,4 +640,4 @@ def hide_candidate(candidate: dict) -> dict:
 
 def format_candidate_description(candidate: dict, limit: int = 200) -> str:
     """Returns truncated candidate description for UI cards."""
-    return format_candidate_description(candidate, limit=limit)
+    return _format_candidate_description_impl(candidate, limit=limit)

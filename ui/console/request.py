@@ -318,7 +318,10 @@ def resolve_title_for_add(
     confirm_genres: bool = False,
 ) -> tuple[dict | None, dict | None, dict | None]:
     """Ищет объект через SQL, затем обогащает через API и собирает defaults."""
-    resolved = service.resolve_title_data_for_add(title, country)
+    def print_progress(_step: int, _total: int, message: str) -> None:
+        print(message)
+
+    resolved = service.resolve_title_data_for_add(title, country, on_progress=print_progress)
     meta_payload = service.build_add_meta_payload(resolved)
     poster_hints = service.build_poster_hints_from_resolve(resolved)
     sql_data = resolved["sql_data"]

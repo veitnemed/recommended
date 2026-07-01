@@ -1,8 +1,8 @@
 import inspect
 
 from apis import tmdb_api
-from ui.console import global_menu
 from ui.console import interface_funcs
+from ui.console import maintenance_menu
 from ui.console import ui
 
 
@@ -51,12 +51,12 @@ def test_ping_external_apis_prints_status(monkeypatch, capsys) -> None:
     assert "Статус: Ошибка" in output
 
 
-def test_extra_menu_has_api_ping_item() -> None:
-    menu_source = inspect.getsource(ui.show_extra_menu)
-    handler_source = inspect.getsource(global_menu.open_extra_menu)
+def test_maintenance_diagnostics_menu_has_api_ping_item() -> None:
+    menu_source = inspect.getsource(ui.show_maintenance_diagnostics_menu)
+    handler_source = inspect.getsource(maintenance_menu.open_maintenance_diagnostics_menu)
     func_source = inspect.getsource(interface_funcs.ping_external_apis)
 
-    assert "9 >> Пинг API" in menu_source
+    assert "1 >> Пинг API" in menu_source
     assert "ping_external_apis" in handler_source
     assert "Kinopoisk API" in func_source
     assert "TMDb API" in func_source

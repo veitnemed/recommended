@@ -140,6 +140,7 @@ py -m pytest
 - [PROJECT_MAP.md](PROJECT_MAP.md) - карта активных модулей.
 - [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
 - [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - целевая архитектура и правила зависимостей.
+- [REFACTORING_CHECKLIST.md](REFACTORING_CHECKLIST.md) - чеклист безопасного завершения структурных правок.
 - [DATA_STORAGE_PLAN.md](DATA_STORAGE_PLAN.md) - структура локального хранения данных.
 - [add_functions.md](add_functions.md) - правила добавления нового функционала.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
