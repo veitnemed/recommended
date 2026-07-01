@@ -1,11 +1,12 @@
 """Central service for adding records to dataset/meta."""
 
-from dataclasses import dataclass
-
 from config import constant
-from common import format_score
 from common import valid
-from storage import data as storage_data
+from dataset.meta.merge import extract_extra_meta
+from dataset.meta.sync import sync_raw_scores_to_meta
+from dataset.models.identity import duplicate_title_exists, find_dataset_title
+from dataset.models.results import AddRecordResult, UpdateRecordResult
+from dataset.records.features import build_computed_scores, build_feature_vector
 from storage.data import add_movies_to_meta, get_meta_obj, load_dataset, load_meta, save_dataset, save_meta
 from storage.normalize import (
     is_valid_genre_tags,
@@ -15,91 +16,6 @@ from storage.normalize import (
     normalize_raw_scores,
     normalize_tags_vibe,
 )
-
-
-@dataclass
-class AddRecordResult:
-    ok: bool
-    title: str | None
-    message: str
-    reason: str | None = None
-
-
-@dataclass
-class UpdateRecordResult:
-    ok: bool
-    title: str | None
-    message: str
-    reason: str | None = None
-    changed_fields: list[str] | None = None
-
-
-def _duplicate_title_exists(data: dict, title: str) -> bool:
-    expected = title.strip().lower()
-    for current_title in data.keys():
-        if current_title.strip().lower() == expected:
-            return True
-    return False
-
-
-def _find_dataset_title(data: dict, title: str) -> str | None:
-    expected = str(title).strip().lower()
-    for current_title in data.keys():
-        if current_title.strip().lower() == expected:
-            return current_title
-    return None
-
-
-def _build_features(computed_scores: dict, tags_vibe: dict, genre_tags: dict) -> dict:
-    features = {
-        constant.BIAS_FEATURE: 1.0
-    }
-    for feature in computed_scores:
-        features[feature] = computed_scores[feature]
-    for feature, value in format_score.tags_to_features(tags_vibe).items():
-        features[feature] = value
-    for feature, value in format_score.tags_to_features(genre_tags, constant.GENRE_SECTION).items():
-        features[feature] = value
-    return features
-
-
-def _find_meta_title(meta: dict, title: str) -> str | None:
-    expected = str(title).strip().lower()
-    for current_title in meta.keys():
-        if current_title.strip().lower() == expected:
-            return current_title
-    return None
-
-
-def _sync_raw_scores_to_meta(title: str, main_info: dict, raw_scores: dict) -> None:
-    meta = load_meta()
-    meta_title = _find_meta_title(meta, title)
-
-    meta_obj = {
-        "main_info": normalize_main_info(main_info),
-        "raw_scores": normalize_raw_scores(raw_scores),
-    }
-    if meta_title is None:
-        meta[title] = meta_obj
-    else:
-        current_meta = dict(meta[meta_title])
-        current_meta["main_info"] = meta_obj["main_info"]
-        current_meta["raw_scores"] = meta_obj["raw_scores"]
-        meta[meta_title] = current_meta
-
-    save_meta(meta)
-
-
-def _extract_extra_meta(meta_payload) -> dict:
-    if isinstance(meta_payload, dict) is False:
-        return {}
-
-    extra_meta = {}
-    for key, value in meta_payload.items():
-        if key in {"main_info", "raw_scores"}:
-            continue
-        extra_meta[key] = value
-    return extra_meta
 
 
 def _cleanup_candidate_pool(pool_candidate=None) -> None:
@@ -167,7 +83,7 @@ def add_dataset_record(
         )
 
     data = load_dataset()
-    if _duplicate_title_exists(data, title):
+    if duplicate_title_exists(data, title):
         return AddRecordResult(
             ok=False,
             title=title,
@@ -214,7 +130,7 @@ def add_dataset_record(
             reason="invalid_payload",
         )
 
-    extra_meta = _extract_extra_meta(meta_payload)
+    extra_meta = extract_extra_meta(meta_payload)
     meta_obj = None
     if isinstance(meta_payload, dict) and (
         "raw_scores" in meta_payload or "raw" in meta_payload
@@ -254,16 +170,8 @@ def add_dataset_record(
 
     raw_scores = normalize_raw_scores(raw_scores)
     new_main_info = normalize_main_info(main_info)
-    computed_scores = format_score.raw_to_struct(raw_scores, new_main_info)
-    features = {
-        constant.BIAS_FEATURE: 1.0
-    }
-    for feature in computed_scores:
-        features[feature] = computed_scores[feature]
-    for feature, value in format_score.tags_to_features(tags_vibe).items():
-        features[feature] = value
-    for feature, value in format_score.tags_to_features(genre_tags, constant.GENRE_SECTION).items():
-        features[feature] = value
+    computed_scores = build_computed_scores(raw_scores, new_main_info)
+    features = build_feature_vector(computed_scores, tags_vibe, genre_tags)
 
     if valid.is_valid_features(features) is False:
         return AddRecordResult(
@@ -344,7 +252,7 @@ def add_dataset_record(
 def update_dataset_record(title, patch_payload, source_name: str = "") -> UpdateRecordResult:
     """Updates safe fields of an existing dataset record without changing its key."""
     data = load_dataset()
-    dataset_title = _find_dataset_title(data, title)
+    dataset_title = find_dataset_title(data, title)
     if dataset_title is None:
         return UpdateRecordResult(
             ok=False,
@@ -470,7 +378,7 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
             try:
                 current_main_info = normalize_main_info({**main_info, "title": dataset_title})
                 current_raw_scores = normalize_raw_scores(raw_scores)
-                _sync_raw_scores_to_meta(dataset_title, current_main_info, current_raw_scores)
+                sync_raw_scores_to_meta(dataset_title, current_main_info, current_raw_scores)
             except Exception as error:
                 return UpdateRecordResult(
                     ok=False,
@@ -515,8 +423,8 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
     if is_valid_genre_tags(new_genre_tags) is False:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректная genre-разметка", "invalid_patch", [])
 
-    computed_scores = format_score.raw_to_struct(new_raw_scores, new_main_info)
-    features = _build_features(computed_scores, new_tags_vibe, new_genre_tags)
+    computed_scores = build_computed_scores(new_raw_scores, new_main_info)
+    features = build_feature_vector(computed_scores, new_tags_vibe, new_genre_tags)
     if valid.is_valid_features(features) is False:
         return UpdateRecordResult(
             ok=False,
@@ -537,7 +445,7 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
     try:
         save_dataset(data)
         if raw_patch is not None:
-            _sync_raw_scores_to_meta(dataset_title, new_main_info, new_raw_scores)
+            sync_raw_scores_to_meta(dataset_title, new_main_info, new_raw_scores)
     except Exception as error:
         return UpdateRecordResult(
             ok=False,

@@ -5,8 +5,11 @@ from difflib import SequenceMatcher
 from config import constant
 from config import genre_tags
 from config import scheme
-from candidates.to_dataset import candidate_genre_keys_to_dataset_genres, raw_genres_to_dataset_genres
-from candidates import genre_schema
+from dataset.genres.mapping import (
+    candidate_genre_keys_to_dataset_genres,
+    normalize_genre_label_to_key,
+    raw_genres_to_dataset_genres,
+)
 from apis import imdb_sql as sql_search
 from apis import kp_api as api
 
@@ -73,7 +76,7 @@ def split_known_genres(genres: list) -> tuple[list, list]:
     unknown = list(mapping["unmapped_raw_genres"])
 
     for raw_genre in unique_preserve_order(mapping["mapped_raw_genres"]):
-        genre_key = genre_schema.normalize_genre_to_key(raw_genre)
+        genre_key = normalize_genre_label_to_key(raw_genre)
         if genre_key is None or genre_key in unmapped_keys:
             if raw_genre not in unknown:
                 unknown.append(raw_genre)

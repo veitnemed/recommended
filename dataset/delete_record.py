@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import constant
+from dataset.meta.lookup import find_meta_title
 from posters.cache import (
     DEFAULT_POSTER_CACHE_JSON,
     load_poster_cache,
@@ -21,14 +22,6 @@ def _movie_title_year(dataset_key: str, movie: dict) -> tuple[str, object]:
     title = str(main_info.get("title") or movie.get("title") or dataset_key).strip()
     year = main_info.get("year", movie.get("year"))
     return title, year
-
-
-def _find_meta_key(meta: dict, title: str) -> str | None:
-    expected = str(title).strip().lower()
-    for meta_title in meta.keys():
-        if meta_title.strip().lower() == expected:
-            return meta_title
-    return None
 
 
 def search_watched_records_by_query(query: str, data: dict | None = None) -> list[dict]:
@@ -75,7 +68,7 @@ def build_watched_delete_preview(dataset_key: str, data: dict | None = None) -> 
     main_info = movie.get("main_info") or {}
     raw_scores = movie.get("raw_scores") or {}
     meta = storage_data.load_meta()
-    meta_key = _find_meta_key(meta, title)
+    meta_key = find_meta_title(meta, title)
     meta_obj = meta.get(meta_key) if meta_key is not None else None
 
     poster_cache = load_poster_cache()
@@ -151,7 +144,7 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
     meta = storage_data.load_meta()
     poster_cache = load_poster_cache()
 
-    meta_key = _find_meta_key(meta, title)
+    meta_key = find_meta_title(meta, title)
     cache_identity = poster_identity_key(title, year)
     cache_entry = poster_cache.get(cache_identity) if isinstance(poster_cache.get(cache_identity), dict) else None
     had_cache_entry = cache_entry is not None
