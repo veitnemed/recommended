@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail.card_pills import clear_layout, fill_meta_pill_row, fill_pill_rows
 from desktop.shared.detail.card_poster import DetailCardPosterMixin
 from desktop.shared.detail.main_info import build_main_info_items
@@ -20,6 +21,8 @@ from desktop.shared.detail.rating_indicator import RatingCircleIndicator
 from desktop.shared.detail.types import DetailEntry
 from desktop.theme import (
     COLOR_ACCENT,
+    COLOR_TEXT,
+    COLOR_TEXT_SECONDARY,
     OVERVIEW_DIVIDER_TEXT_SPACING,
     OVERVIEW_SECTION_TOP_SPACING,
     OVERVIEW_TITLE_DIVIDER_SPACING,
@@ -31,7 +34,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
     """Detail card widget for the selected watched title."""
 
     def __init__(self, parent=None, profile: DetailCardLayoutProfile | None = None) -> None:
-        from PyQt6.QtCore import Qt
+        from PyQt6.QtCore import QSize, Qt
         from PyQt6.QtWidgets import (
             QFrame,
             QGridLayout,
@@ -93,6 +96,19 @@ class WatchedDetailCard(DetailCardPosterMixin):
         info_column.setContentsMargins(0, 0, 0, 0)
         info_column.setSpacing(12)
 
+        self._title_row_widget = QWidget()
+        self._title_row_widget.setStyleSheet(TRANSPARENT_STYLE)
+        title_row = QHBoxLayout(self._title_row_widget)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(8)
+
+        self._title_actions_widget = QWidget()
+        self._title_actions_widget.setObjectName("detailTitleActions")
+        self._title_actions_widget.setStyleSheet(TRANSPARENT_STYLE)
+        self._title_actions_layout = QHBoxLayout(self._title_actions_widget)
+        self._title_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self._title_actions_layout.setSpacing(6)
+
         self._title_label = QLabel("Выберите тайтл слева")
         self._title_label.setObjectName("detailTitle")
         self._title_label.setWordWrap(True)
@@ -132,21 +148,40 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._metrics_row.addWidget(self._score_indicator, alignment=Qt.AlignmentFlag.AlignLeft)
         self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
         if self._profile.show_mark_watched_button:
-            self._mark_watched_button = QPushButton("👁")
+            self._mark_watched_button = QPushButton()
             self._mark_watched_button.setObjectName("candidateMarkWatchedButton")
             self._mark_watched_button.setToolTip("Перенести в просмотренные")
+            self._mark_watched_button.setIcon(
+                make_detail_action_icon("eye", COLOR_TEXT, COLOR_TEXT_SECONDARY)
+            )
+            self._mark_watched_button.setIconSize(QSize(24, 24))
             self._mark_watched_button.setFixedSize(36, 36)
             self._mark_watched_button.setEnabled(False)
             self._mark_watched_button.clicked.connect(self._on_mark_watched_clicked)
-            self._metrics_row.addWidget(self._mark_watched_button, alignment=Qt.AlignmentFlag.AlignVCenter)
+            self._title_actions_layout.addWidget(
+                self._mark_watched_button,
+                alignment=Qt.AlignmentFlag.AlignTop,
+            )
         if self._profile.show_hide_candidate_button:
-            self._hide_button = QPushButton("Hide")
+            self._hide_button = QPushButton()
             self._hide_button.setObjectName("candidateHideButton")
             self._hide_button.setToolTip("Скрыть кандидата")
-            self._hide_button.setFixedSize(52, 36)
+            self._hide_button.setIcon(
+                make_detail_action_icon("hide", COLOR_TEXT, COLOR_TEXT_SECONDARY)
+            )
+            self._hide_button.setIconSize(QSize(24, 24))
+            self._hide_button.setFixedSize(36, 36)
             self._hide_button.setEnabled(False)
             self._hide_button.clicked.connect(self._on_hide_clicked)
-            self._metrics_row.addWidget(self._hide_button, alignment=Qt.AlignmentFlag.AlignVCenter)
+            self._title_actions_layout.addWidget(
+                self._hide_button,
+                alignment=Qt.AlignmentFlag.AlignTop,
+            )
+        self._title_actions_widget.setVisible(
+            self._profile.show_mark_watched_button or self._profile.show_hide_candidate_button
+        )
+        title_row.addWidget(self._title_actions_widget, alignment=Qt.AlignmentFlag.AlignTop)
+        title_row.addWidget(self._title_label, stretch=1)
         self._metrics_row.addStretch()
 
         self._genre_section = QWidget()
@@ -213,7 +248,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         overview_layout.addSpacing(OVERVIEW_DIVIDER_TEXT_SPACING)
         overview_layout.addWidget(self._overview_label)
 
-        info_column.addWidget(self._title_label)
+        info_column.addWidget(self._title_row_widget)
         info_column.addSpacing(2)
         info_column.addWidget(self._genre_section)
         info_column.addSpacing(2)

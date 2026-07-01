@@ -110,26 +110,6 @@ QComboBox#candidateListSort::down-arrow {{
     width: 10px;
     height: 10px;
 }}
-QPushButton#candidateMarkWatchedButton {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: 18px;
-    color: {COLOR_TEXT};
-    font-size: 16px;
-    padding: 0;
-    min-width: 36px;
-    max-width: 36px;
-    min-height: 36px;
-    max-height: 36px;
-}}
-QPushButton#candidateMarkWatchedButton:hover {{
-    border-color: {COLOR_ACCENT};
-    background-color: {COLOR_CARD_ALT};
-}}
-QPushButton#candidateMarkWatchedButton:disabled {{
-    color: {COLOR_TEXT_SECONDARY};
-    border-color: {COLOR_BORDER};
-}}
 QWidget#candidateFiltersRoot {{
     font-size: {FONT_BASE}px;
 }}

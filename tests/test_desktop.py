@@ -916,6 +916,26 @@ def test_watched_detail_card_renders_main_info_block() -> None:
     assert "_set_main_info_items([])" in empty_source
 
 
+def test_candidate_detail_actions_are_icon_only_before_title() -> None:
+    import inspect
+
+    import desktop.shared.detail.card as watched_view_module
+
+    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+
+    assert 'QPushButton("👁")' not in init_source
+    assert 'QPushButton("Hide")' not in init_source
+    assert 'QPushButton()' in init_source
+    assert 'make_detail_action_icon("eye"' in init_source
+    assert 'make_detail_action_icon("hide"' in init_source
+    assert init_source.index("title_row.addWidget(self._title_actions_widget") < init_source.index(
+        "title_row.addWidget(self._title_label"
+    )
+    assert "self._title_actions_layout.addWidget" in init_source
+    assert "self._metrics_row.addWidget(self._mark_watched_button" not in init_source
+    assert "self._metrics_row.addWidget(self._hide_button" not in init_source
+
+
 def test_build_score_count_html_smoke() -> None:
     from desktop.analytics.charts import build_score_count_html
 
@@ -1013,9 +1033,10 @@ def test_analytics_distribution_uses_score_count_points() -> None:
     assert 'analytics["genre_count_rows"]' in source
     assert "get_pool_genre_count_rows" in source
     assert 'analytics["year_average_points"]' in source
-    assert 'analytics["imdb_delta_rows"]' in source
-    assert 'analytics["rating_higher_than_public"]' in source
-    assert 'analytics["suspicious_ratings"]' in source
+    assert 'analytics["rating_lower_than_public"]' in source
+    assert 'analytics["imdb_delta_rows"]' not in source
+    assert 'analytics["rating_higher_than_public"]' not in source
+    assert 'analytics["suspicious_ratings"]' not in source
     assert "_fill_completeness" in source
     fill_distribution_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_distribution)
     assert "build_score_count_html" in fill_distribution_source
@@ -1031,24 +1052,19 @@ def test_analytics_mvp_sections_wired() -> None:
     assert "Количество тайтлов по жанрам" in init_source
     assert "Количество тайтлов по жанрам (pool)" in init_source
     assert "Средняя моя оценка по годам" in init_source
-    assert "Отличие моих оценок от IMDb" in init_source
-    assert "Я сильно выше IMDb" in init_source
     assert "Я сильно ниже IMDb" in init_source
-    assert "Подозрительные оценки" in init_source
+    assert "Отличие моих оценок от IMDb" not in init_source
+    assert "Я сильно выше IMDb" not in init_source
+    assert "Подозрительные оценки" not in init_source
 
     update_source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
     assert "_fill_genre_count" in update_source
     assert "_fill_pool_genre_count" in update_source
     assert "_fill_year_average" in update_source
-    assert "_fill_imdb_delta" in update_source
-    assert "_fill_rating_higher" in update_source
-    assert "_fill_suspicious" in update_source
-
-    fill_higher_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_rating_higher)
-    assert "format_rating_gap_line" in fill_higher_source
-
-    fill_suspicious_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_suspicious)
-    assert "format_suspicious_rating_line" in fill_suspicious_source
+    assert "_fill_rating_lower" in update_source
+    assert "_fill_imdb_delta" not in update_source
+    assert "_fill_rating_higher" not in update_source
+    assert "_fill_suspicious" not in update_source
 
 
 def test_analytics_renders_dataset_completeness_block() -> None:
@@ -1736,7 +1752,10 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "AnalyticsView" in factory_source
     assert '"Фильтры"' in factory_source
     assert '"Кандидаты"' in factory_source
-    assert '"Analytics"' in factory_source
+    assert '"Моё"' in factory_source
+    assert '"Информация"' in factory_source
+    assert '"Watched"' not in factory_source
+    assert '"Analytics"' not in factory_source
     assert '"Search"' not in factory_source
     assert "MainTabRegistry" in factory_source
     assert "ShellTabSpec" in factory_source
@@ -1744,6 +1763,28 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "registry.register" in factory_source
     assert "registry.focus" in factory_source
     assert "on_watched_entries_changed" in factory_source
+
+
+def test_analytics_view_hides_removed_imdb_sections() -> None:
+    import inspect
+
+    import desktop.analytics.constants as constants_module
+    import desktop.analytics.view as analytics_view_module
+
+    source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
+    update_source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
+    icons = constants_module.SECTION_ICONS
+
+    assert "Отличие моих оценок от IMDb" not in source
+    assert "Я сильно выше IMDb" not in source
+    assert "Подозрительные оценки" not in source
+    assert "_fill_imdb_delta" not in update_source
+    assert "_fill_rating_higher" not in update_source
+    assert "_fill_suspicious" not in update_source
+    assert "Отличие моих оценок от IMDb" not in icons
+    assert "Я сильно выше IMDb" not in icons
+    assert "Подозрительные оценки" not in icons
+    assert "Я сильно ниже IMDb" in source
 
 
 def test_genre_chip_selector_tracks_selection(qapp) -> None:

@@ -150,42 +150,12 @@ class AnalyticsView(
             )
         )
 
-        self._imdb_delta_layout = QVBoxLayout()
-        self._imdb_delta_rows: list[dict] = []
-        self._imdb_delta_extra_count = 0
-        self._imdb_delta_expanded = False
-        root_layout.addWidget(
-            self._make_section(
-                "Отличие моих оценок от IMDb",
-                self._imdb_delta_layout,
-                SECTION_ICONS["Отличие моих оценок от IMDb"],
-            )
-        )
-
-        self._rating_higher_layout = QVBoxLayout()
-        root_layout.addWidget(
-            self._make_section(
-                "Я сильно выше IMDb",
-                self._rating_higher_layout,
-                SECTION_ICONS["Я сильно выше IMDb"],
-            )
-        )
-
         self._rating_lower_layout = QVBoxLayout()
         root_layout.addWidget(
             self._make_section(
                 "Я сильно ниже IMDb",
                 self._rating_lower_layout,
                 SECTION_ICONS["Я сильно ниже IMDb"],
-            )
-        )
-
-        self._suspicious_layout = QVBoxLayout()
-        root_layout.addWidget(
-            self._make_section(
-                "Подозрительные оценки",
-                self._suspicious_layout,
-                SECTION_ICONS["Подозрительные оценки"],
             )
         )
 
@@ -216,22 +186,9 @@ class AnalyticsView(
         self._fill_genre_count(analytics["genre_count_rows"])
         self._fill_pool_genre_count(get_pool_genre_count_rows())
         self._fill_year_average(analytics["year_average_points"])
-        self._imdb_delta_expanded = False
-        self._fill_imdb_delta(
-            analytics["imdb_delta_rows"],
-            analytics["imdb_delta_extra_count"],
-        )
-        self._fill_rating_higher(
-            analytics["rating_higher_than_public"],
-            analytics["rating_higher_extra_count"],
-        )
         self._fill_rating_lower(
             analytics["rating_lower_than_public"],
             analytics["rating_lower_extra_count"],
-        )
-        self._fill_suspicious(
-            analytics["suspicious_ratings"],
-            analytics["suspicious_extra_count"],
         )
         if SHOW_DENSE_SCORES_SECTION:
             self._fill_dense_scores(analytics["dense_scores"])

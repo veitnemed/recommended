@@ -87,7 +87,7 @@ def build_main_tabs(
         watched_tab_view.entries,
         entries_provider=lambda: watched_tab_view.entries,
     )
-    registry.register(ShellTabSpec("watched", "Watched", watched_tab_view))
+    registry.register(ShellTabSpec("watched", "Моё", watched_tab_view))
 
     candidate_session = CandidateSearchSession()
 
@@ -107,7 +107,7 @@ def build_main_tabs(
     )
     registry.register(ShellTabSpec("filters", "Фильтры", candidate_filters_view))
     registry.register(ShellTabSpec("candidates", "Кандидаты", candidate_list_view))
-    registry.register(ShellTabSpec("analytics", "Analytics", analytics_view))
+    registry.register(ShellTabSpec("analytics", "Информация", analytics_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
 

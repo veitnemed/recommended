@@ -19,6 +19,30 @@ QLabel#detailTitle {{
     font-weight: 700;
     padding: 0 0 {SPACING_XSMALL}px 0;
 }}
+QWidget#detailTitleActions {{
+    background: transparent;
+}}
+QPushButton#candidateMarkWatchedButton,
+QPushButton#candidateHideButton {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 18px;
+    padding: 0;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+}}
+QPushButton#candidateMarkWatchedButton:hover,
+QPushButton#candidateHideButton:hover {{
+    border-color: {COLOR_ACCENT};
+    background-color: {COLOR_CARD_ALT};
+}}
+QPushButton#candidateMarkWatchedButton:disabled,
+QPushButton#candidateHideButton:disabled {{
+    border-color: {COLOR_BORDER};
+    background-color: {COLOR_CARD};
+}}
 QLabel#genrePill {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
