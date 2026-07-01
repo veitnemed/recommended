@@ -26,9 +26,9 @@ def _cleanup_candidate_pool(pool_candidate=None) -> None:
             candidate_service.mark_candidate_watched_in_pool(pool_candidate)
             return
 
-        from candidates import candidate_pool
+        from candidates.repositories import pool_repository
 
-        candidate_pool.save_candidate_pool(candidate_pool.load_candidate_pool())
+        pool_repository.save_candidate_pool(pool_repository.load_candidate_pool())
     except Exception as error:
         print(f"Предупреждение: не удалось обновить candidate pool после добавления записи: {error}")
 

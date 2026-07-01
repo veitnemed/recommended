@@ -101,7 +101,7 @@ def test_add_title_preview_card_profile_is_compact() -> None:
 
 
 def test_add_title_country_combo_has_any_default() -> None:
-    from candidates.tmdb_country_options import (
+    from candidates.sources.tmdb.country_options import (
         ADD_TITLE_COUNTRY_ANY_LABEL,
         add_title_country_combo_options,
     )

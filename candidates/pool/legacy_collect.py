@@ -6,35 +6,18 @@ import time
 from datetime import datetime
 
 from apis import kp_api as api
-from candidates.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
+from candidates.models.schema import normalize_candidate_for_storage
+from candidates.pool.completeness import movie_matches_genres
 from candidates.pool.normalization import normalize_storage_pool
 from candidates.pool.watched_cleanup import (
     build_dataset_title_keys,
     build_watched_signatures,
     is_watched_candidate,
 )
-from candidates.schema import normalize_candidate_for_storage
 
 DISCOVER_PAGE_LIMIT = 30
 DISCOVER_PAGE_PAUSE_SECONDS = 1.0
-
-
-def movie_matches_genres(movie: dict, expected_genres: list, excluded_genres: list | None = None) -> bool:
-    """Проверяет обязательные и исключенные жанры кандидата."""
-    if excluded_genres is None:
-        excluded_genres = []
-    actual = {
-        str(item.get("name", "")).strip().casefold()
-        for item in movie.get("genres", []) or []
-        if isinstance(item, dict) and item.get("name")
-    }
-    blocked = {genre.casefold() for genre in excluded_genres}
-    if len(actual & blocked) > 0:
-        return False
-    if len(expected_genres) == 0:
-        return True
-    wanted = {genre.casefold() for genre in expected_genres}
-    return len(actual & wanted) > 0
 
 
 def normalize_candidate(movie: dict, criteria_name: str) -> dict:
@@ -59,10 +42,10 @@ def normalize_candidate(movie: dict, criteria_name: str) -> dict:
 
 def collect_candidates(criteria_name: str, criteria: dict) -> dict:
     """Собирает новых кандидатов из API в общий pool."""
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
 
     criteria_name = COMMON_POOL_CRITERIA_NAME
-    pool = normalize_storage_pool(pool_compat.load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     watched_signatures = build_watched_signatures()
     dataset_title_keys = build_dataset_title_keys()
     target_count = int(criteria.get("count") or 20)
@@ -131,7 +114,7 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
         if added < target_count:
             time.sleep(DISCOVER_PAGE_PAUSE_SECONDS)
 
-    pool_compat.save_candidate_pool(pool)
+    save_candidate_pool(pool)
     return {
         "criteria_name": criteria_name,
         "target_count": target_count,

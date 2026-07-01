@@ -7,23 +7,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from candidates import candidate_pool as legacy_candidate_pool
-from candidates.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
-from candidates.schema import normalize_candidate_for_storage
-
-
-ROOT_DIR = Path(__file__).resolve().parents[3]
-OUTPUT_DIR = ROOT_DIR / "data" / "exports" / "candidate_pool"
-
-
-def list_tmdb_result_files() -> list[Path]:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    files = [
-        path for path in OUTPUT_DIR.glob("*candidate_pool_*.json")
-        if path.is_file()
-    ]
-    files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
-    return files
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
+from candidates.models.schema import normalize_candidate_for_storage
+from candidates.pool.dataset_overlap import build_dataset_title_keys
+from candidates.pool.normalization import normalize_storage_pool
+from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
+from candidates.repositories.criteria_repository import load_candidate_criteria, save_named_criteria
+from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
+from candidates.scoring.sort_keys import candidate_sort_score
+from candidates.sources.tmdb.output import list_tmdb_result_files
 
 
 def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criteria_name: str) -> dict[str, Any]:
@@ -162,9 +154,9 @@ def import_tmdb_candidates_to_common_pool(
 ) -> dict[str, Any]:
     result_metadata = result_metadata or {}
     resolved_criteria_name = resolve_tmdb_import_criteria_name(result_metadata, criteria_name)
-    pool = legacy_candidate_pool.normalize_storage_pool(legacy_candidate_pool.load_candidate_pool())
-    watched_signatures = legacy_candidate_pool.build_watched_signatures()
-    dataset_title_keys = legacy_candidate_pool.build_dataset_title_keys()
+    pool = normalize_storage_pool(load_candidate_pool())
+    watched_signatures = build_watched_signatures()
+    dataset_title_keys = build_dataset_title_keys()
     stats = _base_import_stats(len(candidates), resolved_criteria_name, len(pool))
 
     for raw_candidate in candidates:
@@ -177,7 +169,7 @@ def import_tmdb_candidates_to_common_pool(
             stats["errors"] += 1
             continue
 
-        if legacy_candidate_pool.is_watched_candidate(
+        if is_watched_candidate(
             candidate,
             watched_signatures,
             dataset_title_keys,
@@ -193,14 +185,14 @@ def import_tmdb_candidates_to_common_pool(
             stats["added"] += 1
             continue
 
-        if legacy_candidate_pool.candidate_sort_score(candidate) > legacy_candidate_pool.candidate_sort_score(matched_candidate):
+        if candidate_sort_score(candidate) > candidate_sort_score(matched_candidate):
             pool[matched_key] = candidate
             stats["updated"] += 1
         else:
             stats["duplicates"] += 1
             stats["skipped_duplicates"] += 1
 
-    existing_criteria = legacy_candidate_pool.load_candidate_criteria().get(resolved_criteria_name) or {}
+    existing_criteria = load_candidate_criteria().get(resolved_criteria_name) or {}
     criteria_entry = build_tmdb_import_criteria_defaults(resolved_criteria_name)
     criteria_entry.update(existing_criteria if isinstance(existing_criteria, dict) else {})
     criteria_metadata = build_tmdb_import_criteria_metadata(
@@ -212,12 +204,12 @@ def import_tmdb_candidates_to_common_pool(
     )
     if criteria_entry.get("count") in (None, 0, ""):
         criteria_entry["count"] = len(candidates)
-    legacy_candidate_pool.save_named_criteria(
+    save_named_criteria(
         resolved_criteria_name,
         merge_criteria_metadata(criteria_entry, criteria_metadata),
     )
-    legacy_candidate_pool.save_candidate_pool(pool)
-    pool_size_after = len(legacy_candidate_pool.load_candidate_pool())
+    save_candidate_pool(pool)
+    pool_size_after = len(load_candidate_pool())
     stats["pool_size_after"] = pool_size_after
     stats["pool_size"] = pool_size_after
     return stats

@@ -4,9 +4,15 @@ from datetime import datetime
 
 from config import constant
 from common import valid
-from candidates import candidate_pool
 from candidates import service as candidate_service
-from candidates.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.pool.completeness import get_available_genres
+from candidates.repositories.criteria_repository import (
+    ensure_common_pool_criteria,
+    load_candidate_criteria,
+    patch_criteria_filters,
+    save_named_criteria,
+)
 
 
 def format_optional_default(value) -> str:
@@ -75,7 +81,7 @@ def choose_genres_by_numbers(
     genres = candidate_service.get_search_genre_options_view(criteria_name)["genres"]
     used_catalog_fallback = False
     if len(genres) == 0:
-        genres = candidate_pool.get_available_genres()
+        genres = get_available_genres()
         used_catalog_fallback = len(genres) > 0
 
     if len(genres) == 0:
@@ -123,7 +129,7 @@ def choose_genres_by_numbers(
 
 def get_common_pool_criteria_readonly() -> tuple[str, dict] | None:
     """Возвращает настройки общего pool без записи JSON."""
-    criteria = candidate_pool.load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
+    criteria = load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
     if isinstance(criteria, dict) is False:
         return None
     return COMMON_POOL_CRITERIA_NAME, criteria
@@ -144,7 +150,7 @@ def choose_existing_criteria() -> tuple[str, dict] | None:
 
 def create_criteria_interactive() -> tuple[str, dict] | None:
     """Запрашивает настройки сбора для общего pool и сохраняет их."""
-    criteria_name, current = candidate_pool.ensure_common_pool_criteria()
+    criteria_name, current = ensure_common_pool_criteria()
     country_default = current.get("country")
     country_answer = input(f"Страна [{format_optional_default(country_default)}] >> ").strip()
     country = country_answer if country_answer != "" else country_default
@@ -180,7 +186,7 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     }
 
-    return candidate_pool.save_named_criteria(criteria_name, criteria)
+    return save_named_criteria(criteria_name, criteria)
 
 
 def update_criteria_filters(criteria_name: str, current: dict) -> dict:
@@ -200,7 +206,7 @@ def update_criteria_filters(criteria_name: str, current: dict) -> dict:
         prompt_hint="Enter = оставить saved default. Это не пересобирает pool и не делает новый TMDb-запрос.",
         input_label="Номера жанров для исключения",
     )
-    return candidate_pool.patch_criteria_filters(
+    return patch_criteria_filters(
         criteria_name,
         current,
         min_kp=min_kp,

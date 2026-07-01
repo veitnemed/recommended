@@ -8,7 +8,7 @@ from common import valid
 from storage import data as storage_data
 from dataset import title_resolve
 from ui.console import title_presenters
-from candidates import tmdb_country_options
+from candidates.sources.tmdb import country_options as tmdb_country_options
 
 
 def get_request_schema() -> dict:

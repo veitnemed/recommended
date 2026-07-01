@@ -89,13 +89,12 @@ Watched dataset: добавление, обновление, удаление, m
 Поиск и обслуживание кандидатов к просмотру.
 
 - [candidates/service.py](../candidates/service.py) - facade для UI.
-- [candidates/candidate_pool.py](../candidates/candidate_pool.py) - общий candidate pool, фильтры, dedupe, retry KP.
-- [candidates/tmdb_candidate_pool.py](../candidates/tmdb_candidate_pool.py) - TMDb Discover/Details build.
-- [candidates/import_tmdb.py](../candidates/import_tmdb.py) - импорт saved TMDb result в общий pool.
-- [candidates/kp_enrichment.py](../candidates/kp_enrichment.py) - KP lookup/enrichment.
-- [candidates/schema.py](../candidates/schema.py) - нормализация candidate record.
-- [candidates/keys.py](../candidates/keys.py) - ключи pool/dedupe.
-- [candidates/genres.py](../candidates/genres.py) - runtime genre aliases.
+- [candidates/models/](../candidates/models/) - schema, keys, country/genre schema.
+- [candidates/repositories/](../candidates/repositories/) - load/save pool и criteria JSON.
+- [candidates/pool/](../candidates/pool/) - dedupe, queries, stats, diagnostics, search helpers.
+- [candidates/sources/tmdb/](../candidates/sources/tmdb/) - TMDb Discover/Details build и import.
+- [candidates/sources/kp/](../candidates/sources/kp/) - KP lookup/enrichment и retry.
+- [candidates/genres.py](../candidates/genres.py) - runtime genre aliases для saved pool.
 
 Инварианты pool:
 
@@ -169,13 +168,13 @@ Read-only экспорт watched/add-title карточек.
 
 1. Пользователь задает runtime-фильтр (defaults из `criteria.json`, запись `"pool"`).
 2. `candidates.service` готовит view для UI.
-3. `candidates.candidate_pool` читает общий pool и применяет фильтры.
+3. `candidates.pool` и `candidates.repositories` читают общий pool; `app/core/filters` применяет runtime-фильтры.
 4. Incomplete-кандидаты можно добрать через KP enrichment.
 
 ### TMDb candidate pool
 
 1. UI выбирает страну, режим и Discover-фильтры.
-2. `tmdb_candidate_pool` получает TMDb Discover/Details.
+2. `candidates.sources.tmdb.builder` получает TMDb Discover/Details.
 3. IMDb SQL и KP enrichment дополняют данные.
 4. Результат сохраняется в `data/exports/candidate_pool/`.
 5. Saved result импортируется/мерджится в общий pool (auto-import или Управление pool).

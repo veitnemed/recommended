@@ -1,6 +1,6 @@
 """Tests for candidate identity keys."""
 
-from candidates.keys import pool_entry_key, title_identity_key
+from candidates.models.keys import pool_entry_key, title_identity_key
 
 
 def test_title_identity_key_stable() -> None:

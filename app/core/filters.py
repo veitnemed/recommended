@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from candidates import country_schema, genre_schema
-from candidates.keys import title_identity_key
-from candidates.schema import coerce_candidate_number, normalize_candidate_record
+from candidates.models import country_schema, genre_schema
+from candidates.models.keys import title_identity_key
+from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 
 
 def _criteria_value(criteria: dict, *names, default=None):

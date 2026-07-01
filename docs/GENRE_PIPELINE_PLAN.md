@@ -136,7 +136,7 @@ Transfer не зависит от того, в какое поле попали 
 ## Фаза 4. Gates на границах pipeline (P3)
 
 **Срок:** 1 день  
-**Файлы:** `candidates/import_tmdb.py`, `ui/console/interface_funcs.py`, `candidates/tmdb_candidate_pool.py`
+**Файлы:** `candidates/sources/tmdb/importer.py`, `ui/console/interface_funcs.py`, `candidates/sources/tmdb/builder.py`
 
 ### Задачи
 

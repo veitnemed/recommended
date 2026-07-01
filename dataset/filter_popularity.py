@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from collections import Counter
 
-from candidates import country_schema
-from candidates import tmdb_country_options
+from candidates.models import country_schema
+from candidates.sources.tmdb import country_options as tmdb_country_options
 from dataset.score_analytics import collect_analytics_entry_items
 from dataset.title_resolve import extract_country_value
 

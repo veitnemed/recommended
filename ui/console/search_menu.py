@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from candidates import country_schema
-from candidates import genre_schema
+from candidates.models import country_schema
+from candidates.models import genre_schema
 from candidates import service as candidate_service
-from candidates import tmdb_country_options
+from candidates.sources.tmdb import country_options as tmdb_country_options
 from common import valid
 from config import constant
 from ui.console import request

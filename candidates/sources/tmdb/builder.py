@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from candidates.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.sources.tmdb import debug as kp_tmdb_build_debug
 from candidates.sources.tmdb.discover_dedupe import (
     deduplicate_discover_results,

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from candidates import candidate_pool as legacy_candidate_pool
+from candidates.pool.dataset_overlap import build_dataset_title_keys
+from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
 from apis import tmdb_api as api_tmdb
 
 
@@ -39,8 +40,8 @@ def sort_discover_for_details(items: list[dict[str, Any]]) -> list[dict[str, Any
 
 def remove_watched_discover(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     try:
-        watched_signatures = legacy_candidate_pool.build_watched_signatures()
-        dataset_title_keys = legacy_candidate_pool.build_dataset_title_keys()
+        watched_signatures = build_watched_signatures()
+        dataset_title_keys = build_dataset_title_keys()
     except Exception:
         watched_signatures = set()
         dataset_title_keys = set()
@@ -56,7 +57,7 @@ def remove_watched_discover(items: list[dict[str, Any]]) -> tuple[list[dict[str,
             "alternative_title": item.get("original_name") or "",
             "year": api_tmdb.get_year(item.get("first_air_date")),
         }
-        if legacy_candidate_pool.is_watched_candidate(
+        if is_watched_candidate(
             candidate,
             watched_signatures,
             dataset_title_keys,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from candidates import genre_schema
+from candidates.models import genre_schema
 
 
 def normalize_genre_name(value) -> str:

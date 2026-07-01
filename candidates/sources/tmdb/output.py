@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from candidates.sources.tmdb import debug as kp_tmdb_build_debug
-from candidates.sources.tmdb import importer as import_tmdb
 from candidates.sources.tmdb.transformer import (
     _genre_values_from_field,
     safe_int,
@@ -127,14 +126,20 @@ def list_tmdb_result_files() -> list[Path]:
 
 
 def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criteria_name: str) -> dict[str, Any]:
+    from candidates.sources.tmdb import importer as import_tmdb
+
     return import_tmdb.normalize_tmdb_candidate_for_common_import(candidate, criteria_name)
 
 
 def tmdb_import_default_criteria_name(result: dict[str, Any]) -> str | None:
+    from candidates.sources.tmdb import importer as import_tmdb
+
     return import_tmdb.tmdb_import_default_criteria_name(result)
 
 
 def import_tmdb_result_to_common_pool(result_path, criteria_name: str | None = None) -> dict[str, Any]:
+    from candidates.sources.tmdb import importer as import_tmdb
+
     return import_tmdb.import_tmdb_result_to_common_pool(result_path, criteria_name=criteria_name)
 
 

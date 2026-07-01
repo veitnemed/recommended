@@ -6,7 +6,7 @@ from unittest.mock import patch
 from config import constant
 from config import scheme
 from common import format_score
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:

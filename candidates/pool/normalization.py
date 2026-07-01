@@ -5,7 +5,7 @@ from __future__ import annotations
 from candidates.models.keys import pool_entry_key
 from candidates.pool.dedupe import deduplicate_pool
 from candidates.repositories import pool_repository
-from candidates.schema import normalize_candidate_for_storage
+from candidates.models.schema import normalize_candidate_for_storage
 from candidates.scoring.sort_keys import candidate_sort_score
 
 

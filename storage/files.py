@@ -79,7 +79,8 @@ def restore_backup(file_path: Path) -> int:
 
 def init_all_dates():
     """Инициализирует все рабочие файлы данных."""
-    from candidates.candidate_pool import init_candidate_criteria, init_candidate_pool
+    from candidates.repositories.criteria_repository import init_candidate_criteria
+    from candidates.repositories.pool_repository import init_candidate_pool
     from app.core.storage import init_search_lists
     from storage.data import init_dataset, init_meta
 

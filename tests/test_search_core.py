@@ -1,7 +1,27 @@
 from app.core.explain import explain_candidate
 from app.core.filters import candidate_matches, filter_candidates
 from app.core.ranking import calculate_quality_score, rank_candidates
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
+from candidates.pool.dataset_overlap import (
+    is_dataset_title_match,
+    purge_dataset_title_matches_from_pool,
+)
+from candidates.pool.dedupe import (
+    clean_common_pool_duplicates,
+    deduplicate_pool,
+    dedupe_pool_by_similar_titles,
+    dedupe_pool_cross_year_titles,
+)
+from candidates.pool.diagnostics import (
+    build_candidate_poster_diagnostics,
+    build_title_duplicate_summary,
+    classify_candidate_poster_state,
+    collect_unique_pool_poster_urls,
+    find_cross_year_title_groups,
+    find_title_duplicate_groups,
+)
+from candidates.pool.stats import build_pool_genre_count_rows
+from candidates.views.formatters import format_pool_stats_summary
 
 
 def _candidate(**overrides):
@@ -162,15 +182,13 @@ def test_console_add_flow_uses_add_named_helpers() -> None:
 def test_classify_candidate_poster_state_displayable_local_file(monkeypatch) -> None:
     from pathlib import Path
 
-    from candidates import candidate_pool
-
     monkeypatch.setattr(
         Path,
         "is_file",
         lambda self: str(self).endswith("poster.jpg"),
     )
 
-    state = candidate_pool.classify_candidate_poster_state(
+    state = classify_candidate_poster_state(
         {
             "title": "Local Show",
             "poster_path": "/cache/posters/poster.jpg",
@@ -181,9 +199,7 @@ def test_classify_candidate_poster_state_displayable_local_file(monkeypatch) -> 
 
 
 def test_classify_candidate_poster_state_metadata_only_without_file() -> None:
-    from candidates import candidate_pool
-
-    state = candidate_pool.classify_candidate_poster_state(
+    state = classify_candidate_poster_state(
         {
             "title": "Remote Show",
             "poster_url": "https://example.com/poster.jpg",
@@ -196,8 +212,6 @@ def test_classify_candidate_poster_state_metadata_only_without_file() -> None:
 def test_build_candidate_poster_diagnostics_summarizes_counts(monkeypatch) -> None:
     from pathlib import Path
 
-    from candidates import candidate_pool
-
     monkeypatch.setattr(
         Path,
         "is_file",
@@ -209,7 +223,7 @@ def test_build_candidate_poster_diagnostics_summarizes_counts(monkeypatch) -> No
         {"title": "No poster"},
     ]
 
-    diagnostics = candidate_pool.build_candidate_poster_diagnostics(candidates)
+    diagnostics = build_candidate_poster_diagnostics(candidates)
 
     assert diagnostics["total"] == 3
     assert diagnostics["counts"]["displayable"] == 1
@@ -240,8 +254,6 @@ def test_get_candidate_poster_diagnostics_view_uses_service_facade(monkeypatch) 
 
 
 def test_collect_unique_pool_poster_urls_deduplicates() -> None:
-    from candidates import candidate_pool
-
     candidates = [
         {"title": "A", "poster_url": "https://example.com/one.jpg"},
         {"title": "B", "poster_url": "https://example.com/one.jpg"},
@@ -249,7 +261,7 @@ def test_collect_unique_pool_poster_urls_deduplicates() -> None:
         {"title": "D"},
     ]
 
-    urls = candidate_pool.collect_unique_pool_poster_urls(candidates)
+    urls = collect_unique_pool_poster_urls(candidates)
 
     assert urls == [
         "https://example.com/one.jpg",
@@ -397,33 +409,27 @@ def test_download_candidate_pool_preview_posters_service(monkeypatch) -> None:
 
 
 def test_deduplicate_pool_keeps_best_record() -> None:
-    from candidates import candidate_pool
-
     pool = {
         "show|2018": {"title": "Show", "year": 2018, "kp_score": 7.0},
         "other|2018": {"title": "Show", "year": 2018, "kp_score": 8.5},
     }
-    deduped = candidate_pool.deduplicate_pool(pool)
+    deduped = deduplicate_pool(pool)
     assert len(deduped) == 1
     assert list(deduped.values())[0]["kp_score"] == 8.5
 
 
 def test_dedupe_pool_by_similar_titles_merges_same_show() -> None:
-    from candidates import candidate_pool
-
     pool = {
         "a|2015": {"title": "Метод", "year": 2015, "kp_score": 8.0},
         "b|2015": {"title": "метод", "year": 2015, "kp_score": 6.0},
     }
-    deduped, removed = candidate_pool.dedupe_pool_by_similar_titles(pool)
+    deduped, removed = dedupe_pool_by_similar_titles(pool)
     assert len(deduped) == 1
     assert removed == 1
     assert list(deduped.values())[0]["kp_score"] == 8.0
 
 
 def test_format_pool_stats_summary_shows_unique_and_duplicates() -> None:
-    from candidates import candidate_pool
-
     stats = {
         "unique_total": 10,
         "storage_total": 10,
@@ -433,28 +439,26 @@ def test_format_pool_stats_summary_shows_unique_and_duplicates() -> None:
         "duplicate_entries": 4,
         "similar_duplicate_total": 1,
     }
-    summary = candidate_pool.format_pool_stats_summary(stats)
+    summary = format_pool_stats_summary(stats)
     assert "уникальных: 10" in summary
     assert "+4 дублей" in summary
     assert "похожих: 1" in summary
 
 
 def test_build_pool_genre_count_rows() -> None:
-    from candidates import candidate_pool
-
     candidates = [
         {"title": "Alpha", "genres": ["Драма", "Комедия"]},
         {"title": "Bravo", "genres": ["Драма"]},
     ]
 
-    rows = candidate_pool.build_pool_genre_count_rows(candidates)
+    rows = build_pool_genre_count_rows(candidates)
 
     assert [(row["label"], row["count"]) for row in rows] == [("Драма", 2), ("Комедия", 1)]
     assert rows[0]["example_titles"] == ["Alpha", "Bravo"]
 
 
 def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> None:
-    from candidates import candidate_pool
+    from candidates.repositories import pool_repository
 
     raw_pool = {
         "legacy|show|2018": {"title": "Show", "year": 2018, "kp_score": 7.0},
@@ -462,10 +466,10 @@ def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> Non
     }
     saved = {}
 
-    monkeypatch.setattr(candidate_pool, "load_candidate_pool", lambda: dict(raw_pool))
-    monkeypatch.setattr(candidate_pool, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
+    monkeypatch.setattr(pool_repository, "load_candidate_pool", lambda: dict(raw_pool))
+    monkeypatch.setattr(pool_repository, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
 
-    result = candidate_pool.clean_common_pool_duplicates()
+    result = clean_common_pool_duplicates()
     assert result["removed_exact"] == 1
     assert result["unique_total"] == 1
     assert len(saved["pool"]) == 1
@@ -473,35 +477,31 @@ def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> Non
 
 
 def test_resolve_canonical_year_prefers_imdb_start_year() -> None:
-    from candidates.schema import resolve_canonical_year
+    from candidates.models.schema import resolve_canonical_year
 
     candidate = {"imdb_start_year": 2016, "year": 2015}
     assert resolve_canonical_year(candidate) == 2016
 
 
 def test_find_cross_year_title_groups_groups_different_years() -> None:
-    from candidates import candidate_pool
-
     candidates = [
         {"title": "Show Name", "year": 2015},
         {"title": "Show Name", "year": 2016},
     ]
-    groups = candidate_pool.find_cross_year_title_groups(candidates)
+    groups = find_cross_year_title_groups(candidates)
     assert len(groups) == 1
     assert groups[0]["years"] == [2015, 2016]
 
 
 def test_find_title_duplicate_groups_counts_extra_entries() -> None:
-    from candidates import candidate_pool
-
     candidates = [
         {"title": "Show Name", "year": 2015},
         {"title": "Show Name", "year": 2016},
         {"title": "Show Name", "year": 2016, "kp_score": 8.0},
         {"title": "Other", "year": 2020},
     ]
-    groups = candidate_pool.find_title_duplicate_groups(candidates, include_dataset=False)
-    summary = candidate_pool.build_title_duplicate_summary(groups)
+    groups = find_title_duplicate_groups(candidates, include_dataset=False)
+    summary = build_title_duplicate_summary(groups)
     assert len(groups) == 1
     assert groups[0]["entry_count"] == 3
     assert summary["group_count"] == 1
@@ -509,20 +509,18 @@ def test_find_title_duplicate_groups_counts_extra_entries() -> None:
 
 
 def test_find_title_duplicate_groups_includes_dataset_matches() -> None:
-    from candidates import candidate_pool
-
     candidates = [{"title": "Show Name", "year": 2015}]
     dataset_index = {
         "show name": [
             {"dataset_key": "Show Name", "title": "Show Name", "year": 2015},
         ],
     }
-    groups = candidate_pool.find_title_duplicate_groups(
+    groups = find_title_duplicate_groups(
         candidates,
         include_dataset=True,
         dataset_by_title_key=dataset_index,
     )
-    summary = candidate_pool.build_title_duplicate_summary(groups)
+    summary = build_title_duplicate_summary(groups)
     assert len(groups) == 1
     assert groups[0]["entry_count"] == 1
     assert groups[0]["dataset_count"] == 1
@@ -563,13 +561,11 @@ def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
 
 
 def test_dedupe_pool_cross_year_titles_merges_within_one_year() -> None:
-    from candidates import candidate_pool
-
     pool = {
         "show|2015": {"title": "Show", "year": 2015, "kp_score": 7.0},
         "show|2016": {"title": "Show", "year": 2016, "imdb_start_year": 2015, "kp_score": 8.0},
     }
-    deduped, removed = candidate_pool.dedupe_pool_cross_year_titles(pool)
+    deduped, removed = dedupe_pool_cross_year_titles(pool)
     assert removed == 1
     assert len(deduped) == 1
     entry = list(deduped.values())[0]
@@ -578,19 +574,17 @@ def test_dedupe_pool_cross_year_titles_merges_within_one_year() -> None:
 
 
 def test_dedupe_pool_cross_year_titles_skips_conflicting_imdb_ids() -> None:
-    from candidates import candidate_pool
-
     pool = {
         "show|2015": {"title": "Show", "year": 2015, "imdb_id": "tt111"},
         "show|2016": {"title": "Show", "year": 2016, "imdb_id": "tt222"},
     }
-    deduped, removed = candidate_pool.dedupe_pool_cross_year_titles(pool)
+    deduped, removed = dedupe_pool_cross_year_titles(pool)
     assert removed == 0
     assert len(deduped) == 2
 
 
 def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
-    from candidates import candidate_pool
+    from candidates.repositories import pool_repository
 
     raw_pool = {
         "show|2015": {"title": "Show", "year": 2015, "kp_score": 7.0, "tmdb_id": "1"},
@@ -598,10 +592,10 @@ def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
     }
     saved = {}
 
-    monkeypatch.setattr(candidate_pool, "load_candidate_pool", lambda: dict(raw_pool))
-    monkeypatch.setattr(candidate_pool, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
+    monkeypatch.setattr(pool_repository, "load_candidate_pool", lambda: dict(raw_pool))
+    monkeypatch.setattr(pool_repository, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
 
-    result = candidate_pool.clean_common_pool_duplicates()
+    result = clean_common_pool_duplicates()
     assert result["removed_cross_year"] == 1
     assert result["unique_total"] == 1
     assert len(saved["pool"]) == 1
@@ -612,15 +606,13 @@ def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
 
 
 def test_is_dataset_title_match_ignores_year() -> None:
-    from candidates import candidate_pool
-
     dataset_keys = {"бывшие"}
     candidate = {"title": "Бывшие", "year": 2018}
-    assert candidate_pool.is_dataset_title_match(candidate, dataset_keys) is True
+    assert is_dataset_title_match(candidate, dataset_keys) is True
 
 
 def test_purge_dataset_title_matches_from_pool(monkeypatch) -> None:
-    from candidates import candidate_pool
+    from candidates.repositories import pool_repository
 
     raw_pool = {
         "byvshie|2018": {"title": "Бывшие", "year": 2018},
@@ -628,15 +620,14 @@ def test_purge_dataset_title_matches_from_pool(monkeypatch) -> None:
     }
     saved = {}
 
-    monkeypatch.setattr(candidate_pool, "load_candidate_pool", lambda: dict(raw_pool))
+    monkeypatch.setattr(pool_repository, "load_candidate_pool", lambda: dict(raw_pool))
     monkeypatch.setattr(
-        candidate_pool,
-        "build_dataset_title_keys",
+        "candidates.pool.dataset_overlap.build_dataset_title_keys",
         lambda: {"бывшие"},
     )
-    monkeypatch.setattr(candidate_pool, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
+    monkeypatch.setattr(pool_repository, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
 
-    result = candidate_pool.purge_dataset_title_matches_from_pool()
+    result = purge_dataset_title_matches_from_pool()
     assert result["removed_dataset_title_matches"] == 1
     assert result["unique_total"] == 1
     assert len(saved["pool"]) == 1

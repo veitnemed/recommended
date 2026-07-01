@@ -1,6 +1,6 @@
 """Tests for candidate schema normalization."""
 
-from candidates.schema import normalize_candidate_record
+from candidates.models.schema import normalize_candidate_record
 
 
 def test_normalize_candidate_record_preserves_unknown_fields() -> None:

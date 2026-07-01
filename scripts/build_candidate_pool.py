@@ -11,7 +11,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from apis import imdb_sql as sql_search
-from candidates.tmdb_candidate_pool import (
+from candidates.sources.tmdb.builder import (
     build_candidate_pool,
     build_summary_lines,
     save_candidate_pool_result,

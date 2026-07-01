@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from candidates import kp_enrichment
+from candidates.sources.kp import enrichment as kp_enrichment
 
 
 _COUNTRY_SOURCE_FIELDS = (

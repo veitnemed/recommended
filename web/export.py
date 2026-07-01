@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
 from config import constant
 from posters.cache import lookup_poster_cache_entry
 
@@ -211,9 +211,9 @@ def build_export_lookup_cache(meta=None, pool_by_identity=None) -> dict:
     if pool_by_identity is None:
         pool_by_identity = {}
         try:
-            from candidates import candidate_pool
+            from candidates.repositories.pool_repository import load_candidate_pool
 
-            for candidate in candidate_pool.load_candidate_pool().values():
+            for candidate in load_candidate_pool().values():
                 if isinstance(candidate, dict):
                     pool_by_identity.setdefault(title_identity_key(candidate), candidate)
         except Exception:
@@ -242,9 +242,9 @@ def resolve_watched_description(title: str, year, meta_obj: dict | None, pool_by
 
     pool_candidate = pool_by_identity.get(title_identity_key({"title": title, "year": year}))
     if isinstance(pool_candidate, dict):
-        from candidates import candidate_pool
+        from candidates.views.formatters import format_candidate_description
 
-        pool_text = candidate_pool.format_candidate_description(pool_candidate)
+        pool_text = format_candidate_description(pool_candidate)
         if pool_text and pool_text != "нет данных":
             return pool_text
 

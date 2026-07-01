@@ -297,7 +297,7 @@ def normalize_country_name(country: str) -> str:
 
 def movie_has_country(movie: dict, country: str) -> bool:
     """Проверяет, есть ли нужная страна среди стран объекта."""
-    from candidates import kp_enrichment
+    from candidates.sources.kp import enrichment as kp_enrichment
 
     kp_countries = kp_enrichment.extract_kp_country_values(movie)
     return kp_enrichment.countries_match(country, kp_countries)

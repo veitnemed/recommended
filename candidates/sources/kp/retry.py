@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from apis import kp_api as api
-from candidates import country_schema
+from candidates.models import country_schema
 from candidates.pool.normalization import normalize_storage_pool
 from candidates.pool.queries import get_incomplete_candidates
-from candidates.schema import normalize_candidate_record
+from candidates.models.schema import normalize_candidate_record
 from candidates.sources.kp import enrichment as kp_enrichment
 
 
@@ -44,12 +44,12 @@ def _candidate_retry_country(candidate: dict) -> str:
 
 
 def _criteria_country(criteria_name: str | None) -> str:
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.criteria_repository import load_candidate_criteria
 
     if criteria_name is None:
         return "Россия"
 
-    criteria = pool_compat.load_candidate_criteria().get(criteria_name, {})
+    criteria = load_candidate_criteria().get(criteria_name, {})
     return _country_label_from_value(criteria.get("country")) or "Россия"
 
 
@@ -70,9 +70,9 @@ def _append_signal(candidate: dict, signal: str) -> None:
 
 def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = None) -> dict:
     """Повторно добирает KP-данные для неполных кандидатов в общем candidate_pool."""
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
 
-    pool = normalize_storage_pool(pool_compat.load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     incomplete_candidates = get_incomplete_candidates(pool, criteria_name=criteria_name)
     selected_candidates = incomplete_candidates[:max(0, int(limit))]
     stats = {
@@ -142,5 +142,5 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
 
     stats["remaining_incomplete"] = len(get_incomplete_candidates(pool, criteria_name=criteria_name))
     if stats["attempted"] > 0:
-        pool_compat.save_candidate_pool(pool)
+        save_candidate_pool(pool)
     return stats

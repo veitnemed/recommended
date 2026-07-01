@@ -9,7 +9,7 @@ from typing import Any, Callable
 from urllib.request import urlopen
 
 from apis import kp_api
-from candidates import kp_enrichment
+from candidates.sources.kp import enrichment as kp_enrichment
 
 MATCH_THRESHOLD = 0.78
 YEAR_TOLERANCE = 1

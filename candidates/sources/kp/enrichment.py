@@ -7,7 +7,7 @@ from typing import Any, Callable
 from apis import kp_api
 
 
-# Labels match candidates.tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE (TMDb build UI).
+# Labels match candidates.sources.tmdb.country_options.COUNTRY_NAMES_RU_BY_CODE (TMDb build UI).
 KR_COUNTRY_ALIASES = (
     "Южная Корея",
     "Корея Южная",

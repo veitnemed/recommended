@@ -6,8 +6,8 @@ import json
 import os
 from datetime import datetime
 
-from candidates.keys import title_identity_key
-from candidates.schema import normalize_candidate_record
+from candidates.models.keys import title_identity_key
+from candidates.models.schema import normalize_candidate_record
 from config import constant
 from storage import data as storage_data
 

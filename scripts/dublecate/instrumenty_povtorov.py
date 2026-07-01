@@ -11,7 +11,17 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from candidates import candidate_pool
+from candidates.models.keys import normalize_key_part
+from candidates.models.schema import normalize_candidate_record, resolve_canonical_year
+from candidates.pool.dedupe import (
+    candidate_key,
+    candidate_title,
+    compact_title_key,
+    normalized_title_key,
+)
+from candidates.pool.diagnostics import find_cross_year_title_groups, find_title_duplicate_groups
+from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
+from candidates.scoring.sort_keys import candidate_sort_score
 
 
 @dataclass(frozen=True)
@@ -24,149 +34,161 @@ class PoolEntry:
 
 def load_pool_entries() -> list[PoolEntry]:
     """Загружает записи pool и нормализует поля кандидата без сохранения файла."""
-    raw_pool = candidate_pool.load_candidate_pool()
+    raw_pool = load_candidate_pool()
     entries = []
     for key, candidate in raw_pool.items():
         if isinstance(candidate, dict) is False:
             continue
-        entries.append(PoolEntry(key=key, candidate=candidate_pool.normalize_candidate_record(candidate)))
+        entries.append(PoolEntry(key=key, candidate=normalize_candidate_record(candidate)))
     return entries
 
 
 def entry_title(entry: PoolEntry) -> str:
-    """Возвращает основное название кандидата."""
-    return candidate_pool.candidate_title(entry.candidate)
+    return candidate_title(entry.candidate)
 
 
-def title_identity(entry: PoolEntry) -> str:
-    """Возвращает идентификатор title+year для поиска точных повторов."""
-    return candidate_pool.candidate_key(entry.candidate)
+def entry_key(entry: PoolEntry) -> str:
+    return candidate_key(entry.candidate)
 
 
-def entry_sort_score(entry: PoolEntry) -> tuple:
-    """Возвращает score-ключ, по которому выбирается лучший кандидат из повторов."""
-    return candidate_pool.candidate_sort_score(entry.candidate)
+def entry_score(entry: PoolEntry) -> float:
+    return candidate_sort_score(entry.candidate)
+
+
+def find_cross_year_groups(entries: list[PoolEntry] | None = None) -> list[dict]:
+    if entries is None:
+        return find_cross_year_title_groups()
+    candidates = [entry.candidate for entry in entries]
+    return find_cross_year_title_groups(candidates)
+
+
+def find_title_groups(entries: list[PoolEntry] | None = None) -> list[dict]:
+    if entries is None:
+        return find_title_duplicate_groups()
+    candidates = [entry.candidate for entry in entries]
+    return find_title_duplicate_groups(candidates)
+
+
+def titles_are_similar(left_title: str, right_title: str, threshold: float = 0.88) -> bool:
+    left_normalized = normalized_title_key(left_title)
+    right_normalized = normalized_title_key(right_title)
+    if left_normalized == right_normalized:
+        return True
+    if left_normalized == "" or right_normalized == "":
+        return False
+    if compact_title_key(left_title) == compact_title_key(right_title):
+        return True
+    ratio = SequenceMatcher(None, left_normalized, right_normalized).ratio()
+    return ratio >= threshold
+
+
+def purge_keys(keys_to_remove: set[str]) -> int:
+    raw_pool = load_candidate_pool()
+    filtered_pool = {
+        key: candidate
+        for key, candidate in raw_pool.items()
+        if key not in keys_to_remove
+    }
+    removed = len(raw_pool) - len(filtered_pool)
+    if removed > 0:
+        save_candidate_pool(filtered_pool)
+    return removed
+
+
+def delete_entries_by_keys(keys_to_remove: set[str]) -> int:
+    """Удаляет записи pool по raw JSON-ключам."""
+    return purge_keys(keys_to_remove)
 
 
 def format_entry(entry: PoolEntry) -> str:
-    """Форматирует кандидата в одну строку для консольного меню."""
+    """Краткое описание записи для интерактивных скриптов."""
     candidate = entry.candidate
-    title = entry_title(entry) or "Без названия"
-    year = candidate.get("year") or "?"
-    criteria = candidate.get("criteria_name") or "legacy"
-    kp_score = candidate.get("kp_score") or 0
-    kp_votes = candidate.get("kp_votes") or 0
-    imdb_score = candidate.get("imdb_score") or 0
-    imdb_votes = candidate.get("imdb_votes") or 0
-    return (
-        f"{title} ({year}) | критерий: {criteria} | "
-        f"KP {kp_score} / {kp_votes} | IMDb {imdb_score} / {imdb_votes}"
-    )
+    title = candidate_title(candidate) or "Без названия"
+    year = resolve_canonical_year(candidate)
+    year_text = str(year) if year is not None else "?"
+    parts = [f"{title} ({year_text})", f"key={entry.key}"]
+    kp_score = candidate.get("kp_score")
+    if kp_score not in (None, ""):
+        parts.append(f"kp={kp_score}")
+    return " | ".join(parts)
 
 
-def find_exact_duplicate_groups(entries: list[PoolEntry] | None = None) -> list[list[PoolEntry]]:
-    """Ищет точные повторы по нормализованному названию и году во всём общем pool."""
+def _exact_duplicate_group_key(entry: PoolEntry) -> tuple[str, int | None]:
+    title_key = normalize_key_part(candidate_title(entry.candidate))
+    year = resolve_canonical_year(entry.candidate)
+    return title_key, year if isinstance(year, int) else None
+
+
+def find_exact_duplicate_groups(
+    entries: list[PoolEntry] | None = None,
+) -> list[list[PoolEntry]]:
+    """Группы с одинаковым normalized title и canonical year; лучший кандидат первым."""
     if entries is None:
         entries = load_pool_entries()
 
-    groups_by_identity: dict[str, list[PoolEntry]] = {}
+    groups_by_key: dict[tuple[str, int | None], list[PoolEntry]] = {}
     for entry in entries:
-        identity = title_identity(entry)
-        if identity == "|":
+        title_key, year = _exact_duplicate_group_key(entry)
+        if title_key == "" or year is None:
             continue
-        groups_by_identity.setdefault(identity, []).append(entry)
+        groups_by_key.setdefault((title_key, year), []).append(entry)
 
-    groups = [
-        sorted(group, key=entry_sort_score, reverse=True)
-        for group in groups_by_identity.values()
-        if len(group) > 1
-    ]
-    groups.sort(key=lambda group: (entry_title(group[0]), str(group[0].candidate.get("year") or "")))
+    groups: list[list[PoolEntry]] = []
+    for group in groups_by_key.values():
+        if len(group) < 2:
+            continue
+        group.sort(key=lambda item: candidate_sort_score(item.candidate), reverse=True)
+        groups.append(group)
+
+    groups.sort(
+        key=lambda group: (
+            candidate_title(group[0].candidate).casefold(),
+            resolve_canonical_year(group[0].candidate) or 0,
+        )
+    )
     return groups
-
-
-def find_cross_year_title_groups(entries: list[PoolEntry] | None = None) -> list[dict]:
-    """Ищет группы с одним normalized title, но разными canonical year."""
-    if entries is None:
-        return candidate_pool.find_cross_year_title_groups()
-
-    candidates = [entry.candidate for entry in entries]
-    return candidate_pool.find_cross_year_title_groups(candidates)
-
-
-def find_title_duplicate_groups(entries: list[PoolEntry] | None = None) -> list[dict]:
-    """Ищет группы с одним normalized title (2+ записей)."""
-    if entries is None:
-        return candidate_pool.find_title_duplicate_groups()
-
-    candidates = [entry.candidate for entry in entries]
-    return candidate_pool.find_title_duplicate_groups(candidates)
 
 
 def find_similar_title_pairs(
     entries: list[PoolEntry] | None = None,
     *,
-    min_ratio: float = 0.80,
+    threshold: float = 0.80,
 ) -> list[dict]:
-    """Ищет пары одного года с похожими, но не полностью одинаковыми названиями."""
+    """Пары с одним годом, разными normalized title и similarity >= threshold."""
     if entries is None:
         entries = load_pool_entries()
 
-    pairs = []
+    pairs: list[dict] = []
     for left_index in range(len(entries)):
         left = entries[left_index]
-        left_title = entry_title(left)
-        left_year = left.candidate.get("year") or ""
-        if left_title == "":
+        left_title = candidate_title(left.candidate)
+        left_year = resolve_canonical_year(left.candidate)
+        if left_title == "" or left_year is None:
             continue
 
         for right_index in range(left_index + 1, len(entries)):
             right = entries[right_index]
-            right_title = entry_title(right)
-            right_year = right.candidate.get("year") or ""
-            if right_title == "":
+            right_title = candidate_title(right.candidate)
+            right_year = resolve_canonical_year(right.candidate)
+            if right_title == "" or right_year is None:
                 continue
             if left_year != right_year:
                 continue
 
-            left_normalized = candidate_pool.normalized_title_key(left_title)
-            right_normalized = candidate_pool.normalized_title_key(right_title)
+            left_normalized = normalized_title_key(left_title)
+            right_normalized = normalized_title_key(right_title)
             if left_normalized == right_normalized:
                 continue
 
             ratio = SequenceMatcher(
                 None,
-                candidate_pool.compact_title_key(left_title),
-                candidate_pool.compact_title_key(right_title),
+                compact_title_key(left_title),
+                compact_title_key(right_title),
             ).ratio()
-            if ratio < min_ratio:
+            if ratio < threshold:
                 continue
 
-            pairs.append({
-                "left": left,
-                "right": right,
-                "ratio": ratio,
-            })
+            pairs.append({"left": left, "right": right, "ratio": ratio})
 
     pairs.sort(key=lambda item: item["ratio"], reverse=True)
     return pairs
-
-
-def delete_entries_by_keys(keys: set[str]) -> int:
-    """Удаляет выбранные raw-записи и сохраняет pool через обычный write-path проекта."""
-    if len(keys) == 0:
-        return 0
-
-    raw_pool = candidate_pool.load_candidate_pool()
-    filtered_pool = {}
-    removed = 0
-    for key, candidate in raw_pool.items():
-        if key in keys:
-            removed += 1
-            continue
-        filtered_pool[key] = candidate
-
-    if removed > 0:
-        candidate_pool.save_candidate_pool(filtered_pool)
-    return removed
-

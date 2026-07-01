@@ -81,9 +81,9 @@ def purge_watched_from_pool(pool: dict) -> dict:
 
 def remove_candidate_from_pool(target_candidate: dict) -> int:
     """Удаляет из общего пула все варианты кандидата, совпадающие по названию и году."""
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
 
-    pool = normalize_storage_pool(pool_compat.load_candidate_pool())
+    pool = normalize_storage_pool(load_candidate_pool())
     filtered_pool = {}
     removed = 0
 
@@ -94,5 +94,5 @@ def remove_candidate_from_pool(target_candidate: dict) -> int:
         filtered_pool[key] = candidate
 
     if removed > 0:
-        pool_compat.save_candidate_pool(filtered_pool)
+        save_candidate_pool(filtered_pool)
     return removed

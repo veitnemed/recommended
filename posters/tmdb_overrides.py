@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_TMDB_CACHE_DIR = ROOT_DIR / "data" / "cache" / "tmdb"

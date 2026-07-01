@@ -8,8 +8,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from candidates import kp_enrichment
-from candidates.schema import normalize_candidate_record
+from candidates.sources.kp import enrichment as kp_enrichment
+from candidates.models.schema import normalize_candidate_record
 from candidates.sources.tmdb.discover_query import normalize_country_code
 from apis import imdb_sql as sql_search
 from apis import tmdb_api as api_tmdb

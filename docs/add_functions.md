@@ -71,7 +71,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 ### Сохранить теги / pool
 
 - теги: `dataset.tags_work.add_tag()/delete_tag()/delete_all_tags()`, не `save_tags` из UI;
-- candidate pool: функции `candidates.candidate_pool` / `candidates.tmdb_candidate_pool`.
+- candidate pool: `candidates.service` (facade), `candidates.repositories`, `candidates.pool`, `candidates.sources.tmdb`.
 
 ### Добавить вызов внешнего API
 
@@ -82,7 +82,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 ### Прогресс длинной операции в candidates
 
 Не печатать из `candidates`. Использовать `report_progress(source, status)`;
-UI/CLI регистрируют печать через `candidates.tmdb_candidate_pool.set_progress_reporter(...)`.
+UI/CLI регистрируют печать через `candidates.sources.tmdb.builder.set_progress_reporter(...)`.
 Итоговые отчёты возвращать как данные/строки (`build_summary_lines`), печатает их UI/CLI.
 
 ## 5. Чего не делать без отдельного подтверждения

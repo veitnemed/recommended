@@ -22,7 +22,7 @@ def format_candidate_title_line(candidate: dict) -> str:
 
 def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     """Secondary list metric for the active sort mode."""
-    from candidates.schema import coerce_candidate_number
+    from candidates.models.schema import coerce_candidate_number
 
     field_name = sort_mode if sort_mode in candidate_service.SEARCH_SORT_MODES else "kp_score"
     prefix = SORT_MODE_METRIC_PREFIX.get(field_name, "")
@@ -120,7 +120,7 @@ def candidate_poster_url_for_download(candidate: dict) -> str | None:
 
 def build_candidate_readonly_card(candidate: dict) -> dict:
     """Build a WatchedDetailCard dict from pool fields without transfer/network IO."""
-    from candidates.schema import coerce_candidate_number
+    from candidates.models.schema import coerce_candidate_number
 
     title = candidate.get("title") or candidate.get("name") or "Без названия"
     overview = candidate.get("overview") or candidate.get("description")

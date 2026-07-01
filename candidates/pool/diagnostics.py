@@ -12,7 +12,7 @@ from candidates.pool.dedupe import (
     normalized_title_key,
 )
 from candidates.pool.queries import get_all_candidates
-from candidates.schema import coerce_candidate_number, normalize_candidate_record, resolve_canonical_year
+from candidates.models.schema import coerce_candidate_number, normalize_candidate_record, resolve_canonical_year
 from candidates.scoring.sort_keys import candidate_sort_score
 
 

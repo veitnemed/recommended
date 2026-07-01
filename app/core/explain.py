@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from app.core import filters
 from app.core.ranking import calculate_quality_score, imdb_vote_weight
-from candidates import country_schema, genre_schema
-from candidates.schema import coerce_candidate_number, normalize_candidate_record
+from candidates.models import country_schema, genre_schema
+from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 
 
 def _number(value) -> float | None:

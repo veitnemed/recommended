@@ -5,11 +5,11 @@ import time
 from pathlib import Path
 
 from config import constant
-from candidates import country_schema
-from candidates import genre_schema
+from candidates.models import country_schema
+from candidates.models import genre_schema
 from candidates import service as candidate_service
-from candidates import tmdb_country_options
-from candidates import tmdb_genre_options
+from candidates.sources.tmdb import country_options as tmdb_country_options
+from candidates.sources.tmdb import genre_options as tmdb_genre_options
 from dataset import dataset_stats
 from dataset import delete_record as dataset_delete_record
 from dataset import genre_import
@@ -784,7 +784,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     from apis import imdb_sql as sql_search
 
-    from candidates.keys import COMMON_POOL_CRITERIA_NAME
+    from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 
     ui.clean_terminal()
     print("TMDb candidate_pool v1\n")
@@ -911,7 +911,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     kp_debug = result.get("kp_debug")
     if isinstance(kp_debug, dict):
-        from candidates import kp_tmdb_build_debug
+        from candidates.sources.tmdb import debug as kp_tmdb_build_debug
 
         for line in kp_tmdb_build_debug.format_kp_debug_lines(kp_debug):
             print(line)
@@ -931,7 +931,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
 def show_tmdb_dataset_genre_diagnostics() -> None:
     """Показывает и сохраняет распределение TMDb TV-жанров по текущему dataset."""
-    from candidates.tmdb_candidate_pool import (
+    from candidates.sources.tmdb.builder import (
         build_tmdb_genre_distribution_report,
         save_tmdb_genre_distribution_report,
     )

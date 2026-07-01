@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from candidates import country_schema
-from candidates import genre_schema
+from candidates.models import country_schema
+from candidates.models import genre_schema
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.repositories.criteria_repository import load_candidate_criteria
-from candidates.schema import (
+from candidates.models.schema import (
     coerce_candidate_number,
     is_candidate_complete as schema_is_candidate_complete,
     normalize_candidate_record,
@@ -69,7 +69,7 @@ def collect_search_genre_options(candidates: list) -> list[str]:
 
 def collect_search_country_options(candidates: list) -> list[dict]:
     """Returns unique saved-pool country options for runtime search filters."""
-    from candidates import tmdb_country_options
+    from candidates.sources.tmdb import country_options as tmdb_country_options
 
     labels_by_code = tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE
     seen_codes: set[str] = set()

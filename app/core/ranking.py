@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from candidates.schema import coerce_candidate_number, normalize_candidate_record
+from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 
 
 def _number(value) -> float | None:

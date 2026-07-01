@@ -2,7 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
 from posters.tmdb_overrides import (
     get_watched_tmdb_override,
     load_watched_tmdb_overrides,

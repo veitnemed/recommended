@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from candidates import genre_schema
+from candidates.models import genre_schema
 from candidates.pool.dedupe import (
     candidate_title,
     dedupe_pool_by_similar_titles,
@@ -17,7 +17,7 @@ from candidates.pool.watched_cleanup import (
     build_watched_signatures,
     is_watched_candidate,
 )
-from candidates.schema import (
+from candidates.models.schema import (
     is_candidate_complete as schema_is_candidate_complete,
     normalize_candidate_record,
 )
@@ -41,9 +41,9 @@ def _count_raw_pool_entries(raw_pool: dict, criteria_name: str | None = None) ->
 
 def get_pool_stats(criteria_name: str | None = None) -> dict:
     """Возвращает согласованные счётчики pool для UI и диагностики."""
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool
 
-    raw_pool = pool_compat.load_candidate_pool()
+    raw_pool = load_candidate_pool()
     storage_pool = normalize_storage_pool(raw_pool)
     watched_signatures = build_watched_signatures()
     dataset_title_keys = build_dataset_title_keys()

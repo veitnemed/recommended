@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from candidates.models.keys import title_identity_key
-from candidates.schema import (
+from candidates.models.schema import (
     coerce_candidate_number,
     is_candidate_complete as schema_is_candidate_complete,
 )

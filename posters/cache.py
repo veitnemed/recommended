@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
 from storage.data import get_meta_obj
 
 ROOT_DIR = Path(__file__).resolve().parents[1]

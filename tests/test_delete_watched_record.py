@@ -3,7 +3,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from candidates.keys import title_identity_key
+from candidates.models.keys import title_identity_key
 from config import constant
 from config import scheme
 from common import format_score

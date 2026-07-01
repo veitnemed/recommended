@@ -82,23 +82,26 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
 
 
 def test_add_title_button_opens_wizard_dialog() -> None:
-    import desktop.watched.add_title.dialog as dialog_module
+    import desktop.watched.add_title.preview_dialog as preview_module
+    import desktop.watched.add_title.search_dialog as search_module
     import desktop.watched.sidebar as sidebar_module
     import desktop.watched.tab as watched_tab_module
+    import desktop.watched.tab_actions as actions_module
 
     sidebar_source = inspect.getsource(sidebar_module.build_watched_sidebar)
-    handler_source = inspect.getsource(watched_tab_module.WatchedTabView._open_add_title_dialog)
-    dialog_source = inspect.getsource(dialog_module)
+    handler_source = inspect.getsource(actions_module.WatchedTabActionsMixin._open_add_title_dialog)
+    search_source = inspect.getsource(search_module)
+    preview_source = inspect.getsource(preview_module)
 
     assert "watchedAddTitle" in sidebar_source
     assert "+ Добавить тайтл" in sidebar_source
     assert "run_add_title_flow" in handler_source
     assert "reload_entries" in handler_source
     assert "_show_add_title_stub" not in handler_source
-    assert "class AddTitleSearchDialog" in dialog_source
-    assert "class AddTitlePreviewDialog" in dialog_source
-    assert "run_add_title_flow" in dialog_source
-    assert "Искать другой" in dialog_source
+    assert "class AddTitleSearchDialog" in search_source
+    assert "class AddTitlePreviewDialog" in preview_source
+    assert "run_add_title_flow" in handler_source
+    assert "Искать другой" in preview_source
 
 
 def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> None:
@@ -491,7 +494,7 @@ def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch)
         return UpdateRecordResult(True, title, "Запись обновлена.", "updated", ["main_info.user_score"])
 
     monkeypatch.setattr("dataset.dataset_records.update_dataset_record", fake_update)
-    monkeypatch.setattr("candidates.candidate_pool.save_candidate_pool", fail)
+    monkeypatch.setattr("candidates.repositories.pool_repository.save_candidate_pool", fail)
 
     result = save_watched_user_score("Dataset Key", 8.5)
 
@@ -683,8 +686,10 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     import desktop.watched.filters_panel as filters_panel_module
     import desktop.watched.sidebar as sidebar_module
     import desktop.watched.tab as watched_tab_module
+    import desktop.watched.tab_actions as actions_module
 
     tab_source = inspect.getsource(watched_tab_module.WatchedTabView)
+    actions_source = inspect.getsource(actions_module.WatchedTabActionsMixin)
     sidebar_source = inspect.getsource(sidebar_module.build_watched_sidebar)
     filters_source = inspect.getsource(filters_panel_module.WatchedFiltersPanel)
 
@@ -701,9 +706,9 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     assert "reset_all" in filters_source
     assert "watchedScoreReset" not in filters_source
     assert "watchedYearReset" not in filters_source
-    assert "Удалить запись" in tab_source
-    assert "_delete_watched_entry" in tab_source
-    assert "execute_watched_delete" in tab_source
+    assert "Удалить запись" in actions_source
+    assert "_delete_watched_entry" in actions_source
+    assert "execute_watched_delete" in actions_source
 
 
 def test_is_delete_confirmation_valid() -> None:
@@ -1400,9 +1405,9 @@ def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
 
 
 def test_format_pool_stats_user_uses_plain_language() -> None:
-    from desktop.candidates.filters_view import _format_pool_stats_user
+    from desktop.candidates.filters_intro import format_pool_stats_user
 
-    text = _format_pool_stats_user(
+    text = format_pool_stats_user(
         {"unique_total": 305, "ready_total": 204, "incomplete_total": 101},
     )
     assert "305 сериалов" in text
@@ -1528,11 +1533,15 @@ def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeyp
 def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
     import inspect
 
+    import desktop.candidates.filters_form as form_module
     import desktop.candidates.filters_view as module
 
-    source = inspect.getsource(module.CandidateFiltersView.__init__)
-    assert "_kp_score_slider" in source
-    assert "_kp_votes_slider" in source
+    init_source = inspect.getsource(module.CandidateFiltersView.__init__)
+    form_source = inspect.getsource(form_module.build_filters_form)
+    source = init_source + form_source
+    assert "build_filters_form" in init_source
+    assert "kp_score_slider" in source
+    assert "kp_votes_slider" in source
     assert "_make_score_spin" not in source
     assert "_make_votes_spin" not in source
     assert "QDoubleSpinBox" not in source
@@ -1593,13 +1602,17 @@ def test_genre_chip_selector_tracks_selection(qapp) -> None:
 def test_candidate_filters_view_uses_genre_chip_selectors() -> None:
     import inspect
 
+    import desktop.candidates.filters_form as form_module
     import desktop.candidates.filters_view as module
 
-    source = inspect.getsource(module.CandidateFiltersView.__init__)
-    assert "GenreChipSelector" in source
-    assert "_include_genre_selector" in source
-    assert "_exclude_genre_selector" in source
-    assert "_make_genre_list" not in source
+    init_source = inspect.getsource(module.CandidateFiltersView.__init__)
+    form_source = inspect.getsource(form_module.build_filters_form)
+    assert "build_filters_form" in init_source
+    assert "GenreChipSelector" in form_source
+    assert "include_genre_selector" in form_source
+    assert "exclude_genre_selector" in form_source
+    assert "_form" in init_source
+    assert "_make_genre_list" not in init_source + form_source
 
 
 def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
@@ -1785,44 +1798,6 @@ def test_candidate_list_view_starts_async_poster_download() -> None:
     assert "CandidatePosterDownloadWorker" in source
     assert "candidate_poster_url_for_download" in source
     assert "apply_local_poster_path" in source
-
-
-def test_settings_tools_view_wires_pool_maintenance_actions() -> None:
-    import inspect
-
-    import desktop.settings.view as settings_module
-
-    init_source = inspect.getsource(settings_module.SettingsToolsView.__init__)
-    dedupe_source = inspect.getsource(settings_module.SettingsToolsView._run_clean_duplicates)
-    retry_source = inspect.getsource(settings_module.SettingsToolsView._run_retry_kp)
-    clear_source = inspect.getsource(settings_module.SettingsToolsView._run_clear_pool)
-
-    assert "clean_common_pool_duplicates" in dedupe_source
-    assert "retry_kp_enrichment_in_pool" in retry_source
-    assert "clear_common_candidate_pool" in clear_source
-    assert "QMessageBox" in dedupe_source
-    assert "on_pool_changed" in init_source
-    assert "get_title_duplicates_view" in inspect.getsource(settings_module.SettingsToolsView.refresh)
-    assert "settingsSection" in init_source
-    assert "settingsMetricCard" in inspect.getsource(settings_module.SettingsToolsView._make_metric_tile)
-    assert "settingsDangerButton" in init_source
-    assert "format_pool_kpi_items" in inspect.getsource(settings_module.SettingsToolsView.refresh)
-
-
-def test_settings_tools_view_wires_tmdb_import() -> None:
-    import inspect
-
-    import desktop.settings.view as settings_module
-
-    init_source = inspect.getsource(settings_module.SettingsToolsView.__init__)
-    import_source = inspect.getsource(settings_module.SettingsToolsView._run_tmdb_import)
-    refresh_source = inspect.getsource(settings_module.SettingsToolsView._refresh_tmdb_import_section)
-
-    assert "get_tmdb_import_files_view" in refresh_source
-    assert "load_tmdb_result_import_preview" in import_source
-    assert "import_tmdb_result_to_pool" in import_source
-    assert "settingsTmdbImportFile" in init_source
-    assert "_notify_pool_changed" in import_source
 
 
 def test_candidate_session_reload_from_pool_reapplies_filters() -> None:

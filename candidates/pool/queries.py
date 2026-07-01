@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from candidates.pool.normalization import normalize_storage_pool
-from candidates.schema import (
+from candidates.models.schema import (
     compute_completeness as schema_compute_completeness,
 )
 from candidates.scoring.sort_keys import _sort_number
 
 
 def _load_pool() -> dict:
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool
 
-    return pool_compat.load_candidate_pool()
+    return load_candidate_pool()
 
 
 def get_candidates_by_criteria(criteria_name: str) -> list:

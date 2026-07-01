@@ -1,6 +1,6 @@
 """Список стран для выбора TMDb Discover country в консольном UI.
 
-Русские названия синхронизированы с candidates.kp_enrichment.KP_COUNTRY_BY_ISO2
+Русские названия синхронизированы с candidates.sources.kp.enrichment.KP_COUNTRY_BY_ISO2
 для перевода ISO-2 -> country label в KP API enrichment.
 """
 

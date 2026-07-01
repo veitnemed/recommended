@@ -44,10 +44,10 @@ def is_dataset_title_match(candidate: dict, dataset_title_keys: set[str] | None 
 
 def count_pool_dataset_title_matches(pool: dict | None = None) -> dict:
     """Read-only count of pool entries whose title already exists in dataset."""
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool
 
     if pool is None:
-        pool = normalize_storage_pool(pool_compat.load_candidate_pool())
+        pool = normalize_storage_pool(load_candidate_pool())
     dataset_title_keys = build_dataset_title_keys()
     matches = []
     for key, candidate in pool.items():
@@ -68,9 +68,9 @@ def count_pool_dataset_title_matches(pool: dict | None = None) -> dict:
 
 def purge_dataset_title_matches_from_pool() -> dict:
     """Removes pool entries whose normalized title exists in watched dataset."""
-    from candidates import candidate_pool as pool_compat
+    from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
 
-    raw_pool = pool_compat.load_candidate_pool()
+    raw_pool = load_candidate_pool()
     raw_total = len(raw_pool) if isinstance(raw_pool, dict) else 0
     storage_pool = normalize_storage_pool(raw_pool)
     dataset_title_keys = build_dataset_title_keys()
@@ -87,7 +87,7 @@ def purge_dataset_title_matches_from_pool() -> dict:
 
     changed = removed > 0 or set(raw_pool.keys()) != set(filtered.keys())
     if changed:
-        pool_compat.save_candidate_pool(filtered)
+        save_candidate_pool(filtered)
 
     return {
         "ok": True,

@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from candidates.tmdb_candidate_pool import set_progress_reporter
+from candidates.sources.tmdb.builder import set_progress_reporter
 from common import valid
 from storage import files as storage_files
 from ui.console import global_menu

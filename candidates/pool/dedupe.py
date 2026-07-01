@@ -5,7 +5,7 @@ from __future__ import annotations
 from difflib import SequenceMatcher
 
 from candidates.models.keys import normalize_key_part, pool_entry_key, title_identity_key
-from candidates.schema import normalize_candidate_for_storage, resolve_canonical_year
+from candidates.models.schema import normalize_candidate_for_storage, resolve_canonical_year
 from candidates.scoring.sort_keys import candidate_sort_score
 
 
@@ -228,10 +228,10 @@ def clean_common_pool_duplicates(
     merge_cross_year: bool = True,
 ) -> dict:
     """Явно чистит общий pool от exact-, fuzzy- и cross-year-дублей (write-path)."""
-    from candidates import candidate_pool as pool_compat
     from candidates.pool.normalization import normalize_storage_pool
+    from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
 
-    raw_pool = pool_compat.load_candidate_pool()
+    raw_pool = load_candidate_pool()
     raw_total = len(raw_pool) if isinstance(raw_pool, dict) else 0
 
     exact_pool = normalize_storage_pool(raw_pool)
@@ -255,7 +255,7 @@ def clean_common_pool_duplicates(
         or set(raw_pool.keys()) != set(final_pool.keys())
     )
     if changed:
-        pool_compat.save_candidate_pool(final_pool)
+        save_candidate_pool(final_pool)
 
     return {
         "ok": True,
