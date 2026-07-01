@@ -12,7 +12,7 @@
 
 ## Theme Tokens
 
-Основные значения живут в `desktop/theme.py`.
+Основные значения живут в `desktop/theme/tokens.py`; QSS builders — в `desktop/theme/styles/`.
 
 Правила:
 

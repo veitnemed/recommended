@@ -5,8 +5,8 @@ from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from desktop.collapsible_chip_helpers import ChipExpandControl
-from desktop.genre_chip_selector import FlowLayout
+from desktop.shared.widgets.collapsible_chip_helpers import ChipExpandControl
+from desktop.shared.widgets.genre_chip_selector import FlowLayout
 
 
 def _normalize_selected_codes(codes) -> list[str]:

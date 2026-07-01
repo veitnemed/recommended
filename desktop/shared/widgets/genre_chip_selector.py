@@ -5,7 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, QSize, QRect, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from desktop.collapsible_chip_helpers import ChipExpandControl
+from desktop.shared.widgets.collapsible_chip_helpers import ChipExpandControl
 
 
 class FlowLayout(QLayout):

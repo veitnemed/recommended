@@ -37,7 +37,7 @@ Relevant files:
 - `ui/console/interface_funcs.py`;
 - `ui/console/request.py`;
 - `desktop/app.py`;
-- `desktop/watched_view.py`.
+- `desktop/watched/model.py`, `desktop/shared/detail/card.py`.
 
 ## Service-Слой
 

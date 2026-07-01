@@ -1,0 +1,308 @@
+"""QSS builders for dialogs (score edit, delete, add title)."""
+
+from __future__ import annotations
+
+from desktop.theme.tokens import *  # noqa: F403
+
+def build_score_edit_dialog_style() -> str:
+    """Return the score edit dialog stylesheet."""
+    return f"""
+QDialog#scoreEditDialog {{
+    background-color: {COLOR_BG};
+    font-family: {FONT_FAMILY_QSS};
+}}
+QFrame#scoreEditCard {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD_LARGE}px;
+}}
+QLabel#scoreEditTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_DIALOG_TITLE}px;
+    font-weight: 700;
+}}
+QLabel#scoreEditMovieTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+}}
+QLabel#scoreEditCurrent,
+QLabel#scoreEditFieldLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_TINY}px;
+}}
+QDoubleSpinBox#scoreEditSpin {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_DIALOG_TITLE}px;
+    font-weight: 600;
+    padding: 7px {SPACING_MEDIUM}px;
+}}
+QDoubleSpinBox#scoreEditSpin:focus {{
+    border: 1px solid {COLOR_ACCENT};
+}}
+QDoubleSpinBox#scoreEditSpin::up-button,
+QDoubleSpinBox#scoreEditSpin::down-button {{
+    background-color: {COLOR_CARD_ALT};
+    border: none;
+    width: 22px;
+}}
+QDoubleSpinBox#scoreEditSpin::up-button:hover,
+QDoubleSpinBox#scoreEditSpin::down-button:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+}}
+QDialogButtonBox {{
+    background: transparent;
+}}
+QPushButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: {BUTTON_PADDING_Y}px {BUTTON_PADDING_X}px;
+    min-width: 92px;
+}}
+QPushButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#scoreEditSaveButton {{
+    background-color: {COLOR_ACCENT};
+    border-color: {COLOR_ACCENT};
+    color: {COLOR_TEXT};
+}}
+QPushButton#scoreEditSaveButton:hover {{
+    background-color: {COLOR_ACCENT_HOVER};
+    border-color: {COLOR_ACCENT_HOVER};
+}}
+"""
+
+
+def build_delete_dialog_style() -> str:
+    """Return the watched delete confirmation dialog stylesheet."""
+    return f"""
+QDialog#deleteRecordDialog {{
+    background-color: {COLOR_BG};
+    font-family: {FONT_FAMILY_QSS};
+}}
+QFrame#deleteRecordCard {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD_LARGE}px;
+}}
+QLabel#deleteRecordTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_DIALOG_TITLE}px;
+    font-weight: 700;
+}}
+QLabel#deleteRecordWarning {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QLabel#deleteRecordPreviewLine {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {FONT_SMALL}px;
+}}
+QLabel#deleteRecordFieldLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_TINY}px;
+}}
+QLineEdit#deleteRecordConfirmInput {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding: 7px {SPACING_MEDIUM}px;
+}}
+QLineEdit#deleteRecordConfirmInput:focus {{
+    border: 1px solid {COLOR_DELETE_BUTTON};
+}}
+QDialogButtonBox {{
+    background: transparent;
+}}
+QPushButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: {BUTTON_PADDING_Y}px {BUTTON_PADDING_X}px;
+    min-width: 92px;
+}}
+QPushButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#deleteRecordConfirmButton {{
+    background-color: {COLOR_DELETE_BUTTON};
+    border-color: {COLOR_DELETE_BUTTON};
+    color: {COLOR_TEXT};
+}}
+QPushButton#deleteRecordConfirmButton:hover {{
+    background-color: {COLOR_DELETE_BUTTON_HOVER};
+    border-color: {COLOR_DELETE_BUTTON_HOVER};
+}}
+QPushButton#deleteRecordConfirmButton:disabled {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER};
+    color: {COLOR_TEXT_MUTED};
+}}
+"""
+
+
+def build_add_title_dialog_style() -> str:
+    """Return the add-title wizard dialog stylesheet."""
+    return f"""
+QDialog#addTitleDialog, QDialog#addTitleSearchDialog, QDialog#addTitlePreviewDialog {{
+    background-color: {COLOR_BG};
+    font-family: {FONT_FAMILY_QSS};
+}}
+QLabel#addTitleHeader {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_DIALOG_TITLE}px;
+    font-weight: 700;
+}}
+QLabel#addTitleSubtitle {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QFrame#addTitleSearchPanel {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD_LARGE}px;
+}}
+QLineEdit#addTitleSearchInput, QComboBox#addTitleCountryCombo {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    padding: 7px {SPACING_MEDIUM}px;
+    min-height: 18px;
+}}
+QLineEdit#addTitleSearchInput:focus, QComboBox#addTitleCountryCombo:focus {{
+    border: 1px solid {COLOR_ACCENT};
+}}
+QPushButton#addTitleSearchButton {{
+    background-color: {COLOR_ADD_BUTTON};
+    border: 1px solid {COLOR_ADD_BUTTON_BORDER};
+    border-top-color: {COLOR_ADD_BUTTON_TOP};
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: {RADIUS_BUTTON}px;
+}}
+QPushButton#addTitleSearchButton:hover {{
+    background-color: {COLOR_ADD_BUTTON_HOVER};
+    border-color: {COLOR_ADD_BUTTON_HOVER};
+    border-top-color: {COLOR_ADD_BUTTON_HOVER_TOP};
+}}
+QPushButton#addTitleSearchButton:disabled {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER};
+    color: {COLOR_TEXT_MUTED};
+}}
+QProgressBar#addTitleProgress {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {FONT_TINY}px;
+    text-align: center;
+    min-height: 18px;
+}}
+QProgressBar#addTitleProgress::chunk {{
+    background-color: {COLOR_ACCENT};
+    border-radius: {RADIUS_BUTTON}px;
+}}
+QLabel#addTitleStatus {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {FONT_SMALL}px;
+}}
+QLabel#addTitleWarning {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {FONT_SMALL}px;
+    padding: 8px 10px;
+}}
+QFrame#addTitlePreviewCard {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD_LARGE}px;
+}}
+QFrame#addTitlePreviewCard QLabel#detailTitle {{
+    font-size: 18px;
+}}
+QScrollArea#addTitlePreviewScroll {{
+    background: transparent;
+    border: none;
+}}
+QLabel#addTitleConfirmHint {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QLabel#addTitleFieldLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QSpinBox#addTitleYearSpin, QDoubleSpinBox#addTitleScoreSpin {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    padding: 4px 8px;
+}}
+QPushButton#addTitleConfirmButton {{
+    background-color: {COLOR_ACCENT};
+    border: 1px solid {COLOR_ACCENT};
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 700;
+    padding: 9px 18px;
+    border-radius: {RADIUS_BUTTON}px;
+}}
+QPushButton#addTitleConfirmButton:hover {{
+    background-color: {COLOR_ACCENT_HOVER};
+    border-color: {COLOR_ACCENT_HOVER};
+}}
+QPushButton#addTitleConfirmButton:disabled {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER};
+    color: {COLOR_TEXT_MUTED};
+}}
+QPushButton#addTitleSecondaryButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    color: {COLOR_TEXT_SOFT};
+    font-size: {FONT_BASE}px;
+    padding: 8px 14px;
+    border-radius: {RADIUS_BUTTON}px;
+}}
+QPushButton#addTitleSecondaryButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+"""

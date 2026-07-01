@@ -1,4 +1,4 @@
-"""Pure helpers for desktop candidate list display."""
+"""Pure helpers for desktop candidate list display (presenters)."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def filter_candidates_by_title(candidates: list[dict], query: str) -> list[dict]
 
 def build_candidate_search_index(candidates: list[dict]):
     """Build reusable search index for candidate list filtering."""
-    from desktop.list_search import SearchIndex, SearchIndexItem
+    from desktop.shared.widgets.list_search import SearchIndex, SearchIndexItem
 
     items = [
         SearchIndexItem(

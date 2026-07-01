@@ -44,7 +44,7 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
 
 
 def _make_entries() -> list[tuple[str, dict, dict]]:
-    from desktop.watched_view import prepare_card_for_display
+    from desktop.watched import prepare_card_for_display
 
     entries = [
         ("Alpha", _make_movie("Alpha", 9.0, 2020, 8.1), None),
@@ -59,6 +59,7 @@ def test_desktop_app_imports_without_window() -> None:
 
     assert app_module.__name__ == "desktop.app"
     assert callable(app_module.main)
+    assert app_module.WatchedMoviesWindow is not None
 
 
 def test_start_app_entrypoint_is_guarded() -> None:
@@ -69,9 +70,9 @@ def test_start_app_entrypoint_is_guarded() -> None:
 
 
 def test_score_edit_dialog_is_custom_dark_dialog() -> None:
-    import desktop.app as app_module
+    import desktop.watched.dialogs.score_edit as dialog_module
 
-    source = inspect.getsource(app_module)
+    source = inspect.getsource(dialog_module)
 
     assert "class ScoreEditDialog(QDialog)" in source
     assert "QInputDialog" not in source
@@ -81,17 +82,17 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
 
 
 def test_add_title_button_opens_wizard_dialog() -> None:
-    import desktop.app as app_module
-    import desktop.add_title_dialog as dialog_module
+    import desktop.watched.add_title.dialog as dialog_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow)
-    handler_source = inspect.getsource(app_module.WatchedMoviesWindow._open_add_title_dialog)
+    source = inspect.getsource(watched_tab_module.WatchedTabView)
+    handler_source = inspect.getsource(watched_tab_module.WatchedTabView._open_add_title_dialog)
     dialog_source = inspect.getsource(dialog_module)
 
     assert "watchedAddTitle" in source
     assert "+ Добавить тайтл" in source
     assert "run_add_title_flow" in handler_source
-    assert "load_watched_entries" in handler_source
+    assert "reload_entries" in handler_source
     assert "_show_add_title_stub" not in source
     assert "class AddTitleSearchDialog" in dialog_source
     assert "class AddTitlePreviewDialog" in dialog_source
@@ -100,7 +101,7 @@ def test_add_title_button_opens_wizard_dialog() -> None:
 
 
 def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> None:
-    import desktop.add_title_dialog as dialog_module
+    import desktop.watched.add_title.dialog as dialog_module
 
     source = inspect.getsource(dialog_module.AddTitlePreviewDialog)
     assert "_year_label" in source
@@ -110,7 +111,7 @@ def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> No
 
 
 def test_prepare_card_for_display_does_not_mutate_movie() -> None:
-    from desktop.watched_view import prepare_card_for_display
+    from desktop.watched import prepare_card_for_display
 
     movie = _make_movie("Mutation Check", 8.5, 2019)
     original = copy.deepcopy(movie)
@@ -122,7 +123,7 @@ def test_prepare_card_for_display_does_not_mutate_movie() -> None:
 
 
 def test_filter_by_title() -> None:
-    from desktop.watched_view import filter_by_title
+    from desktop.watched import filter_by_title
 
     entries = _make_entries()
 
@@ -132,13 +133,13 @@ def test_filter_by_title() -> None:
 
 
 def test_filter_entries_by_user_score_empty() -> None:
-    from desktop.watched_view import filter_entries_by_user_score
+    from desktop.watched import filter_entries_by_user_score
 
     assert filter_entries_by_user_score([], 7.0, 10.0) == []
 
 
 def test_filter_entries_by_user_score_range() -> None:
-    from desktop.watched_view import filter_entries_by_user_score
+    from desktop.watched import filter_entries_by_user_score
 
     entries = _make_entries()
 
@@ -148,7 +149,7 @@ def test_filter_entries_by_user_score_range() -> None:
 
 
 def test_filter_entries_by_user_score_narrow_range() -> None:
-    from desktop.watched_view import filter_entries_by_user_score
+    from desktop.watched import filter_entries_by_user_score
 
     entries = _make_entries()
 
@@ -158,7 +159,7 @@ def test_filter_entries_by_user_score_narrow_range() -> None:
 
 
 def test_filter_entries_by_user_score_string_and_invalid_scores() -> None:
-    from desktop.watched_view import filter_entries_by_user_score
+    from desktop.watched import filter_entries_by_user_score
 
     entries = [
         ("String Score", {}, {"title": "String Score", "user_score": "7.5"}),
@@ -172,7 +173,7 @@ def test_filter_entries_by_user_score_string_and_invalid_scores() -> None:
 
 
 def test_filter_entries_by_user_score_swaps_invalid_range() -> None:
-    from desktop.watched_view import filter_entries_by_user_score
+    from desktop.watched import filter_entries_by_user_score
 
     entries = _make_entries()
 
@@ -182,13 +183,13 @@ def test_filter_entries_by_user_score_swaps_invalid_range() -> None:
 
 
 def test_filter_entries_by_year_empty() -> None:
-    from desktop.watched_view import filter_entries_by_year
+    from desktop.watched import filter_entries_by_year
 
     assert filter_entries_by_year([], 2015, 2026) == []
 
 
 def test_filter_entries_by_year_range() -> None:
-    from desktop.watched_view import filter_entries_by_year
+    from desktop.watched import filter_entries_by_year
 
     entries = _make_entries()
 
@@ -198,7 +199,7 @@ def test_filter_entries_by_year_range() -> None:
 
 
 def test_filter_entries_by_year_exact_year() -> None:
-    from desktop.watched_view import filter_entries_by_year
+    from desktop.watched import filter_entries_by_year
 
     entries = [
         ("Old", _make_movie("Old", 7.0, 2022), {"title": "Old", "user_score": 7.0, "year": 2022}),
@@ -211,7 +212,7 @@ def test_filter_entries_by_year_exact_year() -> None:
 
 
 def test_filter_entries_by_year_string_and_invalid_years() -> None:
-    from desktop.watched_view import filter_entries_by_year
+    from desktop.watched import filter_entries_by_year
 
     entries = [
         ("String Year", {"main_info": {"year": "2020"}}, {"title": "String Year", "user_score": 7.5}),
@@ -225,7 +226,7 @@ def test_filter_entries_by_year_string_and_invalid_years() -> None:
 
 
 def test_filter_entries_by_year_swaps_invalid_range() -> None:
-    from desktop.watched_view import filter_entries_by_year
+    from desktop.watched import filter_entries_by_year
 
     entries = _make_entries()
 
@@ -235,13 +236,13 @@ def test_filter_entries_by_year_swaps_invalid_range() -> None:
 
 
 def test_get_available_genres_empty() -> None:
-    from desktop.watched_view import get_available_genres
+    from desktop.watched import get_available_genres
 
     assert get_available_genres([]) == []
 
 
 def test_get_available_genres_sorts_and_hides_empty_duplicates() -> None:
-    from desktop.watched_view import get_available_genres
+    from desktop.watched import get_available_genres
 
     entries = [
         ("Alpha", {}, {"title": "Alpha", "genres": ["Драма", "Криминал", "Драма"]}),
@@ -253,7 +254,7 @@ def test_get_available_genres_sorts_and_hides_empty_duplicates() -> None:
 
 
 def test_filter_entries_by_genre_no_filter_returns_all() -> None:
-    from desktop.watched_view import GENRE_FILTER_ALL, filter_entries_by_genre
+    from desktop.watched import GENRE_FILTER_ALL, filter_entries_by_genre
 
     entries = [
         ("Alpha", {}, {"title": "Alpha", "genres": ["Драма"]}),
@@ -265,7 +266,7 @@ def test_filter_entries_by_genre_no_filter_returns_all() -> None:
 
 
 def test_filter_entries_by_genre_matches_selected_genre() -> None:
-    from desktop.watched_view import filter_entries_by_genre
+    from desktop.watched import filter_entries_by_genre
 
     entries = [
         ("Alpha", {}, {"title": "Alpha", "genres": ["Драма", "Криминал"]}),
@@ -279,7 +280,7 @@ def test_filter_entries_by_genre_matches_selected_genre() -> None:
 
 
 def test_filter_entries_by_genre_missing_genre_returns_empty() -> None:
-    from desktop.watched_view import filter_entries_by_genre
+    from desktop.watched import filter_entries_by_genre
 
     entries = [
         ("Alpha", {}, {"title": "Alpha", "genres": ["Драма"]}),
@@ -290,7 +291,7 @@ def test_filter_entries_by_genre_missing_genre_returns_empty() -> None:
 
 
 def test_apply_view_combines_title_score_year_genre_filter_and_sort() -> None:
-    from desktop.watched_view import apply_view
+    from desktop.watched import apply_view
 
     entries = [
         *_make_entries(),
@@ -318,7 +319,7 @@ def test_apply_view_combines_title_score_year_genre_filter_and_sort() -> None:
 
 
 def test_apply_view_empty_after_year_filter() -> None:
-    from desktop.watched_view import apply_view
+    from desktop.watched import apply_view
 
     filtered = apply_view(_make_entries(), "", "user_score", 0.0, 10.0, 1990, 1995)
 
@@ -326,7 +327,7 @@ def test_apply_view_empty_after_year_filter() -> None:
 
 
 def test_apply_view_sorts_after_year_filter() -> None:
-    from desktop.watched_view import apply_view
+    from desktop.watched import apply_view
 
     filtered = apply_view(_make_entries(), "", "year", 0.0, 10.0, 2019, 2022)
 
@@ -334,7 +335,7 @@ def test_apply_view_sorts_after_year_filter() -> None:
 
 
 def test_apply_view_sorts_after_genre_filter() -> None:
-    from desktop.watched_view import apply_view
+    from desktop.watched import apply_view
 
     entries = [
         ("Older", {}, {"title": "Older", "user_score": 7.0, "year": 2018, "genres": ["Драма"]}),
@@ -348,7 +349,7 @@ def test_apply_view_sorts_after_genre_filter() -> None:
 
 
 def test_sort_by_user_score() -> None:
-    from desktop.watched_view import sort_entries
+    from desktop.watched import sort_entries
 
     entries = _make_entries()
     sorted_entries = sort_entries(entries, "user_score")
@@ -357,7 +358,7 @@ def test_sort_by_user_score() -> None:
 
 
 def test_sort_by_year() -> None:
-    from desktop.watched_view import sort_entries
+    from desktop.watched import sort_entries
 
     entries = _make_entries()
     sorted_entries = sort_entries(entries, "year")
@@ -366,7 +367,7 @@ def test_sort_by_year() -> None:
 
 
 def test_format_user_score_display() -> None:
-    from desktop.watched_view import format_user_score_display
+    from desktop.watched import format_user_score_display
 
     assert format_user_score_display(8.25) == "8.3"
     assert format_user_score_display(8) == "8.0"
@@ -374,7 +375,7 @@ def test_format_user_score_display() -> None:
 
 
 def test_build_meta_pill_items() -> None:
-    from desktop.watched_view import build_meta_pill_items
+    from desktop.watched import build_meta_pill_items
 
     items = build_meta_pill_items(
         {
@@ -398,7 +399,7 @@ def test_build_meta_pill_items() -> None:
 
 
 def test_build_meta_pill_labels() -> None:
-    from desktop.watched_view import build_meta_pill_labels
+    from desktop.watched import build_meta_pill_labels
 
     pills = build_meta_pill_labels(
         {
@@ -412,7 +413,7 @@ def test_build_meta_pill_labels() -> None:
 
 
 def test_build_genre_pill_labels_hides_empty() -> None:
-    from desktop.watched_view import build_genre_pill_labels
+    from desktop.watched import build_genre_pill_labels
 
     assert build_genre_pill_labels({"genres": []}) == []
     assert build_genre_pill_labels({"genres": ["Драма", "Криминал"]}) == [
@@ -422,7 +423,7 @@ def test_build_genre_pill_labels_hides_empty() -> None:
 
 
 def test_build_detail_info_pill_labels_moves_year_to_genres() -> None:
-    from desktop.watched_view import build_detail_info_pill_labels
+    from desktop.watched import build_detail_info_pill_labels
 
     assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"]}) == [
         "2025",
@@ -437,20 +438,20 @@ def test_build_detail_info_pill_labels_moves_year_to_genres() -> None:
 
 
 def test_format_genre_pill_label_unknown_genre() -> None:
-    from desktop.watched_view import format_genre_pill_label
+    from desktop.watched import format_genre_pill_label
 
     assert format_genre_pill_label("Документальный") == "Документальный"
 
 
 def test_build_user_score_update_payload() -> None:
-    from desktop.watched_view import build_user_score_update_payload
+    from desktop.watched import build_user_score_update_payload
 
     assert build_user_score_update_payload(8.25) == {"main_info": {"user_score": 8.3}}
 
 
 def test_format_save_user_score_status() -> None:
     from dataset.dataset_records import UpdateRecordResult
-    from desktop.watched_view import format_save_user_score_status
+    from desktop.watched import format_save_user_score_status
 
     assert format_save_user_score_status(
         UpdateRecordResult(True, "Alpha", "Запись обновлена.", "updated", ["main_info.user_score"])
@@ -462,7 +463,7 @@ def test_format_save_user_score_status() -> None:
 
 def test_save_watched_user_score_uses_update_pipeline(monkeypatch) -> None:
     from dataset.dataset_records import UpdateRecordResult
-    from desktop.watched_view import save_watched_user_score
+    from desktop.watched import save_watched_user_score
 
     calls = []
 
@@ -480,7 +481,7 @@ def test_save_watched_user_score_uses_update_pipeline(monkeypatch) -> None:
 
 def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch) -> None:
     from dataset.dataset_records import UpdateRecordResult
-    from desktop.watched_view import save_watched_user_score
+    from desktop.watched import save_watched_user_score
 
     def fail(_payload=None):
         raise AssertionError("desktop score save must not touch unrelated artifacts")
@@ -497,14 +498,14 @@ def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch)
 
 
 def test_get_user_score_spin_value() -> None:
-    from desktop.watched_view import get_user_score_spin_value
+    from desktop.watched import get_user_score_spin_value
 
     assert get_user_score_spin_value({"user_score": 8.25}) == 8.3
     assert get_user_score_spin_value({"user_score": None}) == 0.0
 
 
 def test_validate_score_edit_entry() -> None:
-    from desktop.watched_view import validate_score_edit_entry
+    from desktop.watched import validate_score_edit_entry
 
     assert validate_score_edit_entry(None) == (False, "Запись не выбрана")
     assert validate_score_edit_entry(("  ", {}, {})) == (False, "Запись не выбрана")
@@ -512,7 +513,7 @@ def test_validate_score_edit_entry() -> None:
 
 
 def test_get_country_display() -> None:
-    from desktop.watched_view import get_country_display
+    from desktop.watched import get_country_display
 
     assert get_country_display({"country": "Россия"}) == "Россия"
     assert get_country_display({"country": ""}) is None
@@ -520,7 +521,7 @@ def test_get_country_display() -> None:
 
 
 def test_has_overview_text() -> None:
-    from desktop.watched_view import get_overview_display, has_overview_text
+    from desktop.watched import get_overview_display, has_overview_text
 
     assert has_overview_text({"overview": "Короткое описание."}) is True
     assert get_overview_display({"overview": "  Текст  "}) == "Текст"
@@ -530,7 +531,7 @@ def test_has_overview_text() -> None:
 
 
 def test_format_watched_list_status() -> None:
-    from desktop.watched_view import format_watched_list_status
+    from desktop.watched import format_watched_list_status
 
     assert format_watched_list_status(12, 12, "") == "Всего 12"
     assert format_watched_list_status(3, 12, "alpha") == "Показано 3 из 12"
@@ -545,7 +546,7 @@ def test_format_watched_list_status() -> None:
 
 
 def test_format_watched_list_counter() -> None:
-    from desktop.watched_view import format_watched_list_counter
+    from desktop.watched import format_watched_list_counter
 
     assert format_watched_list_counter(12, 12, "") == "Всего 12"
     assert format_watched_list_counter(3, 12, "alpha") == "3 из 12"
@@ -555,7 +556,7 @@ def test_format_watched_list_counter() -> None:
 
 
 def test_count_active_filters() -> None:
-    from desktop.watched_view import count_active_filters
+    from desktop.watched import count_active_filters
 
     assert count_active_filters() == 0
     assert count_active_filters(True, False, False) == 1
@@ -563,7 +564,7 @@ def test_count_active_filters() -> None:
 
 
 def test_score_filter_is_active() -> None:
-    from desktop.watched_view import USER_SCORE_MAX, USER_SCORE_MIN, score_filter_is_active
+    from desktop.watched import USER_SCORE_MAX, USER_SCORE_MIN, score_filter_is_active
 
     assert score_filter_is_active(USER_SCORE_MIN, USER_SCORE_MAX) is False
     assert score_filter_is_active(8.0, USER_SCORE_MAX) is True
@@ -573,7 +574,7 @@ def test_score_filter_is_active() -> None:
 def test_year_filter_is_active() -> None:
     from datetime import date
 
-    from desktop.watched_view import (
+    from desktop.watched import (
         YEAR_FILTER_DEFAULT_FROM,
         YEAR_FILTER_DEFAULT_TO,
         year_filter_is_active,
@@ -586,7 +587,7 @@ def test_year_filter_is_active() -> None:
 
 
 def test_genre_filter_is_active() -> None:
-    from desktop.watched_view import GENRE_FILTER_ALL, genre_filter_is_active
+    from desktop.watched import GENRE_FILTER_ALL, genre_filter_is_active
 
     assert genre_filter_is_active(None) is False
     assert genre_filter_is_active(GENRE_FILTER_ALL) is False
@@ -596,7 +597,7 @@ def test_genre_filter_is_active() -> None:
 def test_watched_filters_are_active_from_ranges() -> None:
     from datetime import date
 
-    from desktop.watched_view import (
+    from desktop.watched import (
         USER_SCORE_MAX,
         USER_SCORE_MIN,
         YEAR_FILTER_DEFAULT_FROM,
@@ -630,7 +631,7 @@ def test_watched_filters_are_active_from_ranges() -> None:
 
 
 def test_format_watched_filters_label() -> None:
-    from desktop.watched_view import format_watched_filters_label
+    from desktop.watched import format_watched_filters_label
 
     assert format_watched_filters_label() == "▸ Фильтры"
     assert format_watched_filters_label(is_expanded=True) == "▾ Фильтры"
@@ -641,7 +642,7 @@ def test_format_watched_filters_label() -> None:
 
 
 def test_apply_view_after_default_filter_reset_respects_search() -> None:
-    from desktop.watched_view import (
+    from desktop.watched import (
         USER_SCORE_MAX,
         USER_SCORE_MIN,
         YEAR_FILTER_DEFAULT_FROM,
@@ -678,9 +679,9 @@ def test_apply_view_after_default_filter_reset_respects_search() -> None:
 def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow)
+    source = inspect.getsource(watched_tab_module.WatchedTabView)
 
     assert "_build_filters_panel" in source
     assert "watchedFiltersPanel" in source
@@ -700,7 +701,7 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
 
 
 def test_is_delete_confirmation_valid() -> None:
-    from desktop.watched_delete import is_delete_confirmation_valid
+    from desktop.watched.delete import is_delete_confirmation_valid
 
     assert is_delete_confirmation_valid("DELETE") is True
     assert is_delete_confirmation_valid(" DELETE ") is True
@@ -710,7 +711,7 @@ def test_is_delete_confirmation_valid() -> None:
 
 
 def test_format_delete_preview_lines() -> None:
-    from desktop.watched_delete import format_delete_preview_lines
+    from desktop.watched.delete import format_delete_preview_lines
 
     lines = format_delete_preview_lines(
         {
@@ -733,7 +734,7 @@ def test_format_delete_preview_lines() -> None:
 
 
 def test_format_delete_preview_lines_handles_missing_fields() -> None:
-    from desktop.watched_delete import format_delete_preview_lines
+    from desktop.watched.delete import format_delete_preview_lines
 
     lines = format_delete_preview_lines({"title": "No Meta"})
     joined = "\n".join(lines)
@@ -747,9 +748,9 @@ def test_format_delete_preview_lines_handles_missing_fields() -> None:
 def test_watched_delete_entry_uses_service_helper() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow._delete_watched_entry)
+    source = inspect.getsource(watched_tab_module.WatchedTabView._delete_watched_entry)
     assert "load_delete_preview" in source
     assert "WatchedDeleteDialog" in source
     assert "execute_watched_delete" in source
@@ -759,7 +760,7 @@ def test_watched_delete_entry_uses_service_helper() -> None:
 def test_watched_detail_card_layout_contract() -> None:
     import inspect
 
-    import desktop.watched_view as watched_view_module
+    import desktop.shared.detail.card as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedDetailCard)
     init_source = source.split("def _info_column_content_width", 1)[0]
@@ -774,7 +775,7 @@ def test_watched_detail_card_layout_contract() -> None:
 def test_watched_detail_card_hides_overview_without_text() -> None:
     import inspect
 
-    import desktop.watched_view as watched_view_module
+    import desktop.shared.detail.card as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
@@ -785,7 +786,7 @@ def test_watched_detail_card_hides_overview_without_text() -> None:
 
 
 def test_build_score_count_html_smoke() -> None:
-    from desktop.plotly_charts import build_score_count_html
+    from desktop.analytics.charts import build_score_count_html
 
     html = build_score_count_html(
         [
@@ -802,7 +803,7 @@ def test_build_score_count_html_smoke() -> None:
 
 
 def test_build_score_distribution_html_smoke() -> None:
-    from desktop.plotly_charts import build_score_distribution_html
+    from desktop.analytics.charts import build_score_distribution_html
 
     html = build_score_distribution_html(
         [
@@ -821,7 +822,7 @@ def test_build_score_distribution_html_smoke() -> None:
 
 
 def test_build_genre_count_html_smoke() -> None:
-    from desktop.plotly_charts import build_genre_count_html
+    from desktop.analytics.charts import build_genre_count_html
 
     html = build_genre_count_html(
         [{"label": "Драма", "count": 5, "example_titles": ["Alpha"], "extra_count": 0}]
@@ -832,7 +833,7 @@ def test_build_genre_count_html_smoke() -> None:
 
 
 def test_build_year_average_html_smoke() -> None:
-    from desktop.plotly_charts import build_year_average_html
+    from desktop.analytics.charts import build_year_average_html
 
     html = build_year_average_html(
         [
@@ -848,7 +849,7 @@ def test_build_year_average_html_smoke() -> None:
 def test_analytics_imdb_delta_uses_collapsible_text_list() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     fill_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_imdb_delta)
     assert "_render_imdb_delta_list" in fill_source
@@ -873,7 +874,7 @@ def test_analytics_style_includes_list_expand_button() -> None:
 def test_analytics_distribution_uses_score_count_points() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
     assert 'analytics["score_count_points"]' in source
@@ -892,7 +893,7 @@ def test_analytics_distribution_uses_score_count_points() -> None:
 def test_analytics_mvp_sections_wired() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
     assert "Количество тайтлов по жанрам" in init_source
@@ -919,7 +920,7 @@ def test_analytics_mvp_sections_wired() -> None:
 def test_analytics_renders_dataset_completeness_block() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
     assert "completenessHeadline" in init_source
@@ -931,7 +932,7 @@ def test_analytics_renders_dataset_completeness_block() -> None:
 
 
 def test_score_count_chart_height_matches_plotly_constant() -> None:
-    from desktop.plotly_charts import CHART_BASE_HEIGHT, SCORE_CHART_HEIGHT, build_score_count_figure
+    from desktop.analytics.charts import CHART_BASE_HEIGHT, SCORE_CHART_HEIGHT, build_score_count_figure
 
     figure = build_score_count_figure([{"score": 8.5, "count": 2, "example_titles": ["A"], "extra_count": 0}])
     assert SCORE_CHART_HEIGHT == CHART_BASE_HEIGHT
@@ -940,7 +941,7 @@ def test_score_count_chart_height_matches_plotly_constant() -> None:
 
 
 def test_bar_chart_height_scales_with_rows() -> None:
-    from desktop.plotly_charts import CHART_BASE_HEIGHT, bar_chart_height
+    from desktop.analytics.charts import CHART_BASE_HEIGHT, bar_chart_height
 
     assert bar_chart_height(0) == CHART_BASE_HEIGHT
     assert bar_chart_height(3) == CHART_BASE_HEIGHT
@@ -950,7 +951,7 @@ def test_bar_chart_height_scales_with_rows() -> None:
 def test_analytics_plotly_view_uses_chart_object_name() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     source = inspect.getsource(analytics_view_module.AnalyticsView._fill_plotly_chart)
     assert "ANALYTICS_PLOTLY_OBJECT_NAME" in source
@@ -967,7 +968,7 @@ def test_analytics_style_includes_plotly_chart_selector() -> None:
 def test_analytics_summary_cards_use_icon_badges() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     source = inspect.getsource(analytics_view_module.AnalyticsView._make_summary_card)
     assert "summaryIconBadge" in source
@@ -978,7 +979,7 @@ def test_analytics_summary_cards_use_icon_badges() -> None:
 def test_analytics_insights_use_bullet_rows() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     source = inspect.getsource(analytics_view_module.AnalyticsView._make_insight_line)
     assert "insightBullet" in source
@@ -988,7 +989,7 @@ def test_analytics_insights_use_bullet_rows() -> None:
 def test_analytics_section_headers_use_icons() -> None:
     import inspect
 
-    import desktop.analytics_view as analytics_view_module
+    import desktop.analytics.view as analytics_view_module
 
     source = inspect.getsource(analytics_view_module.AnalyticsView._make_section_header)
     assert "sectionHeaderIconBadge" in source
@@ -996,7 +997,7 @@ def test_analytics_section_headers_use_icons() -> None:
 
 
 def test_format_list_label() -> None:
-    from desktop.watched_view import format_list_label
+    from desktop.watched import format_list_label
 
     assert format_list_label({"title": "Alpha", "year": 2020, "user_score": 8.0}) == "Alpha (2020)  ·  8.0"
     assert format_list_label({"title": "No Year", "user_score": None}) == "No Year"
@@ -1004,7 +1005,7 @@ def test_format_list_label() -> None:
 
 
 def test_format_rating_score_display() -> None:
-    from desktop.watched_view import format_rating_score_display
+    from desktop.watched import format_rating_score_display
 
     assert format_rating_score_display(8.25) == "8.3"
     assert format_rating_score_display(None) is None
@@ -1012,14 +1013,14 @@ def test_format_rating_score_display() -> None:
 
 
 def test_normalize_user_score_value() -> None:
-    from desktop.watched_view import normalize_user_score_value
+    from desktop.watched import normalize_user_score_value
 
     assert normalize_user_score_value(8.25) == 8.3
     assert normalize_user_score_value(7.0) == 7.0
 
 
 def test_sort_entries_by_title() -> None:
-    from desktop.watched_view import sort_entries
+    from desktop.watched import sort_entries
 
     entries = _make_entries()
     sorted_entries = sort_entries(entries, "title")
@@ -1027,7 +1028,7 @@ def test_sort_entries_by_title() -> None:
 
 
 def test_poster_display_dimensions_are_scaled() -> None:
-    from desktop.watched_view import (
+    from desktop.shared.detail import (
         POSTER_BASE_HEIGHT,
         POSTER_BASE_WIDTH,
         POSTER_DISPLAY_SCALE,
@@ -1044,7 +1045,7 @@ def test_poster_display_dimensions_are_scaled() -> None:
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
     from PyQt6.QtGui import QImage, QPixmap
 
-    from desktop.watched_view import POSTER_HEIGHT, POSTER_WIDTH, fit_poster_pixmap_for_display
+    from desktop.shared.detail import POSTER_HEIGHT, POSTER_WIDTH, fit_poster_pixmap_for_display
 
     small = QPixmap.fromImage(QImage(100, 150, QImage.Format.Format_RGB32))
     result = fit_poster_pixmap_for_display(small, POSTER_WIDTH, POSTER_HEIGHT)
@@ -1056,7 +1057,7 @@ def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
 def test_fit_poster_pixmap_for_display_downscales_large_image(qapp) -> None:
     from PyQt6.QtGui import QImage, QPixmap
 
-    from desktop.watched_view import POSTER_HEIGHT, POSTER_WIDTH, fit_poster_pixmap_for_display
+    from desktop.shared.detail import POSTER_HEIGHT, POSTER_WIDTH, fit_poster_pixmap_for_display
 
     large = QPixmap.fromImage(QImage(800, 1200, QImage.Format.Format_RGB32))
     result = fit_poster_pixmap_for_display(large, POSTER_WIDTH, POSTER_HEIGHT)
@@ -1070,7 +1071,7 @@ def test_fit_poster_pixmap_for_display_downscales_large_image(qapp) -> None:
 def test_watched_detail_card_uses_sharp_poster_fit_helper() -> None:
     import inspect
 
-    import desktop.watched_view as watched_view_module
+    import desktop.shared.detail.card as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedDetailCard._sync_poster_display)
     assert "fit_poster_pixmap_for_display" in source
@@ -1078,7 +1079,7 @@ def test_watched_detail_card_uses_sharp_poster_fit_helper() -> None:
 
 
 def test_format_poster_path_display() -> None:
-    from desktop.watched_view import format_poster_path_display
+    from desktop.watched import format_poster_path_display
 
     assert format_poster_path_display(None) == "Локальный файл не найден"
     short = "D:/cache/posters/images/alpha.jpg"
@@ -1091,7 +1092,7 @@ def test_format_poster_path_display() -> None:
 
 
 def test_open_path_in_shell_opens_existing_file(monkeypatch) -> None:
-    from desktop.watched_view import open_path_in_shell
+    from desktop.watched import open_path_in_shell
 
     opened: list[str] = []
 
@@ -1111,7 +1112,7 @@ def test_open_path_in_shell_opens_existing_file(monkeypatch) -> None:
 
 
 def test_open_path_in_shell_missing_path() -> None:
-    from desktop.watched_view import open_path_in_shell
+    from desktop.watched import open_path_in_shell
 
     ok, error = open_path_in_shell("D:/missing/poster-cache/images/nope.jpg")
 
@@ -1122,7 +1123,7 @@ def test_open_path_in_shell_missing_path() -> None:
 def test_watched_detail_card_has_poster_context_menu() -> None:
     import inspect
 
-    import desktop.watched_view as watched_view_module
+    import desktop.shared.detail.card as watched_view_module
 
     init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
     assert "CustomContextMenu" in init_source
@@ -1137,7 +1138,7 @@ def test_watched_detail_card_has_poster_context_menu() -> None:
 
 
 def test_resolve_local_poster_path_prefers_existing_file() -> None:
-    from desktop.watched_view import resolve_local_poster_path
+    from desktop.watched import resolve_local_poster_path
 
     with tempfile.TemporaryDirectory() as temp_root:
         poster = Path(temp_root) / "poster.jpg"
@@ -1147,14 +1148,14 @@ def test_resolve_local_poster_path_prefers_existing_file() -> None:
 
 
 def test_resolve_local_poster_path_ignores_http_urls() -> None:
-    from desktop.watched_view import resolve_local_poster_path
+    from desktop.watched import resolve_local_poster_path
 
     assert resolve_local_poster_path({"poster_src": "https://example.com/a.jpg"}, {}) is None
     assert resolve_local_poster_path({"poster_path": "http://example.com/b.jpg"}, {}) is None
 
 
 def test_resolve_local_poster_path_reads_nested_poster_dict() -> None:
-    from desktop.watched_view import resolve_local_poster_path
+    from desktop.watched import resolve_local_poster_path
 
     with tempfile.TemporaryDirectory() as temp_root:
         poster = Path(temp_root) / "nested.jpg"
@@ -1164,7 +1165,7 @@ def test_resolve_local_poster_path_reads_nested_poster_dict() -> None:
 
 
 def test_resolve_local_poster_path_uses_preview_cache_for_poster_url() -> None:
-    from desktop.watched_view import resolve_local_poster_path
+    from desktop.watched import resolve_local_poster_path
 
     poster_url = "https://image.tmdb.org/t/p/w500/example.jpg"
     with tempfile.TemporaryDirectory() as temp_root:
@@ -1184,7 +1185,7 @@ def test_resolve_local_poster_path_uses_preview_cache_for_poster_url() -> None:
 def test_watched_list_delegate_uses_poster_resolver() -> None:
     import inspect
 
-    import desktop.watched_view as watched_view_module
+    import desktop.shared.detail.card as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedListItemDelegate.__new__)
     assert "resolve_local_poster_path" in source
@@ -1192,7 +1193,7 @@ def test_watched_list_delegate_uses_poster_resolver() -> None:
 
 
 def test_format_delete_status_message() -> None:
-    from desktop.watched_delete import format_delete_status_message
+    from desktop.watched.delete import format_delete_status_message
 
     assert format_delete_status_message({"ok": True}) == "Запись удалена"
     assert format_delete_status_message({"ok": False, "message": "Ошибка сервиса"}) == "Ошибка сервиса"
@@ -1200,7 +1201,7 @@ def test_format_delete_status_message() -> None:
 
 
 def test_format_delete_preview_lines_includes_local_poster() -> None:
-    from desktop.watched_delete import format_delete_preview_lines
+    from desktop.watched.delete import format_delete_preview_lines
 
     lines = format_delete_preview_lines(
         {
@@ -1212,7 +1213,7 @@ def test_format_delete_preview_lines_includes_local_poster() -> None:
 
 
 def test_load_delete_preview_with_inline_dataset() -> None:
-    from desktop.watched_delete import load_delete_preview
+    from desktop.watched.delete import load_delete_preview
 
     data = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
     preview = load_delete_preview("Alpha", data=data)
@@ -1224,13 +1225,13 @@ def test_load_delete_preview_with_inline_dataset() -> None:
 
 
 def test_load_delete_preview_returns_none_for_missing_key() -> None:
-    from desktop.watched_delete import load_delete_preview
+    from desktop.watched.delete import load_delete_preview
 
     assert load_delete_preview("Missing", data={}) is None
 
 
 def test_execute_watched_delete_delegates_to_service(monkeypatch) -> None:
-    from desktop.watched_delete import execute_watched_delete
+    from desktop.watched.delete import execute_watched_delete
 
     calls: list[str] = []
 
@@ -1238,7 +1239,7 @@ def test_execute_watched_delete_delegates_to_service(monkeypatch) -> None:
         calls.append(dataset_key)
         return {"ok": True, "dataset_key": dataset_key}
 
-    monkeypatch.setattr("desktop.watched_delete.delete_watched_record", fake_delete)
+    monkeypatch.setattr("desktop.watched.delete.delete_watched_record", fake_delete)
     result = execute_watched_delete("Alpha")
     assert calls == ["Alpha"]
     assert result["ok"] is True
@@ -1256,7 +1257,7 @@ def test_build_delete_dialog_style_contains_selectors() -> None:
 def test_watched_delete_dialog_contract() -> None:
     import inspect
 
-    import desktop.delete_dialog as delete_dialog_module
+    import desktop.watched.dialogs.delete_dialog as delete_dialog_module
 
     source = inspect.getsource(delete_dialog_module.WatchedDeleteDialog)
     assert "deleteRecordDialog" in source
@@ -1268,7 +1269,7 @@ def test_watched_delete_dialog_contract() -> None:
 def test_watched_delete_dialog_button_state_logic() -> None:
     import inspect
 
-    import desktop.delete_dialog as delete_dialog_module
+    import desktop.watched.dialogs.delete_dialog as delete_dialog_module
 
     source = inspect.getsource(delete_dialog_module.WatchedDeleteDialog._update_delete_button_state)
     assert "is_delete_confirmation_valid" in source
@@ -1278,7 +1279,7 @@ def test_watched_delete_dialog_button_state_logic() -> None:
 def test_watched_delete_dialog_on_accept_requires_confirmation() -> None:
     import inspect
 
-    import desktop.delete_dialog as delete_dialog_module
+    import desktop.watched.dialogs.delete_dialog as delete_dialog_module
 
     source = inspect.getsource(delete_dialog_module.WatchedDeleteDialog._on_accept)
     assert "is_delete_confirmation_valid" in source
@@ -1288,9 +1289,9 @@ def test_watched_delete_dialog_on_accept_requires_confirmation() -> None:
 def test_delete_watched_entry_handles_cancel_and_missing_preview() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow._delete_watched_entry)
+    source = inspect.getsource(watched_tab_module.WatchedTabView._delete_watched_entry)
     assert "validate_score_edit_entry" in source
     assert "preview is None" in source
     assert "dialog.exec()" in source
@@ -1300,9 +1301,9 @@ def test_delete_watched_entry_handles_cancel_and_missing_preview() -> None:
 def test_refresh_after_user_score_save_wiring() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_user_score_save)
+    source = inspect.getsource(watched_tab_module.WatchedTabView._refresh_after_user_score_save)
     assert "_reload_watched_search_index" in source
     assert "resolve_selection_row" in source
     assert "_model_view.refresh" not in source
@@ -1311,9 +1312,9 @@ def test_refresh_after_user_score_save_wiring() -> None:
 def test_refresh_after_delete_wiring() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow._refresh_after_delete)
+    source = inspect.getsource(watched_tab_module.WatchedTabView._refresh_after_delete)
     assert "load_watched_entries" in source
     assert "_reload_genre_filter_options" in source
     assert "_reload_watched_search_index" in source
@@ -1326,7 +1327,7 @@ def test_refresh_after_delete_wiring() -> None:
 def test_desktop_has_no_model_tab_wiring() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.shell.main_window as app_module
 
     init_source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
     module_source = inspect.getsource(app_module)
@@ -1338,16 +1339,16 @@ def test_desktop_has_no_model_tab_wiring() -> None:
 def test_open_list_context_menu_includes_delete_action() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow._open_list_context_menu)
+    source = inspect.getsource(watched_tab_module.WatchedTabView._open_list_context_menu)
     assert "Удалить запись" in source
     assert "_delete_watched_entry" in source
     assert "Изменить оценку" in source
 
 
 def test_format_candidate_list_label_shows_sort_metric() -> None:
-    from desktop.candidate_search_view import (
+    from desktop.candidates.presenters import (
         format_candidate_list_label,
         format_candidate_metric_value,
         format_candidate_title_line,
@@ -1372,15 +1373,15 @@ def test_format_candidate_list_label_shows_sort_metric() -> None:
 
 
 def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
-    from desktop.candidate_filters_view import CandidateFiltersView
-    from desktop.candidate_search_session import CandidateSearchSession
+    from desktop.candidates.filters_view import CandidateFiltersView
+    from desktop.candidates.session import CandidateSearchSession
 
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_overview_view",
         lambda: {"is_empty": True, "summary": "", "candidates": []},
     )
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_filter_chip_options_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_filter_chip_options_view",
         lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
     session = CandidateSearchSession()
@@ -1390,7 +1391,7 @@ def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
 
 
 def test_format_pool_stats_user_uses_plain_language() -> None:
-    from desktop.candidate_filters_view import _format_pool_stats_user
+    from desktop.candidates.filters_view import _format_pool_stats_user
 
     text = _format_pool_stats_user(
         {"unique_total": 305, "ready_total": 204, "incomplete_total": 101},
@@ -1404,11 +1405,11 @@ def test_format_pool_stats_user_uses_plain_language() -> None:
 
 def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch, qapp) -> None:
     from config import constant
-    from desktop.candidate_filters_view import CANDIDATE_YEAR_MIN, CandidateFiltersView
-    from desktop.candidate_search_session import CandidateSearchSession
+    from desktop.candidates.filters_view import CANDIDATE_YEAR_MIN, CandidateFiltersView
+    from desktop.candidates.session import CandidateSearchSession
 
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_overview_view",
         lambda: {
             "is_empty": False,
             "summary": "в pool: 1 | ready: 1 | incomplete: 0",
@@ -1416,11 +1417,11 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
         },
     )
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_filter_defaults_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_filter_defaults_view",
         lambda: {"defaults": {}},
     )
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_filter_chip_options_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_filter_chip_options_view",
         lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
 
@@ -1440,7 +1441,7 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
 
 
 def test_country_chip_selector_clear_means_all_countries(qapp) -> None:
-    from desktop.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 
     selector = CountryChipSelector([{"code": "RU", "label": "Россия"}, {"code": "US", "label": "США"}])
     selector.set_selected_codes(["RU", "US"])
@@ -1455,7 +1456,7 @@ def test_country_chip_selector_clear_means_all_countries(qapp) -> None:
 
 
 def test_country_chip_selector_toggle_country_updates_selection(qapp) -> None:
-    from desktop.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 
     selector = CountryChipSelector([{"code": "RU", "label": "Россия"}, {"code": "US", "label": "США"}])
     selector._chips["RU"].setChecked(True)
@@ -1465,8 +1466,8 @@ def test_country_chip_selector_toggle_country_updates_selection(qapp) -> None:
 
 
 def test_chip_expand_control_shows_five_chips_when_collapsed(qapp) -> None:
-    from desktop.collapsible_chip_helpers import COLLAPSED_VISIBLE_CHIP_COUNT
-    from desktop.genre_chip_selector import GenreChipSelector
+    from desktop.shared.widgets.collapsible_chip_helpers import COLLAPSED_VISIBLE_CHIP_COUNT
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 
     genres = [f"Жанр {index}" for index in range(8)]
     selector = GenreChipSelector()
@@ -1481,23 +1482,23 @@ def test_chip_expand_control_shows_five_chips_when_collapsed(qapp) -> None:
     assert all(chip.isVisible() for chip in selector._ordered_chips())
 
 def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeypatch, qapp) -> None:
-    from desktop.candidate_filters_view import (
+    from desktop.candidates.filters_view import (
         KP_SCORE_SLIDER_MAX,
         VOTES_SLIDER_MAX_INDEX,
         CandidateFiltersView,
     )
-    from desktop.candidate_search_session import CandidateSearchSession
+    from desktop.candidates.session import CandidateSearchSession
 
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_overview_view",
         lambda: {"is_empty": False, "summary": "ok", "candidates": []},
     )
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_filter_defaults_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_filter_defaults_view",
         lambda: {"defaults": {}},
     )
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_filter_chip_options_view",
+        "desktop.candidates.filters_view.candidate_service.get_search_filter_chip_options_view",
         lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
 
@@ -1518,7 +1519,7 @@ def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeyp
 def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
     import inspect
 
-    from desktop import candidate_filters_view as module
+    import desktop.candidates.filters_view as module
 
     source = inspect.getsource(module.CandidateFiltersView.__init__)
     assert "_kp_score_slider" in source
@@ -1532,7 +1533,7 @@ def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
 def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
     import inspect
 
-    from desktop import candidate_filters_view as module
+    import desktop.candidates.filters_view as module
 
     source = inspect.getsource(module.CandidateFiltersView.__init__)
     assert "top_bar" in source
@@ -1543,19 +1544,26 @@ def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
 def test_watched_window_includes_candidate_tabs() -> None:
     import inspect
 
-    import desktop.app as app_module
+    import desktop.shell.main_window as app_module
 
     source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
+    assert "WatchedTabView" in source
     assert "CandidateFiltersView" in source
     assert "CandidateListView" in source
+    assert "AnalyticsView" in source
     assert '"Фильтры"' in source
     assert '"Кандидаты"' in source
+    assert '"Analytics"' in source
     assert '"Search"' not in source
+    assert "MainTabRegistry" in source
+    assert "ShellTabSpec" in source
+    assert "_tab_registry.register" in source
     assert "_focus_candidates_tab" in source
+    assert "_on_watched_entries_changed" in source
 
 
 def test_genre_chip_selector_tracks_selection(qapp) -> None:
-    from desktop.genre_chip_selector import GenreChipSelector
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 
     selector = GenreChipSelector()
     selector.set_options(["Драма", "Комедия", "Детектив"], ["Драма"])
@@ -1572,7 +1580,7 @@ def test_genre_chip_selector_tracks_selection(qapp) -> None:
 def test_candidate_filters_view_uses_genre_chip_selectors() -> None:
     import inspect
 
-    from desktop import candidate_filters_view as module
+    import desktop.candidates.filters_view as module
 
     source = inspect.getsource(module.CandidateFiltersView.__init__)
     assert "GenreChipSelector" in source
@@ -1582,7 +1590,7 @@ def test_candidate_filters_view_uses_genre_chip_selectors() -> None:
 
 
 def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
-    from desktop.candidate_search_view import build_candidate_readonly_detail_entry
+    from desktop.candidates.presenters import build_candidate_readonly_detail_entry
 
     candidate = {
         "pool_entry_key": "show|2018",
@@ -1612,7 +1620,7 @@ def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
 
 
 def test_build_candidate_readonly_detail_entry_does_not_download_poster(monkeypatch) -> None:
-    from desktop.candidate_search_view import build_candidate_readonly_detail_entry
+    from desktop.candidates.presenters import build_candidate_readonly_detail_entry
 
     def fail_download(_url: str):
         raise AssertionError("download_poster_url_for_preview must not run on read-only selection")
@@ -1633,7 +1641,7 @@ def test_build_candidate_readonly_detail_entry_does_not_download_poster(monkeypa
 
 
 def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> None:
-    from desktop.candidate_search_session import CandidateSearchSession
+    from desktop.candidates.session import CandidateSearchSession
 
     calls = {"count": 0}
     candidates = [
@@ -1652,15 +1660,15 @@ def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> Non
         }
 
     monkeypatch.setattr(
-        "desktop.candidate_search_session.candidate_service.sort_search_candidates",
+        "desktop.candidates.session.candidate_service.sort_search_candidates",
         fake_sort,
     )
     monkeypatch.setattr(
-        "desktop.candidate_search_session.candidate_service.get_search_overview_view",
+        "desktop.candidates.session.candidate_service.get_search_overview_view",
         lambda: {"is_empty": False, "candidates": candidates},
     )
     monkeypatch.setattr(
-        "desktop.candidate_search_session.candidate_service.search_candidate_pool",
+        "desktop.candidates.session.candidate_service.search_candidate_pool",
         lambda _items, _filters: {"candidates": candidates, "filtered_count": len(candidates)},
     )
 
@@ -1676,7 +1684,7 @@ def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> Non
 
 
 def test_filter_candidates_by_title_matches_alternative_title() -> None:
-    from desktop.candidate_search_view import filter_candidates_by_title
+    from desktop.candidates.presenters import filter_candidates_by_title
 
     candidates = [
         {"title": "Alpha", "year": 2020},
@@ -1687,7 +1695,7 @@ def test_filter_candidates_by_title_matches_alternative_title() -> None:
 
 
 def test_list_search_index_filters_with_precomputed_haystack() -> None:
-    from desktop.list_search import SearchIndex, SearchIndexItem, normalize_search_query, resolve_selection_row
+    from desktop.shared.widgets.list_search import SearchIndex, SearchIndexItem, normalize_search_query, resolve_selection_row
 
     index = SearchIndex([
         SearchIndexItem(item={"title": "Alpha"}, haystack="alpha show", selection_key="a"),
@@ -1704,7 +1712,7 @@ def test_list_search_index_filters_with_precomputed_haystack() -> None:
 
 
 def test_build_watched_search_index_matches_title() -> None:
-    from desktop.watched_view import build_watched_search_index
+    from desktop.watched import build_watched_search_index
 
     entries = [
         ("Alpha", {}, {"title": "Alpha Show"}),
@@ -1718,7 +1726,7 @@ def test_build_watched_search_index_matches_title() -> None:
 def test_candidate_list_view_uses_list_search_module() -> None:
     import inspect
 
-    from desktop import candidate_list_view as module
+    import desktop.candidates.list_view as module
 
     source = inspect.getsource(module.CandidateListView)
     assert "DebouncedLineEditSearch" in source
@@ -1729,8 +1737,8 @@ def test_candidate_list_view_uses_list_search_module() -> None:
 def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     import inspect
 
-    from desktop import candidate_list_view as module
-    from desktop.watched_view import CANDIDATE_DETAIL_CARD_PROFILE, DETAIL_CARD_LAYOUT_PROFILE
+    import desktop.candidates.list_view as module
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, DETAIL_CARD_LAYOUT_PROFILE
 
     source = inspect.getsource(module.CandidateListView)
     assert "build_candidate_readonly_detail_entry" in source
@@ -1747,7 +1755,7 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
 def test_candidate_list_view_wires_mark_watched_transfer() -> None:
     import inspect
 
-    from desktop import candidate_list_view as module
+    import desktop.candidates.list_view as module
 
     source = inspect.getsource(module.CandidateListView)
     assert "run_candidate_transfer_flow" in source
@@ -1758,7 +1766,7 @@ def test_candidate_list_view_wires_mark_watched_transfer() -> None:
 def test_candidate_list_view_starts_async_poster_download() -> None:
     import inspect
 
-    from desktop import candidate_list_view as module
+    import desktop.candidates.list_view as module
 
     source = inspect.getsource(module.CandidateListView)
     assert "CandidatePosterDownloadWorker" in source

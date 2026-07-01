@@ -30,15 +30,17 @@ from dataset.add_title_service import (
     format_resolve_status_lines,
     save_add_title_record,
 )
-from desktop.add_title_worker import AddTitleResolveWorker
 from desktop.theme import build_add_title_dialog_style
-from desktop.watched_view import (
+from desktop.watched.add_title.worker import AddTitleResolveWorker
+from desktop.shared.detail.card import (
     ADD_TITLE_PREVIEW_CARD_PROFILE,
+    WatchedDetailCard,
+)
+from desktop.watched.model import (
     USER_SCORE_MAX,
     USER_SCORE_MIN,
     USER_SCORE_STEP,
     YEAR_FILTER_MIN,
-    WatchedDetailCard,
     normalize_user_score_value,
 )
 

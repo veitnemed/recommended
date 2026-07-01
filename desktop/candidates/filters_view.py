@@ -19,10 +19,10 @@ from PyQt6.QtWidgets import (
 
 from candidates import service as candidate_service
 from config import constant
-from desktop.candidate_search_session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
-from desktop.country_chip_selector import CountryChipSelector
-from desktop.genre_chip_selector import GenreChipSelector
-from desktop.range_slider import RangeSlider
+from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+from desktop.shared.widgets.range_slider import RangeSlider
 
 CANDIDATE_YEAR_MIN = 2000
 KP_SCORE_SLIDER_MAX = 100

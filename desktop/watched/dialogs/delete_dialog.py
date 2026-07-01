@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.theme import build_delete_dialog_style
-from desktop.watched_delete import (
+from desktop.watched.delete import (
     DELETE_CONFIRMATION_TEXT,
     format_delete_preview_lines,
     is_delete_confirmation_valid,

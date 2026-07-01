@@ -12,6 +12,7 @@
 - [add_functions.md](add_functions.md) - правила добавления и изменения функционала.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления и изменения записей.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
+- [DESKTOP_MODULE_MAP.md](DESKTOP_MODULE_MAP.md) - карта модулей desktop и правила расширения.
 - [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
 
 ## Слои
@@ -47,13 +48,15 @@ common <- config <- storage <- dataset / apis <- candidates <- ui
 
 PyQt desktop GUI для watched-базы, карточки тайтла, поиска и аналитики.
 
-- [desktop/app.py](../desktop/app.py) - главное окно.
-- [desktop/watched_view.py](../desktop/watched_view.py) - watched-список и карточка выбранного тайтла.
-- [desktop/candidate_filters_view.py](../desktop/candidate_filters_view.py) - runtime-фильтры общего pool.
-- [desktop/candidate_list_view.py](../desktop/candidate_list_view.py) - sorted list и read-only карточка кандидата.
-- [desktop/candidate_search_session.py](../desktop/candidate_search_session.py) - shared filter/sort state.
-- [desktop/analytics_view.py](../desktop/analytics_view.py) - read-only аналитика.
-- [desktop/theme.py](../desktop/theme.py) - QSS и style tokens.
+Структура пакетов: [DESKTOP_MODULE_MAP.md](DESKTOP_MODULE_MAP.md).
+
+- [desktop/app.py](../desktop/app.py) - главное окно (shell, вкладки).
+- [desktop/watched/](../desktop/watched/) - watched feature (`model`, `tab`, dialogs).
+- [desktop/shared/detail/](../desktop/shared/detail/) - detail card widget.
+- [desktop/candidates/](../desktop/candidates/) - candidate search (`session`, `filters_view`, `list_view`, `presenters`).
+- [desktop/analytics/](../desktop/analytics/) - read-only analytics (`view`, `charts`).
+- [desktop/shared/widgets/](../desktop/shared/widgets/) - переиспользуемые виджеты (sliders, search, chips).
+- [desktop/theme/](../desktop/theme/) - tokens и QSS builders (`tokens.py`, `styles/`).
 
 ### `ui/console/`
 

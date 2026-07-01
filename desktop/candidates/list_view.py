@@ -21,9 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates import service as candidate_service
-from desktop.candidate_poster_worker import CandidatePosterDownloadWorker
-from desktop.candidate_search_session import CandidateSearchSession
-from desktop.candidate_search_view import (
+from desktop.candidates.presenters import (
     build_candidate_readonly_detail_entry,
     build_candidate_search_index,
     candidate_detail_identity,
@@ -31,8 +29,10 @@ from desktop.candidate_search_view import (
     format_candidate_metric_value,
     resolve_local_poster_path_for_candidate,
 )
-from desktop.list_search import DebouncedLineEditSearch, resolve_selection_row
-from desktop.watched_view import (
+from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
+from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
+from desktop.shared.detail.card import (
     CANDIDATE_DETAIL_CARD_PROFILE,
     LIST_ITEM_HEIGHT,
     LIST_ITEM_H_PADDING,
@@ -286,12 +286,17 @@ class CandidateListView:
         session.add_listener(self.refresh)
         self.refresh()
 
+    def on_tab_activated(self) -> None:
+        if self._session.has_results:
+            return
+        self._session.apply_filters(dict(DEFAULT_BROWSE_FILTERS))
+
     def _transfer_selected_to_watched(self) -> None:
         candidate = self._selected_candidate
         if not isinstance(candidate, dict):
             return
 
-        from desktop.add_title_dialog import run_candidate_transfer_flow
+        from desktop.watched.add_title import run_candidate_transfer_flow
 
         parent = self._widget.window()
         result = run_candidate_transfer_flow(parent, candidate)

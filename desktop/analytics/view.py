@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import os
 import sys
 import tempfile
@@ -14,7 +16,7 @@ from dataset.score_analytics import (
     IMDB_DELTA_LIST_PREVIEW_LIMIT,
     summarize_dataset_completeness,
 )
-from desktop.plotly_charts import (
+from desktop.analytics.charts import (
     CHART_BASE_HEIGHT,
     bar_chart_height,
 )
@@ -116,7 +118,7 @@ SHOW_DENSE_SCORES_SECTION = False
 # Секция «Одинаковые оценки» скрыта: insights в «Коротко» покрывают mode.
 
 ANALYTICS_PLOTLY_BASE_HEIGHT = CHART_BASE_HEIGHT
-# Базовая высота Plotly-графиков; синхронизирована с desktop/plotly_charts.py.
+# Базовая высота Plotly-графиков; синхронизирована с desktop/analytics/charts.py.
 
 ANALYTICS_PLOTLY_OBJECT_NAME = "analyticsPlotlyChart"
 # objectName QWebEngineView для QSS в build_analytics_style.
@@ -208,11 +210,17 @@ def _clear_layout(layout) -> None:
 class AnalyticsView:
     """Widget wrapper for read-only score analytics."""
 
-    def __init__(self, entries: list[tuple[str, dict, dict]] | None = None) -> None:
+    def __init__(
+        self,
+        entries: list[tuple[str, dict, dict]] | None = None,
+        *,
+        entries_provider: Callable[[], list[tuple[str, dict, dict]]] | None = None,
+    ) -> None:
         from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
         self._plotly_html_paths: list[str] = []
+        self._entries_provider = entries_provider
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -357,6 +365,10 @@ class AnalyticsView:
     @property
     def widget(self):
         return self._scroll
+
+    def on_tab_activated(self) -> None:
+        if self._entries_provider is not None:
+            self.update_entries(self._entries_provider())
 
     def update_entries(self, entries: list[tuple[str, dict, dict]]) -> None:
         analytics = build_score_analytics(_entries_to_records(entries), entries=entries)
@@ -568,7 +580,7 @@ class AnalyticsView:
         return row
 
     def _fill_distribution(self, points: list[dict]) -> None:
-        from desktop.plotly_charts import build_score_count_html
+        from desktop.analytics.charts import build_score_count_html
 
         self._fill_plotly_chart(
             self._distribution_layout,
@@ -579,7 +591,7 @@ class AnalyticsView:
         )
 
     def _fill_genre_count(self, rows: list[dict]) -> None:
-        from desktop.plotly_charts import build_genre_count_html
+        from desktop.analytics.charts import build_genre_count_html
 
         height = bar_chart_height(len(rows))
         self._fill_plotly_chart(
@@ -591,7 +603,7 @@ class AnalyticsView:
         )
 
     def _fill_year_average(self, points: list[dict]) -> None:
-        from desktop.plotly_charts import build_year_average_html
+        from desktop.analytics.charts import build_year_average_html
 
         self._fill_plotly_chart(
             self._year_average_layout,
