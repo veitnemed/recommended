@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from desktop.shared.detail.list_delegate import fit_poster_pixmap_for_display
-from desktop.shared.detail.posters import (
-    get_poster_cache_directory,
-    open_path_in_shell,
-    resolve_local_poster_path,
-)
+from desktop.shared.detail.card_pills import fill_meta_pill_row, fill_pill_rows
+from desktop.shared.detail.card_poster import DetailCardPosterMixin
+from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import (
     build_detail_info_pill_labels,
     build_meta_pill_items,
@@ -15,9 +12,7 @@ from desktop.shared.detail.presenters import (
 from desktop.shared.detail.profiles import (
     DETAIL_CARD_LAYOUT_PROFILE,
     DETAIL_CARD_STYLE,
-    GENRES_PER_ROW,
     DetailCardLayoutProfile,
-    POSTER_IMAGE_STYLE,
     POSTER_PLACEHOLDER_STYLE,
 )
 from desktop.shared.detail.rating_indicator import RatingCircleIndicator
@@ -30,88 +25,8 @@ from desktop.theme import (
     TRANSPARENT_STYLE,
 )
 
-_detail_poster_source_cache: dict[str, object] = {}
 
-
-def _load_detail_poster_source_pixmap(poster_path: str):
-    from PyQt6.QtGui import QPixmap
-
-    cached = _detail_poster_source_cache.get(poster_path)
-    if cached is not None:
-        return cached if cached is not False else None
-    pixmap = QPixmap(poster_path)
-    if pixmap.isNull():
-        _detail_poster_source_cache[poster_path] = False
-        return None
-    _detail_poster_source_cache[poster_path] = pixmap
-    return pixmap
-
-
-def _clear_layout(layout) -> None:
-    while layout.count():
-        item = layout.takeAt(0)
-        child_layout = item.layout()
-        if child_layout is not None:
-            _clear_layout(child_layout)
-            continue
-        widget = item.widget()
-        if widget is not None:
-            widget.deleteLater()
-
-
-def _make_pill_label(text: str, object_name: str, rich: bool = False):
-    from PyQt6.QtCore import Qt
-    from PyQt6.QtWidgets import QLabel
-
-    pill = QLabel()
-    pill.setObjectName(object_name)
-    if rich:
-        pill.setTextFormat(Qt.TextFormat.RichText)
-    pill.setText(text)
-    return pill
-
-
-def _make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE):
-    return RatingCircleIndicator(
-        item.get("label", ""),
-        item.get("score"),
-        item.get("accent", COLOR_ACCENT),
-        widget_size=profile.rating_widget_size,
-        circle_diameter=profile.rating_circle_diameter,
-        value_font_point=profile.rating_value_font_point,
-        label_font_point=profile.rating_label_font_point,
-    )
-
-
-def _fill_meta_pill_row(
-    layout,
-    items: list[dict],
-    profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE,
-) -> None:
-    _clear_layout(layout)
-    layout.setSpacing(8)
-    for item in items:
-        layout.addWidget(_make_meta_pill(item, profile))
-    layout.addStretch()
-
-
-def _fill_pill_rows(container_layout, labels: list[str], object_name: str) -> None:
-    _clear_layout(container_layout)
-    container_layout.setSpacing(8)
-    if len(labels) == 0:
-        return
-    from PyQt6.QtWidgets import QHBoxLayout
-
-    for index in range(0, len(labels), GENRES_PER_ROW):
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        for text in labels[index : index + GENRES_PER_ROW]:
-            row.addWidget(_make_pill_label(text, object_name))
-        row.addStretch()
-        container_layout.addLayout(row)
-
-
-class WatchedDetailCard:
+class WatchedDetailCard(DetailCardPosterMixin):
     """Detail card widget for the selected watched title."""
 
     def __init__(self, parent=None, profile: DetailCardLayoutProfile | None = None) -> None:
@@ -305,101 +220,15 @@ class WatchedDetailCard:
             - (2 * self._profile.card_padding),
         )
 
-    def _sync_poster_display(self) -> None:
-        from PyQt6.QtGui import QPixmap
-
-        poster_width = self._profile.poster_width
-        poster_height = self._profile.poster_height
-        if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
-            display_pixmap = fit_poster_pixmap_for_display(
-                self._poster_source_pixmap,
-                poster_width,
-                poster_height,
-            )
-            width = max(display_pixmap.width(), 1)
-            height = max(display_pixmap.height(), 1)
-            self._poster_label.setFixedSize(width, height)
-            self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
-            self._poster_label.setText("")
-            self._poster_label.setPixmap(display_pixmap)
-            return
-
-        self._poster_label.setFixedSize(poster_width, poster_height)
-        if self._poster_label.pixmap() is None or self._poster_label.pixmap().isNull():
-            self._poster_label.setPixmap(QPixmap())
-            if self._poster_label.text() == "":
-                self._poster_label.setText("Нет постера")
-            self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
-
-    def _schedule_poster_height_sync(self) -> None:
-        from PyQt6.QtCore import QTimer
-
-        QTimer.singleShot(0, self._sync_poster_display)
-
-    def _set_poster_placeholder(self) -> None:
-        from PyQt6.QtGui import QPixmap
-
-        self._poster_source_pixmap = None
-        self._poster_label.setPixmap(QPixmap())
-        self._poster_label.setText("Нет постера")
-        self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
-
-    def _set_poster_image(self, poster_path: str) -> bool:
-        pixmap = _load_detail_poster_source_pixmap(poster_path)
-        if pixmap is None:
-            return False
-
-        self._poster_source_pixmap = pixmap
-        self._sync_poster_display()
-        return True
-
-    def _set_local_poster_path(self, local_path: str | None) -> None:
-        self._local_poster_path = local_path
-        self._poster_label.setToolTip(local_path or "")
-
-    def _show_poster_context_menu(self, position) -> None:
-        from PyQt6.QtWidgets import QMenu
-
-        menu = QMenu(self._poster_label)
-        open_action = menu.addAction("Открыть постер")
-        open_action.setEnabled(self._local_poster_path is not None)
-        cache_action = menu.addAction("Папка poster-cache")
-        chosen_action = menu.exec(self._poster_label.mapToGlobal(position))
-        if chosen_action is open_action:
-            self._open_local_poster()
-        elif chosen_action is cache_action:
-            self._open_poster_cache_directory()
-
-    def _open_local_poster(self) -> None:
-        from PyQt6.QtWidgets import QMessageBox
-
-        if self._local_poster_path is None:
-            return
-        ok, error = open_path_in_shell(self._local_poster_path)
-        if not ok:
-            QMessageBox.warning(self._frame, "Постер", error or "Не удалось открыть файл постера.")
-
-    def _open_poster_cache_directory(self) -> None:
-        from PyQt6.QtWidgets import QMessageBox
-
-        cache_dir = get_poster_cache_directory()
-        ok, error = open_path_in_shell(cache_dir)
-        if not ok:
-            QMessageBox.warning(
-                self._frame,
-                "Poster-cache",
-                error or "Не удалось открыть папку poster-cache.",
-            )
-
     def show_empty(self, title: str = "Выберите тайтл слева") -> None:
         self._set_poster_placeholder()
         self._set_local_poster_path(None)
         self._title_label.setText(title)
         if self._score_indicator is not None:
             self._score_indicator.set_score(None)
-        _fill_meta_pill_row(self._meta_pills_layout, [], self._profile)
+        fill_meta_pill_row(self._meta_pills_layout, [], self._profile)
         self._meta_pills_widget.setVisible(False)
-        _fill_pill_rows(self._genre_pills_layout, [], "genrePill")
+        fill_pill_rows(self._genre_pills_layout, [], "genrePill")
         self._genre_section.setVisible(False)
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
@@ -417,14 +246,14 @@ class WatchedDetailCard:
             self._score_indicator.set_score(card.get("user_score"))
 
         meta_pills = build_meta_pill_items(card)
-        _fill_meta_pill_row(self._meta_pills_layout, meta_pills, self._profile)
+        fill_meta_pill_row(self._meta_pills_layout, meta_pills, self._profile)
         self._meta_pills_widget.setVisible(len(meta_pills) > 0)
         if self._mark_watched_button is not None:
             self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
         self._metrics_row_widget.setVisible(self._metrics_row_should_show(len(meta_pills)))
 
         detail_pills = build_detail_info_pill_labels(card)
-        _fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")
+        fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")
         self._genre_section.setVisible(len(detail_pills) > 0)
 
         if has_overview_text(card):
@@ -438,12 +267,4 @@ class WatchedDetailCard:
         if poster_path is None or self._set_poster_image(poster_path) is False:
             self._set_poster_placeholder()
         self._set_local_poster_path(poster_path)
-        self._schedule_poster_height_sync()
-
-    def apply_local_poster_path(self, poster_path: str | None) -> None:
-        """Update only the poster area after async download."""
-        if poster_path not in (None, "") and self._set_poster_image(poster_path):
-            self._set_local_poster_path(poster_path)
-        else:
-            self._set_poster_placeholder()
         self._schedule_poster_height_sync()

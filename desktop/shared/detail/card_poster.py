@@ -1,0 +1,121 @@
+"""Poster display and context menu helpers for WatchedDetailCard."""
+
+from __future__ import annotations
+
+from desktop.shared.detail.list_delegate import fit_poster_pixmap_for_display
+from desktop.shared.detail.posters import get_poster_cache_directory, open_path_in_shell
+from desktop.shared.detail.profiles import POSTER_IMAGE_STYLE, POSTER_PLACEHOLDER_STYLE
+
+_detail_poster_source_cache: dict[str, object] = {}
+
+
+def load_detail_poster_source_pixmap(poster_path: str):
+    from PyQt6.QtGui import QPixmap
+
+    cached = _detail_poster_source_cache.get(poster_path)
+    if cached is not None:
+        return cached if cached is not False else None
+    pixmap = QPixmap(poster_path)
+    if pixmap.isNull():
+        _detail_poster_source_cache[poster_path] = False
+        return None
+    _detail_poster_source_cache[poster_path] = pixmap
+    return pixmap
+
+
+class DetailCardPosterMixin:
+    """Poster sync, placeholder and shell-open actions for detail cards."""
+
+    def _sync_poster_display(self) -> None:
+        from PyQt6.QtGui import QPixmap
+
+        poster_width = self._profile.poster_width
+        poster_height = self._profile.poster_height
+        if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
+            display_pixmap = fit_poster_pixmap_for_display(
+                self._poster_source_pixmap,
+                poster_width,
+                poster_height,
+            )
+            width = max(display_pixmap.width(), 1)
+            height = max(display_pixmap.height(), 1)
+            self._poster_label.setFixedSize(width, height)
+            self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
+            self._poster_label.setText("")
+            self._poster_label.setPixmap(display_pixmap)
+            return
+
+        self._poster_label.setFixedSize(poster_width, poster_height)
+        if self._poster_label.pixmap() is None or self._poster_label.pixmap().isNull():
+            self._poster_label.setPixmap(QPixmap())
+            if self._poster_label.text() == "":
+                self._poster_label.setText("Нет постера")
+            self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+
+    def _schedule_poster_height_sync(self) -> None:
+        from PyQt6.QtCore import QTimer
+
+        QTimer.singleShot(0, self._sync_poster_display)
+
+    def _set_poster_placeholder(self) -> None:
+        from PyQt6.QtGui import QPixmap
+
+        self._poster_source_pixmap = None
+        self._poster_label.setPixmap(QPixmap())
+        self._poster_label.setText("Нет постера")
+        self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+
+    def _set_poster_image(self, poster_path: str) -> bool:
+        pixmap = load_detail_poster_source_pixmap(poster_path)
+        if pixmap is None:
+            return False
+
+        self._poster_source_pixmap = pixmap
+        self._sync_poster_display()
+        return True
+
+    def _set_local_poster_path(self, local_path: str | None) -> None:
+        self._local_poster_path = local_path
+        self._poster_label.setToolTip(local_path or "")
+
+    def _show_poster_context_menu(self, position) -> None:
+        from PyQt6.QtWidgets import QMenu
+
+        menu = QMenu(self._poster_label)
+        open_action = menu.addAction("Открыть постер")
+        open_action.setEnabled(self._local_poster_path is not None)
+        cache_action = menu.addAction("Папка poster-cache")
+        chosen_action = menu.exec(self._poster_label.mapToGlobal(position))
+        if chosen_action is open_action:
+            self._open_local_poster()
+        elif chosen_action is cache_action:
+            self._open_poster_cache_directory()
+
+    def _open_local_poster(self) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        if self._local_poster_path is None:
+            return
+        ok, error = open_path_in_shell(self._local_poster_path)
+        if not ok:
+            QMessageBox.warning(self._frame, "Постер", error or "Не удалось открыть файл постера.")
+
+    def _open_poster_cache_directory(self) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        cache_dir = get_poster_cache_directory()
+        ok, error = open_path_in_shell(cache_dir)
+        if not ok:
+            QMessageBox.warning(
+                self._frame,
+                "Poster-cache",
+                error or "Не удалось открыть папку poster-cache.",
+            )
+
+    def apply_local_poster_path(self, poster_path: str | None) -> None:
+        """Update only the poster area after async download."""
+        if poster_path not in (None, "") and self._set_poster_image(poster_path):
+            self._set_local_poster_path(poster_path)
+        else:
+            self._set_poster_placeholder()
+        self._schedule_poster_height_sync()

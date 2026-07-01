@@ -40,15 +40,22 @@ desktop/
     sidebar.py                   # build_watched_sidebar()
     delete.py                    # delete preview/execute helpers
     tab.py                       # WatchedTabView orchestration
+    tab_actions.py               # CRUD, context menu, add-title actions
     dialogs/
       score_edit.py              # ScoreEditDialog
       delete_dialog.py           # WatchedDeleteDialog
     add_title/
-      dialog.py                  # search/preview flow
+      constants.py               # dialog sizes and QSS token
+      search_dialog.py           # AddTitleSearchDialog
+      preview_dialog.py          # AddTitlePreviewDialog
+      flow.py                    # run_add_title_flow, transfer flow
+      dialog.py                  # backward-compatible re-exports
       worker.py                  # AddTitleResolveWorker
   candidates/
     session.py                   # shared filter/sort state
-    filters_view.py              # вкладка Фильтры
+    filters_view.py              # вкладка Фильтры (orchestrator)
+    filters_intro.py             # intro copy and pool stats text
+    filters_form.py              # scrollable filter form widgets
     list_view.py                 # вкладка Кандидаты
     list_delegate.py             # card-style list rows
     filters_controls.py          # threshold slider helpers
@@ -63,9 +70,6 @@ desktop/
       fallback_bars.py           # bar fallbacks
       lists.py                   # IMDb delta, gaps, dense scores
     charts.py                    # Plotly HTML builders
-  settings/
-    view.py                      # optional: pool maintenance UI (not registered in shell)
-    presenters.py                # stats/dedupe status formatters
   shared/
     detail/
       types.py                   # DetailEntry
@@ -74,7 +78,9 @@ desktop/
       profiles.py                # layout profiles and constants
       rating_indicator.py        # RatingCircleIndicator
       list_delegate.py           # WatchedListItemDelegate
-      card.py                    # WatchedDetailCard only
+      card.py                    # WatchedDetailCard orchestrator
+      card_pills.py              # pill row helpers
+      card_poster.py             # poster sync and context menu mixin
     widgets/
       range_slider.py
       list_search.py
@@ -101,7 +107,8 @@ desktop/
 | `app.py` | thin entry, re-exports `main` | shell |
 | `shell/main_window.py` | главное окно, status bar | shell |
 | `shell/tabs.py` | `build_main_tabs()`, tab registry, cross-tab wiring | shell |
-| `watched/tab.py` | orchestration: detail card, dialogs, CRUD | feature view |
+| `watched/tab.py` | layout, list state, selection | feature view |
+| `watched/tab_actions.py` | delete/score/add-title write actions | feature view |
 | `watched/sidebar.py` | list widget, search, sort, add-title button | feature view |
 | `watched/filters_panel.py` | collapsible score/year/genre filters | feature view |
 | `watched/model/` | load/filter/format, poster paths, score save | model |
@@ -109,14 +116,15 @@ desktop/
 | `watched/dialogs/score_edit.py` | диалог редактирования user_score | dialog |
 | `watched/add_title/` | wizard добавления / transfer из pool | dialog + worker |
 | `candidates/session.py` | shared state Фильтры ↔ Кандидаты | session |
-| `candidates/filters_view.py` | вкладка Фильтры | feature view |
+| `candidates/filters_view.py` | вкладка Фильтры (orchestrator) | feature view |
+| `candidates/filters_form.py` | filter form widget builders | feature view |
+| `candidates/filters_intro.py` | intro/stats copy | presenter |
 | `candidates/list_view.py` | вкладка Кандидаты | feature view |
 | `candidates/list_delegate.py` | card-style list row delegate | shared UI |
 | `candidates/presenters.py` | format/map для UI | presenter |
 | `analytics/view.py` | read-only вкладка Analytics (orchestrator) | feature view |
 | `analytics/sections/*` | KPI, charts, lists section mixins | feature view |
 | `analytics/charts.py` | Plotly chart builders | charts |
-| `settings/view.py` | pool maintenance UI (не в tab bar; console) | optional / unused in shell |
 | `shared/widgets/` | range_slider, list_search, chip selectors | shared |
 | `theme/tokens.py` | colors, fonts, spacing | theme |
 | `theme/styles/*` | QSS builders per screen | theme |
@@ -148,8 +156,13 @@ class SomeTabView:
 | Фильтр/сортировка watched (логика) | `watched/model/filters.py` |
 | Layout watched sidebar | `watched/sidebar.py` |
 | Watched filter panel UI | `watched/filters_panel.py` |
+| Detail card layout / show_entry | `shared/detail/card.py` |
+| Detail card pills | `shared/detail/card_pills.py` |
+| Detail card poster area | `shared/detail/card_poster.py` |
 | Detail card formatters | `shared/detail/presenters.py` |
-| Detail card / list delegate | `shared/detail/card.py`, `list_delegate.py` |
+| List delegate | `shared/detail/list_delegate.py` |
+| Candidate filter form layout | `candidates/filters_form.py` |
+| Candidate filter intro copy | `candidates/filters_intro.py` |
 | Форматирование candidate list | `candidates/presenters.py` |
 | Candidate list row paint | `candidates/list_delegate.py` |
 | Write-сценарий (save/delete) | `watched/delete.py` / `dataset` + dialog |
@@ -193,6 +206,7 @@ class SomeTabView:
 10. ~~`shared/detail/{types,presenters,posters}.py` — убрать `watched/` из card~~ done
 11. ~~Разбить монолиты: `shared/detail/*`, `watched/{sidebar,filters_panel,model/}`, `candidates/list_delegate.py`~~ done
 12. ~~`analytics/sections/*`, `build_main_tabs()` в shell, docs~~ done
+13. ~~Cleanup: удалить `desktop/settings/`, split `filters_view`, `watched/tab` + `add_title`, `shared/detail/card`~~ done
 
 ## Проверки
 
