@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from web.export import build_watched_movie_card
-
 
 def _local_path(value) -> str | None:
     if value is None:
@@ -16,45 +14,67 @@ def _local_path(value) -> str | None:
     return text
 
 
-def _nested_poster_value(movie: dict, field: str) -> str | None:
-    poster = movie.get("poster")
+def _nested_poster_value(record: dict, field: str) -> str | None:
+    poster = record.get("poster")
     if isinstance(poster, dict):
         return poster.get(field)
     return None
 
 
-def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | None:
-    """Return a local filesystem poster path when available. Never uses network."""
-    display_card = card if card is not None else build_watched_movie_card(movie)
-    candidates: list[str | None] = [
-        display_card.get("poster_path"),
-        _local_path(display_card.get("poster_src")),
-        _local_path(movie.get("poster_src")),
-        _local_path(movie.get("poster_path")),
-        _local_path(_nested_poster_value(movie, "path")),
-        _local_path(_nested_poster_value(movie, "poster_path")),
-    ]
-
+def _first_existing_local_path(*candidates: str | None) -> str | None:
     for candidate in candidates:
         if candidate is None:
             continue
         path = Path(candidate)
         if path.is_file():
             return str(path)
+    return None
 
-    poster_url = display_card.get("poster_url") or movie.get("poster_url")
-    if poster_url not in (None, ""):
-        from posters.download_images import local_preview_poster_path_if_cached
 
-        preview_path = local_preview_poster_path_if_cached(str(poster_url))
-        if preview_path not in (None, ""):
-            path = Path(preview_path)
-            if path.is_file():
-                return str(path)
+def _cached_preview_path(poster_url) -> str | None:
+    if poster_url in (None, ""):
+        return None
+    from posters.download_images import local_preview_poster_path_if_cached
 
-    main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
-    title = display_card.get("title") or main_info.get("title") or movie.get("title")
-    year = display_card.get("year", main_info.get("year", movie.get("year")))
+    preview_path = local_preview_poster_path_if_cached(str(poster_url))
+    if preview_path in (None, ""):
+        return None
+    path = Path(preview_path)
+    if path.is_file():
+        return str(path)
+    return None
+
+
+def resolve_local_poster_path_from_record(
+    record: dict,
+    *,
+    card: dict | None = None,
+    title: str | None = None,
+    year=None,
+) -> str | None:
+    """Return a local filesystem poster path from generic record fields. Never uses network."""
+    display_card = card or {}
+    local = _first_existing_local_path(
+        _local_path(display_card.get("poster_path")),
+        _local_path(display_card.get("poster_src")),
+        _local_path(record.get("poster_path")),
+        _local_path(record.get("poster_src")),
+        _local_path(_nested_poster_value(record, "path")),
+        _local_path(_nested_poster_value(record, "poster_path")),
+    )
+    if local is not None:
+        return local
+
+    poster_url = display_card.get("poster_url") or record.get("poster_url")
+    cached = _cached_preview_path(poster_url)
+    if cached is not None:
+        return cached
+
+    if title in (None, ""):
+        main_info = record.get("main_info") if isinstance(record.get("main_info"), dict) else {}
+        title = display_card.get("title") or main_info.get("title") or record.get("title")
+        if year is None:
+            year = display_card.get("year", main_info.get("year", record.get("year")))
     if title not in (None, ""):
         from posters.cache import default_local_poster_path
 
@@ -62,6 +82,22 @@ def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | No
         if default_path not in (None, ""):
             return default_path
     return None
+
+
+def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | None:
+    """Return a local filesystem poster path for a watched movie record."""
+    from web.export import build_watched_movie_card
+
+    display_card = card if card is not None else build_watched_movie_card(movie)
+    main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
+    title = display_card.get("title") or main_info.get("title") or movie.get("title")
+    year = display_card.get("year", main_info.get("year", movie.get("year")))
+    return resolve_local_poster_path_from_record(
+        movie,
+        card=display_card,
+        title=title,
+        year=year,
+    )
 
 
 def get_poster_cache_directory() -> str:

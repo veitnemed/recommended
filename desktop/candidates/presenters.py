@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from candidates import service as candidate_service
 from dataset.add_title_service import build_candidate_transfer_bundle
 
@@ -94,25 +92,13 @@ def candidate_detail_identity(candidate: dict) -> str:
 
 def resolve_local_poster_path_for_candidate(candidate: dict) -> str | None:
     """Return a local poster path from pool fields. Never downloads or uses network."""
-    for key in ("poster_path", "poster_src"):
-        value = candidate.get(key)
-        if value in (None, ""):
-            continue
-        text = str(value).strip()
-        if text.startswith(("http://", "https://")):
-            continue
-        path = Path(text)
-        if path.is_file():
-            return str(path)
+    from desktop.shared.detail.posters import resolve_local_poster_path_from_record
 
-    poster_url = candidate.get("poster_url")
-    if poster_url not in (None, ""):
-        from posters.download_images import local_preview_poster_path_if_cached
-
-        cached = local_preview_poster_path_if_cached(str(poster_url))
-        if cached not in (None, ""):
-            return cached
-    return None
+    return resolve_local_poster_path_from_record(
+        candidate,
+        title=candidate.get("title") or candidate.get("name"),
+        year=candidate.get("year"),
+    )
 
 
 def candidate_poster_url_for_download(candidate: dict) -> str | None:

@@ -19,27 +19,27 @@ from PyQt6.QtWidgets import (
 
 from candidates import service as candidate_service
 from config import constant
+from desktop.candidates.filters_controls import (
+    KP_SCORE_SLIDER_MAX,
+    KP_SCORE_SLIDER_STEP,
+    VOTES_SLIDER_MAX_INDEX,
+    VOTES_SLIDER_STEPS,
+    add_threshold_filter_row,
+    field_label,
+    make_min_threshold_slider,
+    min_score_from_slider,
+    min_votes_from_slider,
+    set_score_slider_from_default,
+    set_votes_slider_from_default,
+    update_score_range_label,
+    update_votes_range_label,
+)
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 from desktop.shared.widgets.range_slider import RangeSlider
 
 CANDIDATE_YEAR_MIN = 2000
-KP_SCORE_SLIDER_MAX = 100
-KP_SCORE_SLIDER_STEP = 0.1
-VOTES_SLIDER_STEPS = (
-    0,
-    100,
-    1_000,
-    5_000,
-    10_000,
-    50_000,
-    100_000,
-    500_000,
-    1_000_000,
-    5_000_000,
-)
-VOTES_SLIDER_MAX_INDEX = len(VOTES_SLIDER_STEPS) - 1
 APPLY_BUTTON_WIDTH_RATIO = 0.25
 APPLY_BUTTON_HEIGHT = 32
 
@@ -186,43 +186,43 @@ class CandidateFiltersView:
 
         self._kp_score_range_label = QLabel("")
         self._kp_score_range_label.setObjectName("candidateSearchFilterValue")
-        self._kp_score_slider = self._make_min_threshold_slider(
+        self._kp_score_slider = make_min_threshold_slider(
             0,
             KP_SCORE_SLIDER_MAX,
             "candidateSearchKpScoreRange",
-            self._update_kp_score_range_label,
+            lambda: update_score_range_label(self._kp_score_slider, self._kp_score_range_label),
         )
-        self._add_threshold_filter_row(form, "Мин. KP", self._kp_score_range_label, self._kp_score_slider)
+        add_threshold_filter_row(form, "Мин. KP", self._kp_score_range_label, self._kp_score_slider)
 
         self._imdb_score_range_label = QLabel("")
         self._imdb_score_range_label.setObjectName("candidateSearchFilterValue")
-        self._imdb_score_slider = self._make_min_threshold_slider(
+        self._imdb_score_slider = make_min_threshold_slider(
             0,
             KP_SCORE_SLIDER_MAX,
             "candidateSearchImdbScoreRange",
-            self._update_imdb_score_range_label,
+            lambda: update_score_range_label(self._imdb_score_slider, self._imdb_score_range_label),
         )
-        self._add_threshold_filter_row(form, "Мин. IMDb", self._imdb_score_range_label, self._imdb_score_slider)
+        add_threshold_filter_row(form, "Мин. IMDb", self._imdb_score_range_label, self._imdb_score_slider)
 
         self._kp_votes_range_label = QLabel("")
         self._kp_votes_range_label.setObjectName("candidateSearchFilterValue")
-        self._kp_votes_slider = self._make_min_threshold_slider(
+        self._kp_votes_slider = make_min_threshold_slider(
             0,
             VOTES_SLIDER_MAX_INDEX,
             "candidateSearchKpVotesRange",
-            self._update_kp_votes_range_label,
+            lambda: update_votes_range_label(self._kp_votes_slider, self._kp_votes_range_label),
         )
-        self._add_threshold_filter_row(form, "Мин. голосов KP", self._kp_votes_range_label, self._kp_votes_slider)
+        add_threshold_filter_row(form, "Мин. голосов KP", self._kp_votes_range_label, self._kp_votes_slider)
 
         self._imdb_votes_range_label = QLabel("")
         self._imdb_votes_range_label.setObjectName("candidateSearchFilterValue")
-        self._imdb_votes_slider = self._make_min_threshold_slider(
+        self._imdb_votes_slider = make_min_threshold_slider(
             0,
             VOTES_SLIDER_MAX_INDEX,
             "candidateSearchImdbVotesRange",
-            self._update_imdb_votes_range_label,
+            lambda: update_votes_range_label(self._imdb_votes_slider, self._imdb_votes_range_label),
         )
-        self._add_threshold_filter_row(
+        add_threshold_filter_row(
             form,
             "Мин. голосов IMDb",
             self._imdb_votes_range_label,
@@ -247,10 +247,10 @@ class CandidateFiltersView:
 
         self._update_apply_button_width()
         self._update_year_range_label()
-        self._update_kp_score_range_label()
-        self._update_imdb_score_range_label()
-        self._update_kp_votes_range_label()
-        self._update_imdb_votes_range_label()
+        update_score_range_label(self._kp_score_slider, self._kp_score_range_label)
+        update_score_range_label(self._imdb_score_slider, self._imdb_score_range_label)
+        update_votes_range_label(self._kp_votes_slider, self._kp_votes_range_label)
+        update_votes_range_label(self._imdb_votes_slider, self._imdb_votes_range_label)
         self._apply_filter_defaults()
         self._update_intro()
 
@@ -316,124 +316,7 @@ class CandidateFiltersView:
 
     @staticmethod
     def _label(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("candidateSearchFieldLabel")
-        return label
-
-    @staticmethod
-    def _add_threshold_filter_row(
-        form: QVBoxLayout,
-        title: str,
-        value_label: QLabel,
-        slider: RangeSlider,
-    ) -> None:
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.addWidget(CandidateFiltersView._label(title))
-        header.addStretch()
-        header.addWidget(value_label)
-        form.addLayout(header)
-        form.addWidget(slider)
-
-    @staticmethod
-    def _make_min_threshold_slider(
-        minimum: int,
-        maximum: int,
-        object_name: str,
-        on_change: Callable[[], None],
-    ) -> RangeSlider:
-        slider = RangeSlider(minimum, maximum, minimum, maximum)
-        slider.setObjectName(object_name)
-
-        def _on_range_changed(lower: int, upper: int) -> None:
-            if upper != maximum:
-                slider.blockSignals(True)
-                slider.setValues(lower, maximum)
-                slider.blockSignals(False)
-            on_change()
-
-        slider.rangeChanged.connect(_on_range_changed)
-        return slider
-
-    @staticmethod
-    def _format_min_score_label(tenths: int) -> str:
-        if tenths <= 0:
-            return "—"
-        return f"{tenths * KP_SCORE_SLIDER_STEP:.1f}+"
-
-    @staticmethod
-    def _score_tenths_from_slider(slider: RangeSlider) -> int:
-        lower, _upper = slider.values()
-        return max(0, int(lower))
-
-    @staticmethod
-    def _min_score_from_slider(slider: RangeSlider) -> float | None:
-        tenths = CandidateFiltersView._score_tenths_from_slider(slider)
-        if tenths <= 0:
-            return None
-        return round(tenths * KP_SCORE_SLIDER_STEP, 1)
-
-    @staticmethod
-    def _set_score_slider_from_default(slider: RangeSlider, value) -> None:
-        tenths = 0
-        if value not in (None, ""):
-            try:
-                tenths = max(0, min(KP_SCORE_SLIDER_MAX, int(round(float(value) / KP_SCORE_SLIDER_STEP))))
-            except (TypeError, ValueError):
-                tenths = 0
-        slider.blockSignals(True)
-        slider.setValues(tenths, KP_SCORE_SLIDER_MAX)
-        slider.blockSignals(False)
-
-    @staticmethod
-    def _format_min_votes_label(step_index: int) -> str:
-        if step_index <= 0:
-            return "—"
-        return f"{VOTES_SLIDER_STEPS[step_index]:,}".replace(",", " ") + "+"
-
-    @staticmethod
-    def _votes_index_from_slider(slider: RangeSlider) -> int:
-        lower, _upper = slider.values()
-        return max(0, min(VOTES_SLIDER_MAX_INDEX, int(lower)))
-
-    @staticmethod
-    def _min_votes_from_slider(slider: RangeSlider) -> int | None:
-        index = CandidateFiltersView._votes_index_from_slider(slider)
-        if index <= 0:
-            return None
-        return VOTES_SLIDER_STEPS[index]
-
-    @staticmethod
-    def _set_votes_slider_from_default(slider: RangeSlider, value) -> None:
-        index = 0
-        if value not in (None, ""):
-            try:
-                target = int(value)
-            except (TypeError, ValueError):
-                target = 0
-            if target > 0:
-                for step_index, step_value in enumerate(VOTES_SLIDER_STEPS):
-                    if step_value <= target:
-                        index = step_index
-        slider.blockSignals(True)
-        slider.setValues(index, VOTES_SLIDER_MAX_INDEX)
-        slider.blockSignals(False)
-
-    def _update_kp_score_range_label(self) -> None:
-        tenths = self._score_tenths_from_slider(self._kp_score_slider)
-        self._kp_score_range_label.setText(self._format_min_score_label(tenths))
-
-    def _update_imdb_score_range_label(self) -> None:
-        tenths = self._score_tenths_from_slider(self._imdb_score_slider)
-        self._imdb_score_range_label.setText(self._format_min_score_label(tenths))
-
-    def _update_kp_votes_range_label(self) -> None:
-        index = self._votes_index_from_slider(self._kp_votes_slider)
-        self._kp_votes_range_label.setText(self._format_min_votes_label(index))
-
-    def _update_imdb_votes_range_label(self) -> None:
-        index = self._votes_index_from_slider(self._imdb_votes_slider)
-        self._imdb_votes_range_label.setText(self._format_min_votes_label(index))
+        return field_label(text)
 
     def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
         self._update_year_range_label()
@@ -491,14 +374,14 @@ class CandidateFiltersView:
         self._country_selector.set_options(country_options, defaults.get("country"))
 
         self._set_year_slider_from_defaults(defaults.get("year_min"), defaults.get("year_max"))
-        self._set_score_slider_from_default(self._kp_score_slider, defaults.get("min_kp_score"))
-        self._set_score_slider_from_default(self._imdb_score_slider, defaults.get("min_imdb_score"))
-        self._set_votes_slider_from_default(self._kp_votes_slider, defaults.get("min_kp_votes"))
-        self._set_votes_slider_from_default(self._imdb_votes_slider, defaults.get("min_imdb_votes"))
-        self._update_kp_score_range_label()
-        self._update_imdb_score_range_label()
-        self._update_kp_votes_range_label()
-        self._update_imdb_votes_range_label()
+        set_score_slider_from_default(self._kp_score_slider, defaults.get("min_kp_score"))
+        set_score_slider_from_default(self._imdb_score_slider, defaults.get("min_imdb_score"))
+        set_votes_slider_from_default(self._kp_votes_slider, defaults.get("min_kp_votes"))
+        set_votes_slider_from_default(self._imdb_votes_slider, defaults.get("min_imdb_votes"))
+        update_score_range_label(self._kp_score_slider, self._kp_score_range_label)
+        update_score_range_label(self._imdb_score_slider, self._imdb_score_range_label)
+        update_votes_range_label(self._kp_votes_slider, self._kp_votes_range_label)
+        update_votes_range_label(self._imdb_votes_slider, self._imdb_votes_range_label)
         self._only_complete_check.setChecked(DEFAULT_BROWSE_FILTERS["only_complete"])
         self._only_unwatched_check.setChecked(DEFAULT_BROWSE_FILTERS["only_unwatched"])
         self._hide_hidden_check.setChecked(DEFAULT_BROWSE_FILTERS["hide_hidden"])
@@ -516,10 +399,10 @@ class CandidateFiltersView:
             "year_max": year_max,
             "include_genres": self._include_genre_selector.selected_genres(),
             "exclude_genres": self._exclude_genre_selector.selected_genres(),
-            "min_kp_score": self._min_score_from_slider(self._kp_score_slider),
-            "min_kp_votes": self._min_votes_from_slider(self._kp_votes_slider),
-            "min_imdb_score": self._min_score_from_slider(self._imdb_score_slider),
-            "min_imdb_votes": self._min_votes_from_slider(self._imdb_votes_slider),
+            "min_kp_score": min_score_from_slider(self._kp_score_slider),
+            "min_kp_votes": min_votes_from_slider(self._kp_votes_slider),
+            "min_imdb_score": min_score_from_slider(self._imdb_score_slider),
+            "min_imdb_votes": min_votes_from_slider(self._imdb_votes_slider),
             "only_complete": self._only_complete_check.isChecked(),
             "only_unwatched": self._only_unwatched_check.isChecked(),
             "hide_hidden": self._hide_hidden_check.isChecked(),
