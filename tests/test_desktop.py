@@ -1570,6 +1570,9 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "registry.register" in factory_source
     assert "registry.focus" in factory_source
     assert "on_watched_entries_changed" in factory_source
+    assert "SettingsToolsView" in factory_source
+    assert '"Сервис"' in factory_source
+    assert "on_pool_changed" in factory_source
 
 
 def test_genre_chip_selector_tracks_selection(qapp) -> None:
@@ -1782,3 +1785,31 @@ def test_candidate_list_view_starts_async_poster_download() -> None:
     assert "CandidatePosterDownloadWorker" in source
     assert "candidate_poster_url_for_download" in source
     assert "apply_local_poster_path" in source
+
+
+def test_settings_tools_view_wires_pool_maintenance_actions() -> None:
+    import inspect
+
+    import desktop.settings.view as settings_module
+
+    init_source = inspect.getsource(settings_module.SettingsToolsView.__init__)
+    dedupe_source = inspect.getsource(settings_module.SettingsToolsView._run_clean_duplicates)
+    retry_source = inspect.getsource(settings_module.SettingsToolsView._run_retry_kp)
+    clear_source = inspect.getsource(settings_module.SettingsToolsView._run_clear_pool)
+
+    assert "clean_common_pool_duplicates" in dedupe_source
+    assert "retry_kp_enrichment_in_pool" in retry_source
+    assert "clear_common_candidate_pool" in clear_source
+    assert "QMessageBox" in dedupe_source
+    assert "on_pool_changed" in init_source
+    assert "get_title_duplicates_view" in inspect.getsource(settings_module.SettingsToolsView.refresh)
+
+
+def test_candidate_session_reload_from_pool_reapplies_filters() -> None:
+    import inspect
+
+    import desktop.candidates.session as session_module
+
+    source = inspect.getsource(session_module.CandidateSearchSession.reload_from_pool)
+    assert "apply_filters" in source
+    assert "_notify_listeners" in source

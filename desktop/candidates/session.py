@@ -108,3 +108,10 @@ class CandidateSearchSession:
 
     def sorted_total_count(self) -> int:
         return len(self._sorted_candidates)
+
+    def reload_from_pool(self) -> None:
+        """Re-apply the last filter after pool mutation, or notify dependent views."""
+        if self.filters is not None:
+            self.apply_filters(self.filters)
+        else:
+            self._notify_listeners()
