@@ -307,10 +307,15 @@ QLabel#watchedFilterValue {{
 }}
 QWidget#watchedScoreRange,
 QWidget#watchedYearRange,
-QWidget#candidateSearchYearRange {{
+QWidget#candidateSearchYearRange,
+QWidget#candidateSearchKpScoreRange,
+QWidget#candidateSearchImdbScoreRange,
+QWidget#candidateSearchKpVotesRange,
+QWidget#candidateSearchImdbVotesRange {{
     background: transparent;
 }}
-QLabel#candidateSearchYearRangeLabel {{
+QLabel#candidateSearchYearRangeLabel,
+QLabel#candidateSearchFilterValue {{
     background: transparent;
     color: {COLOR_TEXT};
     font-size: {FONT_BASE}px;
@@ -402,6 +407,23 @@ QLabel#candidateSearchHeader {{
     color: {COLOR_TEXT};
     font-size: {FONT_SECTION}px;
     font-weight: 700;
+}}
+QFrame#candidateFiltersIntro {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD}px;
+}}
+QLabel#candidateFiltersIntroLead {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_BASE}px;
+    line-height: 1.35;
+}}
+QLabel#candidateFiltersIntroStats {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SECTION}px;
+    font-weight: 600;
 }}
 QLabel#candidateSearchHint,
 QLabel#candidateSearchResultsSummary,
@@ -538,21 +560,67 @@ QWidget#genreChipHost {{
 QWidget#candidateFiltersRoot {{
     font-size: {FONT_BASE}px;
 }}
-QListWidget#candidateSearchCountryList {{
-    background-color: {COLOR_CARD};
+QPushButton#countryFilterChip {{
+    background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
-    color: {COLOR_TEXT};
+    border-radius: {RADIUS_CHIP}px;
+    color: {COLOR_TEXT_CHIP};
     font-size: {FONT_BASE}px;
-    padding: 6px;
+    font-weight: 500;
+    padding: 8px 14px;
+    min-height: 36px;
 }}
-QListWidget#candidateSearchCountryList::item {{
-    padding: 4px 2px;
-    min-height: 28px;
+QPushButton#countryFilterChip:hover {{
+    background-color: {COLOR_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
 }}
-QListWidget#candidateSearchCountryList::item:selected {{
+QPushButton#countryFilterChip:checked {{
     background-color: {COLOR_ACCENT_SOFT};
+    border-color: {COLOR_ACCENT};
     color: {COLOR_TEXT};
+}}
+QPushButton#countryChipClear {{
+    background: transparent;
+    border: none;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+    padding: 0 4px;
+}}
+QPushButton#countryChipClear:hover {{
+    color: {COLOR_TEXT};
+}}
+QLabel#countryChipCount {{
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QWidget#countryChipHost {{
+    background: transparent;
+    padding-top: 2px;
+}}
+QPushButton#chipExpandToggle {{
+    background: transparent;
+    border: none;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+    padding: 0 4px;
+    text-align: left;
+}}
+QPushButton#chipExpandToggle:hover {{
+    color: {COLOR_TEXT};
+}}
+QPushButton#candidateSearchApplyTopButton {{
+    background-color: {COLOR_ADD_BUTTON};
+    border: 1px solid {COLOR_ADD_BUTTON_BORDER};
+    border-radius: {RADIUS_BUTTON_SMALL}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: 4px 12px;
+    min-height: 28px;
+    max-height: 32px;
+}}
+QPushButton#candidateSearchApplyTopButton:hover {{
+    background-color: {COLOR_ADD_BUTTON_TOP};
 }}
 QPushButton#candidateSearchButton,
 QPushButton#candidateSearchAddWatched {{
@@ -585,11 +653,7 @@ QPushButton#candidateSearchHide:hover {{
 QComboBox#candidateSearchCriteria,
 QSpinBox#candidateSearchYearMin,
 QSpinBox#candidateSearchYearMax,
-QSpinBox#candidateSearchTopN,
-QSpinBox#candidateSearchMinKpVotes,
-QSpinBox#candidateSearchMinImdbVotes,
-QDoubleSpinBox#candidateSearchMinKp,
-QDoubleSpinBox#candidateSearchMinImdb {{
+QSpinBox#candidateSearchTopN {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_INPUT}px;

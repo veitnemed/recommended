@@ -11,7 +11,10 @@ from app.core import storage as search_storage
 from candidates import candidate_pool
 from candidates import import_tmdb as tmdb_import
 from candidates import tmdb_candidate_pool as tmdb_build
+from candidates import tmdb_country_options
 from candidates.keys import COMMON_POOL_CRITERIA_NAME
+from dataset import filter_popularity
+from storage import data as storage_data
 
 
 def get_pool_view(criteria_name: str | None = None) -> list:
@@ -87,6 +90,40 @@ def get_search_genre_options_view(criteria_name: str | None = None) -> dict:
         "genres": genres,
         "count": len(genres),
         "label": "Доступные жанры для поиска (по сохранённым данным pool)",
+    }
+
+
+def get_search_filter_chip_options_view() -> dict:
+    """Returns watched-dataset genre/country options for filter chips, popular first."""
+    dataset = storage_data.load_dataset()
+    dataset_total = len(dataset) if isinstance(dataset, dict) else 0
+    pool_candidates = get_pool_view()
+    pool_genres = candidate_pool.collect_search_genre_options(pool_candidates)
+    pool_countries = candidate_pool.collect_search_country_options(pool_candidates)
+
+    genres = filter_popularity.build_dataset_genre_popularity(dataset)
+    countries = filter_popularity.build_dataset_country_popularity(dataset)
+    genres = filter_popularity.merge_genre_popularity_with_pool(genres, pool_genres)
+    countries = filter_popularity.merge_country_popularity_with_pool(countries, pool_countries)
+
+    source = "dataset" if dataset_total > 0 else "fallback"
+    if not genres:
+        source = "fallback"
+        genres = [{"label": label, "count": 0} for label in pool_genres]
+
+    if not countries:
+        source = "fallback"
+        countries = [
+            {"code": option["code"], "label": option["label"], "count": 0}
+            for option in tmdb_country_options.country_options()
+        ]
+
+    return {
+        "genres": genres,
+        "countries": countries,
+        "dataset_total": dataset_total,
+        "is_empty": dataset_total == 0,
+        "source": source,
     }
 
 

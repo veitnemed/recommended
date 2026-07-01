@@ -5,6 +5,8 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, QSize, QRect, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
+from desktop.collapsible_chip_helpers import ChipExpandControl
+
 
 class FlowLayout(QLayout):
     """Simple left-to-right layout that wraps items to the next row."""
@@ -95,6 +97,7 @@ class GenreChipSelector(QWidget):
         self.setObjectName(object_name)
         self._genres: list[str] = []
         self._chips: dict[str, QPushButton] = {}
+        self._expand = ChipExpandControl()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -120,8 +123,13 @@ class GenreChipSelector(QWidget):
         self._chips_host.setLayout(self._flow)
         root.addWidget(self._chips_host)
 
+        expand_button = self._expand.create_button()
+        expand_button.clicked.connect(self._toggle_expanded)
+        root.addWidget(expand_button)
+
     def set_options(self, genres: list[str], selected: list[str] | None = None) -> None:
         """Rebuild chips for the given genre list and selection."""
+        self._expand.reset()
         selected_normalized = {str(value).casefold() for value in (selected or [])}
         self._genres = [str(genre).strip() for genre in genres if str(genre).strip()]
         self._clear_layout()
@@ -133,12 +141,11 @@ class GenreChipSelector(QWidget):
             chip.setChecked(genre.casefold() in selected_normalized)
             chip.setMinimumHeight(36)
             chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-            chip.toggled.connect(self._update_count_label)
+            chip.toggled.connect(self._on_chip_toggled)
             self._chips[genre] = chip
             self._flow.addWidget(chip)
 
-        self._chips_host.adjustSize()
-        self._update_count_label()
+        self._refresh_chip_layout()
 
     def selected_genres(self) -> list[str]:
         """Return selected genre labels in display order."""
@@ -149,8 +156,22 @@ class GenreChipSelector(QWidget):
             chip.blockSignals(True)
             chip.setChecked(False)
             chip.blockSignals(False)
-        self._update_count_label()
-        self.selection_changed.emit()
+        self._refresh_chip_layout()
+
+    def _ordered_chips(self) -> list[QPushButton]:
+        return [self._chips[genre] for genre in self._genres if genre in self._chips]
+
+    def _toggle_expanded(self) -> None:
+        self._expand.toggle()
+        self._refresh_chip_layout(update_count_only=True)
+
+    def _on_chip_toggled(self, *_args) -> None:
+        self._refresh_chip_layout()
+
+    def _refresh_chip_layout(self, *, update_count_only: bool = False) -> None:
+        self._expand.apply_visibility(self._ordered_chips())
+        self._chips_host.adjustSize()
+        self._update_count_label(emit_selection=not update_count_only)
 
     def _clear_layout(self) -> None:
         self._chips.clear()
@@ -160,7 +181,8 @@ class GenreChipSelector(QWidget):
             if widget is not None:
                 widget.deleteLater()
 
-    def _update_count_label(self, *_args) -> None:
+    def _update_count_label(self, *_args, emit_selection: bool = True) -> None:
         count = len(self.selected_genres())
         self._count_label.setText(f"Выбрано: {count}")
-        self.selection_changed.emit()
+        if emit_selection:
+            self.selection_changed.emit()

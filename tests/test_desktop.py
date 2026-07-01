@@ -1379,10 +1379,27 @@ def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
         "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
         lambda: {"is_empty": True, "summary": "", "candidates": []},
     )
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_filter_chip_options_view",
+        lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
+    )
     session = CandidateSearchSession()
     view = CandidateFiltersView(session)
-    assert "pool пуст" in view._status_label.text()
+    assert "пуст" in view._intro_lead.text().lower()
     assert view._apply_button.isEnabled() is False
+
+
+def test_format_pool_stats_user_uses_plain_language() -> None:
+    from desktop.candidate_filters_view import _format_pool_stats_user
+
+    text = _format_pool_stats_user(
+        {"unique_total": 305, "ready_total": 204, "incomplete_total": 101},
+    )
+    assert "305 сериалов" in text
+    assert "204 с рейтингами" in text
+    assert "101 без полных данных" in text
+    assert "ready" not in text
+    assert "pool" not in text.lower()
 
 
 def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch, qapp) -> None:
@@ -1403,8 +1420,8 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
         lambda: {"defaults": {}},
     )
     monkeypatch.setattr(
-        "desktop.candidate_filters_view.candidate_service.get_search_genre_options_view",
-        lambda: {"genres": []},
+        "desktop.candidate_filters_view.candidate_service.get_search_filter_chip_options_view",
+        lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
 
     view = CandidateFiltersView(CandidateSearchSession())
@@ -1413,8 +1430,114 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
     assert filters["country"] == []
     assert filters["year_min"] is None
     assert filters["year_max"] is None
-    assert view._country_list.item(0).isSelected() is True
+    assert view._country_selector.is_all_selected() is True
     assert view._year_slider.values() == (CANDIDATE_YEAR_MIN, constant.NOW_YEAR)
+    assert filters["min_kp_score"] is None
+    assert filters["min_imdb_score"] is None
+    assert filters["min_kp_votes"] is None
+    assert filters["min_imdb_votes"] is None
+    assert view._only_complete_check.isChecked() is False
+
+
+def test_country_chip_selector_clear_means_all_countries(qapp) -> None:
+    from desktop.country_chip_selector import CountryChipSelector
+
+    selector = CountryChipSelector([{"code": "RU", "label": "Россия"}, {"code": "US", "label": "США"}])
+    selector.set_selected_codes(["RU", "US"])
+
+    assert selector.is_all_selected() is False
+    assert selector.selected_country_codes() == ["RU", "US"]
+
+    selector.clear_selection()
+
+    assert selector.is_all_selected() is True
+    assert selector.selected_country_codes() == []
+
+
+def test_country_chip_selector_toggle_country_updates_selection(qapp) -> None:
+    from desktop.country_chip_selector import CountryChipSelector
+
+    selector = CountryChipSelector([{"code": "RU", "label": "Россия"}, {"code": "US", "label": "США"}])
+    selector._chips["RU"].setChecked(True)
+
+    assert selector.selected_country_codes() == ["RU"]
+    assert selector.is_all_selected() is False
+
+
+def test_chip_expand_control_shows_five_chips_when_collapsed(qapp) -> None:
+    from desktop.collapsible_chip_helpers import COLLAPSED_VISIBLE_CHIP_COUNT
+    from desktop.genre_chip_selector import GenreChipSelector
+
+    genres = [f"Жанр {index}" for index in range(8)]
+    selector = GenreChipSelector()
+    selector.set_options(genres)
+    selector.show()
+
+    visible = [chip.isVisible() for chip in selector._ordered_chips()]
+    assert visible[:COLLAPSED_VISIBLE_CHIP_COUNT] == [True] * COLLAPSED_VISIBLE_CHIP_COUNT
+    assert visible[COLLAPSED_VISIBLE_CHIP_COUNT:] == [False] * 3
+
+    selector._toggle_expanded()
+    assert all(chip.isVisible() for chip in selector._ordered_chips())
+
+def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeypatch, qapp) -> None:
+    from desktop.candidate_filters_view import (
+        KP_SCORE_SLIDER_MAX,
+        VOTES_SLIDER_MAX_INDEX,
+        CandidateFiltersView,
+    )
+    from desktop.candidate_search_session import CandidateSearchSession
+
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_overview_view",
+        lambda: {"is_empty": False, "summary": "ok", "candidates": []},
+    )
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_filter_defaults_view",
+        lambda: {"defaults": {}},
+    )
+    monkeypatch.setattr(
+        "desktop.candidate_filters_view.candidate_service.get_search_filter_chip_options_view",
+        lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
+    )
+
+    view = CandidateFiltersView(CandidateSearchSession())
+    view._kp_score_slider.setValues(75, KP_SCORE_SLIDER_MAX)
+    view._imdb_score_slider.setValues(60, KP_SCORE_SLIDER_MAX)
+    view._kp_votes_slider.setValues(4, VOTES_SLIDER_MAX_INDEX)
+    view._imdb_votes_slider.setValues(2, VOTES_SLIDER_MAX_INDEX)
+
+    filters = view._collect_filters()
+
+    assert filters["min_kp_score"] == 7.5
+    assert filters["min_imdb_score"] == 6.0
+    assert filters["min_kp_votes"] == 10_000
+    assert filters["min_imdb_votes"] == 1_000
+
+
+def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
+    import inspect
+
+    from desktop import candidate_filters_view as module
+
+    source = inspect.getsource(module.CandidateFiltersView.__init__)
+    assert "_kp_score_slider" in source
+    assert "_kp_votes_slider" in source
+    assert "_make_score_spin" not in source
+    assert "_make_votes_spin" not in source
+    assert "QDoubleSpinBox" not in source
+    assert "QSpinBox" not in source
+
+
+def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
+    import inspect
+
+    from desktop import candidate_filters_view as module
+
+    source = inspect.getsource(module.CandidateFiltersView.__init__)
+    assert "top_bar" in source
+    assert "_update_apply_button_width" in source
+    assert "form.addWidget(self._apply_button)" not in source
 
 
 def test_watched_window_includes_candidate_tabs() -> None:

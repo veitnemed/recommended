@@ -1149,6 +1149,29 @@ def collect_search_genre_options(candidates: list) -> list[str]:
     return sorted(options, key=lambda value: str(value).casefold())
 
 
+def collect_search_country_options(candidates: list) -> list[dict]:
+    """Returns unique saved-pool country options for runtime search filters."""
+    from candidates import tmdb_country_options
+
+    labels_by_code = tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE
+    seen_codes: set[str] = set()
+    options: list[dict] = []
+    for candidate in candidates:
+        normalized = normalize_candidate_record(candidate)
+        for code in normalized.get("country_codes") or []:
+            iso2 = str(code or "").strip().upper()
+            if iso2 == "" or iso2 in seen_codes:
+                continue
+            seen_codes.add(iso2)
+            options.append(
+                {
+                    "code": iso2,
+                    "label": labels_by_code.get(iso2, iso2),
+                }
+            )
+    return sorted(options, key=lambda row: str(row.get("label") or "").casefold())
+
+
 def _normalized_optional_text(value) -> str:
     return str(value or "").strip().casefold()
 

@@ -7,28 +7,68 @@ from typing import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
-    QDoubleSpinBox,
     QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
     QScrollArea,
-    QSpinBox,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from candidates import service as candidate_service
-from candidates import tmdb_country_options
 from config import constant
-from desktop.candidate_search_session import CandidateSearchSession
+from desktop.candidate_search_session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.country_chip_selector import CountryChipSelector
 from desktop.genre_chip_selector import GenreChipSelector
 from desktop.range_slider import RangeSlider
 
 CANDIDATE_YEAR_MIN = 2000
-COUNTRY_ALL_ROW = 0
+KP_SCORE_SLIDER_MAX = 100
+KP_SCORE_SLIDER_STEP = 0.1
+VOTES_SLIDER_STEPS = (
+    0,
+    100,
+    1_000,
+    5_000,
+    10_000,
+    50_000,
+    100_000,
+    500_000,
+    1_000_000,
+    5_000_000,
+)
+VOTES_SLIDER_MAX_INDEX = len(VOTES_SLIDER_STEPS) - 1
+APPLY_BUTTON_WIDTH_RATIO = 0.25
+APPLY_BUTTON_HEIGHT = 32
+
+
+def _series_count_phrase(count: int) -> str:
+    """Return a short Russian phrase like «42 сериала»."""
+    value = max(0, int(count))
+    remainder_100 = value % 100
+    remainder_10 = value % 10
+    if 11 <= remainder_100 <= 14:
+        suffix = "сериалов"
+    elif remainder_10 == 1:
+        suffix = "сериал"
+    elif 2 <= remainder_10 <= 4:
+        suffix = "сериала"
+    else:
+        suffix = "сериалов"
+    return f"{value} {suffix}"
+
+
+def _format_pool_stats_user(stats: dict) -> str:
+    unique_total = int(stats.get("unique_total", stats.get("storage_total", 0)) or 0)
+    ready_total = int(stats.get("ready_total", 0) or 0)
+    incomplete_total = int(stats.get("incomplete_total", 0) or 0)
+    return (
+        f"В базе {_series_count_phrase(unique_total)}"
+        f" · {ready_total} с рейтингами КП/IMDb"
+        f" · {incomplete_total} без полных данных"
+    )
 
 
 class CandidateFiltersView:
@@ -45,27 +85,62 @@ class CandidateFiltersView:
         self._genre_options: list[str] = []
         self._year_max = constant.NOW_YEAR
 
-        self._widget = QWidget()
+        view = self
+
+        class CandidateFiltersRootWidget(QWidget):
+            def resizeEvent(self, event) -> None:
+                super().resizeEvent(event)
+                view._update_apply_button_width()
+
+        self._widget = CandidateFiltersRootWidget()
         self._widget.setObjectName("candidateFiltersRoot")
         root_layout = QVBoxLayout(self._widget)
         root_layout.setContentsMargins(16, 16, 16, 16)
         root_layout.setSpacing(12)
 
-        header = QLabel("Фильтры pool")
-        header.setObjectName("candidateSearchHeader")
-        root_layout.addWidget(header)
-
-        hint = QLabel(
-            "Runtime-фильтры по сохранённому pool. Не пересобирает pool и не делает TMDb-запрос."
+        self._apply_button = QPushButton("Применить фильтры")
+        self._apply_button.setObjectName("candidateSearchApplyTopButton")
+        self._apply_button.clicked.connect(self._apply_filters)
+        self._apply_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
         )
-        hint.setObjectName("candidateSearchHint")
-        hint.setWordWrap(True)
-        root_layout.addWidget(hint)
+        self._apply_button.setFixedHeight(32)
 
-        self._status_label = QLabel("")
-        self._status_label.setObjectName("candidateSearchResultsSummary")
-        self._status_label.setWordWrap(True)
-        root_layout.addWidget(self._status_label)
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(0, 0, 0, 0)
+        top_bar.setSpacing(12)
+
+        header = QLabel("Фильтры")
+        header.setObjectName("candidateSearchHeader")
+        header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        top_bar.addWidget(header, stretch=1)
+        top_bar.addWidget(
+            self._apply_button,
+            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+        )
+        root_layout.addLayout(top_bar)
+
+        self._intro_card = QFrame()
+        self._intro_card.setObjectName("candidateFiltersIntro")
+        intro_layout = QVBoxLayout(self._intro_card)
+        intro_layout.setContentsMargins(14, 12, 14, 12)
+        intro_layout.setSpacing(6)
+
+        self._intro_lead = QLabel(
+            "Настройте условия ниже и нажмите «Применить фильтры». "
+            "Список откроется на вкладке «Кандидаты»."
+        )
+        self._intro_lead.setObjectName("candidateFiltersIntroLead")
+        self._intro_lead.setWordWrap(True)
+        intro_layout.addWidget(self._intro_lead)
+
+        self._intro_stats = QLabel("")
+        self._intro_stats.setObjectName("candidateFiltersIntroStats")
+        self._intro_stats.setWordWrap(True)
+        intro_layout.addWidget(self._intro_stats)
+
+        root_layout.addWidget(self._intro_card)
 
         scroll = QScrollArea()
         scroll.setObjectName("candidateSearchFiltersScroll")
@@ -79,20 +154,9 @@ class CandidateFiltersView:
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(12)
 
-        self._country_list = QListWidget()
-        self._country_list.setObjectName("candidateSearchCountryList")
-        self._country_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self._country_list.setMaximumHeight(120)
-        all_item = QListWidgetItem("Все")
-        all_item.setData(Qt.ItemDataRole.UserRole, None)
-        self._country_list.addItem(all_item)
-        for option in tmdb_country_options.country_options():
-            item = QListWidgetItem(option["label"])
-            item.setData(Qt.ItemDataRole.UserRole, option["code"])
-            self._country_list.addItem(item)
-        self._country_list.itemSelectionChanged.connect(self._on_country_selection_changed)
+        self._country_selector = CountryChipSelector([])
         form.addWidget(self._label("Страна"))
-        form.addWidget(self._country_list)
+        form.addWidget(self._country_selector)
 
         year_header = QHBoxLayout()
         year_header.setContentsMargins(0, 0, 0, 0)
@@ -120,48 +184,135 @@ class CandidateFiltersView:
         form.addWidget(self._label("Исключить жанры"))
         form.addWidget(self._exclude_genre_selector)
 
-        self._min_kp_score = self._make_score_spin("candidateSearchMinKp")
-        self._min_imdb_score = self._make_score_spin("candidateSearchMinImdb")
-        self._min_kp_votes = self._make_votes_spin("candidateSearchMinKpVotes")
-        self._min_imdb_votes = self._make_votes_spin("candidateSearchMinImdbVotes")
-        form.addWidget(self._label("Мин. KP"))
-        form.addWidget(self._min_kp_score)
-        form.addWidget(self._label("Мин. IMDb"))
-        form.addWidget(self._min_imdb_score)
-        form.addWidget(self._label("Мин. голосов KP"))
-        form.addWidget(self._min_kp_votes)
-        form.addWidget(self._label("Мин. голосов IMDb"))
-        form.addWidget(self._min_imdb_votes)
+        self._kp_score_range_label = QLabel("")
+        self._kp_score_range_label.setObjectName("candidateSearchFilterValue")
+        self._kp_score_slider = self._make_min_threshold_slider(
+            0,
+            KP_SCORE_SLIDER_MAX,
+            "candidateSearchKpScoreRange",
+            self._update_kp_score_range_label,
+        )
+        self._add_threshold_filter_row(form, "Мин. KP", self._kp_score_range_label, self._kp_score_slider)
+
+        self._imdb_score_range_label = QLabel("")
+        self._imdb_score_range_label.setObjectName("candidateSearchFilterValue")
+        self._imdb_score_slider = self._make_min_threshold_slider(
+            0,
+            KP_SCORE_SLIDER_MAX,
+            "candidateSearchImdbScoreRange",
+            self._update_imdb_score_range_label,
+        )
+        self._add_threshold_filter_row(form, "Мин. IMDb", self._imdb_score_range_label, self._imdb_score_slider)
+
+        self._kp_votes_range_label = QLabel("")
+        self._kp_votes_range_label.setObjectName("candidateSearchFilterValue")
+        self._kp_votes_slider = self._make_min_threshold_slider(
+            0,
+            VOTES_SLIDER_MAX_INDEX,
+            "candidateSearchKpVotesRange",
+            self._update_kp_votes_range_label,
+        )
+        self._add_threshold_filter_row(form, "Мин. голосов KP", self._kp_votes_range_label, self._kp_votes_slider)
+
+        self._imdb_votes_range_label = QLabel("")
+        self._imdb_votes_range_label.setObjectName("candidateSearchFilterValue")
+        self._imdb_votes_slider = self._make_min_threshold_slider(
+            0,
+            VOTES_SLIDER_MAX_INDEX,
+            "candidateSearchImdbVotesRange",
+            self._update_imdb_votes_range_label,
+        )
+        self._add_threshold_filter_row(
+            form,
+            "Мин. голосов IMDb",
+            self._imdb_votes_range_label,
+            self._imdb_votes_slider,
+        )
 
         self._only_complete_check = QCheckBox("Только complete")
         self._only_complete_check.setObjectName("candidateSearchOnlyComplete")
-        self._only_complete_check.setChecked(True)
+        self._only_complete_check.setChecked(DEFAULT_BROWSE_FILTERS["only_complete"])
         self._only_unwatched_check = QCheckBox("Скрывать просмотренные")
         self._only_unwatched_check.setObjectName("candidateSearchOnlyUnwatched")
-        self._only_unwatched_check.setChecked(True)
+        self._only_unwatched_check.setChecked(DEFAULT_BROWSE_FILTERS["only_unwatched"])
         self._hide_hidden_check = QCheckBox("Скрывать hidden")
         self._hide_hidden_check.setObjectName("candidateSearchHideHidden")
-        self._hide_hidden_check.setChecked(True)
+        self._hide_hidden_check.setChecked(DEFAULT_BROWSE_FILTERS["hide_hidden"])
         form.addWidget(self._only_complete_check)
         form.addWidget(self._only_unwatched_check)
         form.addWidget(self._hide_hidden_check)
 
-        self._apply_button = QPushButton("Применить фильтры")
-        self._apply_button.setObjectName("candidateSearchButton")
-        self._apply_button.clicked.connect(self._apply_filters)
-        form.addWidget(self._apply_button)
-
         scroll.setWidget(form_host)
         root_layout.addWidget(scroll, stretch=1)
 
-        self._select_country_all()
+        self._update_apply_button_width()
         self._update_year_range_label()
+        self._update_kp_score_range_label()
+        self._update_imdb_score_range_label()
+        self._update_kp_votes_range_label()
+        self._update_imdb_votes_range_label()
         self._apply_filter_defaults()
-        self._refresh_status()
+        self._update_intro()
 
     @property
     def widget(self) -> QWidget:
         return self._widget
+
+    def _update_intro(self, *, result_count: int | None = None, result_ok: bool | None = None) -> None:
+        overview = candidate_service.get_search_overview_view()
+        if overview.get("is_empty"):
+            self._intro_lead.setText("Список кандидатов пока пуст.")
+            self._intro_stats.setText(
+                "Сначала добавьте сериалы через консоль: сбор кандидатов или импорт."
+            )
+            self._apply_button.setEnabled(False)
+            return
+
+        self._apply_button.setEnabled(True)
+        self._intro_lead.setText(
+            "Настройте условия ниже и нажмите «Применить фильтры». "
+            "Список откроется на вкладке «Кандидаты»."
+        )
+        stats = overview.get("stats") or {}
+        unique_total = int(stats.get("unique_total", stats.get("storage_total", 0)) or 0)
+
+        if result_ok is False and result_count == 0:
+            self._intro_stats.setText(
+                "По выбранным условиям ничего не найдено. "
+                "Ослабьте фильтры или разрешите неполные карточки."
+            )
+            return
+
+        if result_count is not None and result_count > 0:
+            self._intro_stats.setText(
+                f"Подходит {_series_count_phrase(result_count)} из {unique_total}."
+            )
+            return
+
+        if self._session.has_results and result_count is None:
+            filtered = int(self._session.filtered_count or 0)
+            if filtered > 0:
+                self._intro_stats.setText(
+                    f"Подходит {_series_count_phrase(filtered)} из {unique_total}."
+                )
+                return
+            self._intro_stats.setText(
+                "По выбранным условиям ничего не найдено. "
+                "Ослабьте фильтры или разрешите неполные карточки."
+            )
+            return
+
+        self._intro_stats.setText(_format_pool_stats_user(stats))
+
+    def _update_apply_button_width(self) -> None:
+        width = self._widget.width()
+        if width <= 0:
+            return
+        max_width = max(120, int(width * APPLY_BUTTON_WIDTH_RATIO))
+        content_width = self._apply_button.sizeHint().width()
+        target = min(max_width, content_width)
+        self._apply_button.setFixedWidth(target)
+        self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
     @staticmethod
     def _label(text: str) -> QLabel:
@@ -170,53 +321,119 @@ class CandidateFiltersView:
         return label
 
     @staticmethod
-    def _make_score_spin(object_name: str) -> QDoubleSpinBox:
-        spin = QDoubleSpinBox()
-        spin.setObjectName(object_name)
-        spin.setRange(0.0, 10.0)
-        spin.setDecimals(1)
-        spin.setSingleStep(0.1)
-        spin.setSpecialValueText("—")
-        spin.setValue(0.0)
-        return spin
+    def _add_threshold_filter_row(
+        form: QVBoxLayout,
+        title: str,
+        value_label: QLabel,
+        slider: RangeSlider,
+    ) -> None:
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.addWidget(CandidateFiltersView._label(title))
+        header.addStretch()
+        header.addWidget(value_label)
+        form.addLayout(header)
+        form.addWidget(slider)
 
     @staticmethod
-    def _make_votes_spin(object_name: str) -> QSpinBox:
-        spin = QSpinBox()
-        spin.setObjectName(object_name)
-        spin.setRange(0, 10_000_000)
-        spin.setSingleStep(100)
-        spin.setSpecialValueText("—")
-        spin.setValue(0)
-        return spin
+    def _make_min_threshold_slider(
+        minimum: int,
+        maximum: int,
+        object_name: str,
+        on_change: Callable[[], None],
+    ) -> RangeSlider:
+        slider = RangeSlider(minimum, maximum, minimum, maximum)
+        slider.setObjectName(object_name)
 
-    def _select_country_all(self) -> None:
-        self._country_list.blockSignals(True)
-        self._country_list.clearSelection()
-        self._country_list.item(COUNTRY_ALL_ROW).setSelected(True)
-        self._country_list.blockSignals(False)
+        def _on_range_changed(lower: int, upper: int) -> None:
+            if upper != maximum:
+                slider.blockSignals(True)
+                slider.setValues(lower, maximum)
+                slider.blockSignals(False)
+            on_change()
 
-    def _on_country_selection_changed(self) -> None:
-        all_item = self._country_list.item(COUNTRY_ALL_ROW)
-        selected = self._country_list.selectedItems()
-        if len(selected) == 0:
-            self._select_country_all()
-            return
+        slider.rangeChanged.connect(_on_range_changed)
+        return slider
 
-        real_selected = [
-            item
-            for item in selected
-            if item.data(Qt.ItemDataRole.UserRole) not in (None, "")
-        ]
-        if len(real_selected) == 0:
-            if all_item not in selected:
-                self._select_country_all()
-            return
+    @staticmethod
+    def _format_min_score_label(tenths: int) -> str:
+        if tenths <= 0:
+            return "—"
+        return f"{tenths * KP_SCORE_SLIDER_STEP:.1f}+"
 
-        if all_item in selected:
-            self._country_list.blockSignals(True)
-            all_item.setSelected(False)
-            self._country_list.blockSignals(False)
+    @staticmethod
+    def _score_tenths_from_slider(slider: RangeSlider) -> int:
+        lower, _upper = slider.values()
+        return max(0, int(lower))
+
+    @staticmethod
+    def _min_score_from_slider(slider: RangeSlider) -> float | None:
+        tenths = CandidateFiltersView._score_tenths_from_slider(slider)
+        if tenths <= 0:
+            return None
+        return round(tenths * KP_SCORE_SLIDER_STEP, 1)
+
+    @staticmethod
+    def _set_score_slider_from_default(slider: RangeSlider, value) -> None:
+        tenths = 0
+        if value not in (None, ""):
+            try:
+                tenths = max(0, min(KP_SCORE_SLIDER_MAX, int(round(float(value) / KP_SCORE_SLIDER_STEP))))
+            except (TypeError, ValueError):
+                tenths = 0
+        slider.blockSignals(True)
+        slider.setValues(tenths, KP_SCORE_SLIDER_MAX)
+        slider.blockSignals(False)
+
+    @staticmethod
+    def _format_min_votes_label(step_index: int) -> str:
+        if step_index <= 0:
+            return "—"
+        return f"{VOTES_SLIDER_STEPS[step_index]:,}".replace(",", " ") + "+"
+
+    @staticmethod
+    def _votes_index_from_slider(slider: RangeSlider) -> int:
+        lower, _upper = slider.values()
+        return max(0, min(VOTES_SLIDER_MAX_INDEX, int(lower)))
+
+    @staticmethod
+    def _min_votes_from_slider(slider: RangeSlider) -> int | None:
+        index = CandidateFiltersView._votes_index_from_slider(slider)
+        if index <= 0:
+            return None
+        return VOTES_SLIDER_STEPS[index]
+
+    @staticmethod
+    def _set_votes_slider_from_default(slider: RangeSlider, value) -> None:
+        index = 0
+        if value not in (None, ""):
+            try:
+                target = int(value)
+            except (TypeError, ValueError):
+                target = 0
+            if target > 0:
+                for step_index, step_value in enumerate(VOTES_SLIDER_STEPS):
+                    if step_value <= target:
+                        index = step_index
+        slider.blockSignals(True)
+        slider.setValues(index, VOTES_SLIDER_MAX_INDEX)
+        slider.blockSignals(False)
+
+    def _update_kp_score_range_label(self) -> None:
+        tenths = self._score_tenths_from_slider(self._kp_score_slider)
+        self._kp_score_range_label.setText(self._format_min_score_label(tenths))
+
+    def _update_imdb_score_range_label(self) -> None:
+        tenths = self._score_tenths_from_slider(self._imdb_score_slider)
+        self._imdb_score_range_label.setText(self._format_min_score_label(tenths))
+
+    def _update_kp_votes_range_label(self) -> None:
+        index = self._votes_index_from_slider(self._kp_votes_slider)
+        self._kp_votes_range_label.setText(self._format_min_votes_label(index))
+
+    def _update_imdb_votes_range_label(self) -> None:
+        index = self._votes_index_from_slider(self._imdb_votes_slider)
+        self._imdb_votes_range_label.setText(self._format_min_votes_label(index))
 
     def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
         self._update_year_range_label()
@@ -256,73 +473,40 @@ class CandidateFiltersView:
     def _apply_filter_defaults(self) -> None:
         defaults_view = candidate_service.get_search_filter_defaults_view()
         defaults = defaults_view.get("defaults") or {}
-        genre_view = candidate_service.get_search_genre_options_view()
-        self._genre_options = list(genre_view.get("genres") or [])
-        self._include_genre_selector.set_options(self._genre_options, defaults.get("include_genres") or [])
-        self._exclude_genre_selector.set_options(self._genre_options, defaults.get("exclude_genres") or [])
+        chip_view = candidate_service.get_search_filter_chip_options_view()
+        genre_labels = [
+            str(item.get("label") or "").strip()
+            for item in chip_view.get("genres") or []
+            if str(item.get("label") or "").strip()
+        ]
+        self._genre_options = genre_labels
+        self._include_genre_selector.set_options(genre_labels, defaults.get("include_genres") or [])
+        self._exclude_genre_selector.set_options(genre_labels, defaults.get("exclude_genres") or [])
+
+        country_options = [
+            {"code": str(item.get("code") or "").strip(), "label": str(item.get("label") or "").strip()}
+            for item in chip_view.get("countries") or []
+            if str(item.get("code") or "").strip()
+        ]
+        self._country_selector.set_options(country_options, defaults.get("country"))
 
         self._set_year_slider_from_defaults(defaults.get("year_min"), defaults.get("year_max"))
-        self._set_optional_float(self._min_kp_score, defaults.get("min_kp_score"))
-        self._set_optional_float(self._min_imdb_score, defaults.get("min_imdb_score"))
-        self._set_optional_int(self._min_kp_votes, defaults.get("min_kp_votes"))
-        self._set_optional_int(self._min_imdb_votes, defaults.get("min_imdb_votes"))
-        self._only_complete_check.setChecked(defaults.get("only_complete", True) is True)
-
-        self._country_list.blockSignals(True)
-        self._country_list.clearSelection()
-        default_country = defaults.get("country")
-        if default_country not in (None, ""):
-            matched = False
-            for row in range(1, self._country_list.count()):
-                item = self._country_list.item(row)
-                if item.data(Qt.ItemDataRole.UserRole) == default_country:
-                    item.setSelected(True)
-                    matched = True
-                    break
-            if matched is False:
-                self._country_list.item(COUNTRY_ALL_ROW).setSelected(True)
-        else:
-            self._country_list.item(COUNTRY_ALL_ROW).setSelected(True)
-        self._country_list.blockSignals(False)
-
-    @staticmethod
-    def _set_optional_float(spin: QDoubleSpinBox, value) -> None:
-        if value in (None, ""):
-            spin.setValue(0.0)
-            return
-        try:
-            spin.setValue(float(value))
-        except (TypeError, ValueError):
-            spin.setValue(0.0)
-
-    @staticmethod
-    def _set_optional_int(spin: QSpinBox, value) -> None:
-        if value in (None, ""):
-            spin.setValue(0)
-            return
-        try:
-            spin.setValue(int(value))
-        except (TypeError, ValueError):
-            spin.setValue(0)
+        self._set_score_slider_from_default(self._kp_score_slider, defaults.get("min_kp_score"))
+        self._set_score_slider_from_default(self._imdb_score_slider, defaults.get("min_imdb_score"))
+        self._set_votes_slider_from_default(self._kp_votes_slider, defaults.get("min_kp_votes"))
+        self._set_votes_slider_from_default(self._imdb_votes_slider, defaults.get("min_imdb_votes"))
+        self._update_kp_score_range_label()
+        self._update_imdb_score_range_label()
+        self._update_kp_votes_range_label()
+        self._update_imdb_votes_range_label()
+        self._only_complete_check.setChecked(DEFAULT_BROWSE_FILTERS["only_complete"])
+        self._only_unwatched_check.setChecked(DEFAULT_BROWSE_FILTERS["only_unwatched"])
+        self._hide_hidden_check.setChecked(DEFAULT_BROWSE_FILTERS["hide_hidden"])
 
     def _collect_filters(self) -> dict:
-        countries = []
-        for item in self._country_list.selectedItems():
-            code = item.data(Qt.ItemDataRole.UserRole)
-            if code not in (None, ""):
-                countries.append(str(code))
+        countries = self._country_selector.selected_country_codes()
 
         year_min, year_max = self._year_filter_bounds()
-
-        def optional_float(spin: QDoubleSpinBox):
-            if spin.value() <= 0.0 and spin.specialValueText():
-                return None
-            return spin.value()
-
-        def optional_int(spin: QSpinBox):
-            if spin.value() <= 0 and spin.specialValueText():
-                return None
-            return spin.value()
 
         return {
             "criteria_name": None,
@@ -332,51 +516,26 @@ class CandidateFiltersView:
             "year_max": year_max,
             "include_genres": self._include_genre_selector.selected_genres(),
             "exclude_genres": self._exclude_genre_selector.selected_genres(),
-            "min_kp_score": optional_float(self._min_kp_score),
-            "min_kp_votes": optional_int(self._min_kp_votes),
-            "min_imdb_score": optional_float(self._min_imdb_score),
-            "min_imdb_votes": optional_int(self._min_imdb_votes),
+            "min_kp_score": self._min_score_from_slider(self._kp_score_slider),
+            "min_kp_votes": self._min_votes_from_slider(self._kp_votes_slider),
+            "min_imdb_score": self._min_score_from_slider(self._imdb_score_slider),
+            "min_imdb_votes": self._min_votes_from_slider(self._imdb_votes_slider),
             "only_complete": self._only_complete_check.isChecked(),
             "only_unwatched": self._only_unwatched_check.isChecked(),
             "hide_hidden": self._hide_hidden_check.isChecked(),
         }
 
-    def _refresh_status(self) -> None:
-        overview = candidate_service.get_search_overview_view()
-        if overview.get("is_empty"):
-            self._status_label.setText(
-                "Общий candidate pool пуст.\n"
-                "Соберите pool через console: TMDb build или import saved result."
-            )
-            self._apply_button.setEnabled(False)
-            return
-
-        self._apply_button.setEnabled(True)
-        stats = overview.get("stats") or {}
-        unique_total = stats.get("unique_total", stats.get("storage_total", 0))
-        pool_note = f"Уникальных в pool: {unique_total}."
-        if self._session.has_results:
-            self._status_label.setText(
-                f"{pool_note} Последний фильтр: {self._session.filtered_count}. "
-                f"Откройте вкладку «Кандидаты» для просмотра."
-            )
-        else:
-            summary = overview.get("summary") or "Настройте фильтры и нажмите «Применить фильтры»."
-            self._status_label.setText(f"{pool_note}\n{summary}")
-
     def _apply_filters(self) -> None:
         result = self._session.apply_filters(self._collect_filters())
         if result.get("is_empty_pool"):
-            self._refresh_status()
+            self._update_intro()
             return
 
-        if result.get("filtered_count", 0) == 0:
-            self._status_label.setText(
-                "После фильтра: 0 кандидатов.\n"
-                "Ослабьте фильтры или включите incomplete-кандидатов."
-            )
-        else:
-            self._status_label.setText(result.get("message") or f"После фильтра: {result['filtered_count']}")
+        filtered_count = int(result.get("filtered_count", 0) or 0)
+        self._update_intro(
+            result_count=filtered_count,
+            result_ok=filtered_count > 0,
+        )
 
         if self._on_applied is not None:
             self._on_applied()
